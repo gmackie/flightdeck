@@ -15,6 +15,10 @@ class FakeAPI {
  streams=[];sinks=[];pipelines=[];
  account(path){return "/accounts/"+account+path;}
  async call(path,{method="GET",body}={}){
+  if(path.endsWith("/workers/subdomain")){
+    if(method==="GET")return {subdomain:"testteam"};
+    throw new Error("Wizard must never rename an existing workers.dev subdomain");
+  }
   if(path.endsWith("/d1/database"))return method==="POST"?{uuid:d1Id}:[];
   if(path.includes("/r2/buckets/"))throw new InstallerError("provider_request_failed","(404)");
   if(path.endsWith("/r2/buckets"))return {name:"flightdeck-test-events"};

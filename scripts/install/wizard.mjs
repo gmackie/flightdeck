@@ -5,7 +5,7 @@
 import {readFileSync,writeFileSync,existsSync,chmodSync,mkdirSync,unlinkSync} from "node:fs";
 import {randomBytes,createHash} from "node:crypto";
 import {Shell,Manifest,InstallerError,workerHost,validateInstallOptions} from "./engine.mjs";
-import {CloudflareApi,chooseAccount,ensureAccess} from "./cloudflare.mjs";
+import {CloudflareApi,chooseAccount,ensureAccess,ensureWorkersSubdomain} from "./cloudflare.mjs";
 import {ensureD1,ensureR2Bucket,ensureCatalog,ensureBasin,ensureQueues} from "./basin.mjs";
 import {buildConfigs,writeConfigs,assertLocked,assertReady} from "./config.mjs";
 
@@ -89,7 +89,7 @@ export function installationPlan(input){
       queue:n.queue,deadLetterQueue:n.dlq,
     },
     steps:[
-      "Check authentication and account capabilities",
+      "Check authentication, account capabilities and workers.dev subdomain",
       "Provision project-scoped D1 metadata",
       "Create R2 bucket + Basin Catalog",
       "Create authenticated Worker-binding Basin stream, Catalog sink and SQL pipeline",
@@ -148,6 +148,7 @@ export async function applyWizard({
     enableAI:input.enableAI===true,queryUnits:input.queryUnits??50000};
   let creds=ensureCredentials();
   await stage("d1",()=>ensureD1({api,shell,names,manifest}));
+  await stage("workers_subdomain",()=>ensureWorkersSubdomain({api,shell,accountId:account,manifest}));
   await stage("r2",()=>ensureR2Bucket({api,shell,names,manifest}));
   await stage("catalog",()=>ensureCatalog({shell,names}));
   await stage("basin",()=>ensureBasin({api,shell,names,manifest,prompt,logger}));
