@@ -33,6 +33,8 @@ export type CaptureContext = {
   sourceToken: string;
   environment?: string;
   requestId?: string;
+  /** Asserted by an authenticated application, never from browser input. */
+  consentGranted?: boolean;
 };
 export type CaptureRequest = { context: CaptureContext; events: readonly AnalyticsEvent[] };
 export type Durability = "stream_ingested" | "r2_persisted";

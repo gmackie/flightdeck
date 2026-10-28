@@ -14,6 +14,10 @@ export interface BrowserHandlerOptions<T extends AuthenticatedActor> {
   authenticate(request:Request): Promise<T|null>;
   client(actor:T, request:Request): Flightdeck;
   policy: BrowserEventPolicy;
+  /** Application-owned consent record, evaluated after authentication. */
+  hasConsent?(actor:T,request:Request): Promise<boolean>;
+  /** Application-owned distributed limiter; return false to reject. */
+  consumeQuota?(actor:T,request:Request,events:number): Promise<boolean>;
   objects?(actor:T, eventName:string): readonly ObjectReference[];
 }
 function json(body:unknown,status=200):Response {
@@ -46,6 +50,10 @@ export function createBrowserEventHandler<T extends AuthenticatedActor>(
     if(!payload || typeof payload!=="object" || !("events" in payload) ||
       !Array.isArray(payload.events) || payload.events.length<1 ||payload.events.length>100)
       return json({error:"invalid_batch"},400);
+    if(options.hasConsent && !(await options.hasConsent(actor,request)))
+      return json({error:"consent_required"},403);
+    if(options.consumeQuota && !(await options.consumeQuota(actor,request,payload.events.length)))
+      return json({error:"rate_limited"},429);
     const events:AnalyticsEvent[]=[];
     for(const raw of payload.events as UntrustedEvent[]){
       if(!raw || typeof raw!=="object" || typeof raw.eventName!=="string")

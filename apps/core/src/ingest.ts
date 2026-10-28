@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { EventBatch, type CaptureReceipt, type CaptureRequest, type AnalyticsEvent } from "@flightdeck/contracts";
+import { allowedBatchBytes, allowedBatchSize, enforceBatchPolicy, enforceSourcePolicy, type SourceGovernance } from "./governance";
 
 const encoder = new TextEncoder();
 const identifier = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
@@ -9,7 +10,7 @@ const MAX_BYTES = 256_000;
 const MAX_AGE_MS = 90 * 86_400_000;
 const MAX_FUTURE_MS = 5 * 60_000;
 
-export type SourceConfig = {
+export type SourceConfig = SourceGovernance & {
   sha256: string;
   projectId: string;
   allowedEvents: string[];
@@ -58,17 +59,24 @@ export async function authenticate(
     throw new IngestError("unauthorized_source");
   const source = registry[context.sourceId];
   const actual = await sha256(context.sourceToken);
-  if (!source?.projectId || !identifier.test(source.projectId) || !equalHex(source.sha256, actual))
-    throw new IngestError("unauthorized_source");
+  if (!source?.projectId || !identifier.test(source.projectId)) throw new IngestError("unauthorized_source");
+  const digests = [source.sha256, ...(source.rotatingSha256 ?? [])];
+  // Evaluate each candidate to avoid disclosing which credential is active.
+  let valid = false;
+  for (const digest of digests) {
+    if (typeof digest === "string" && equalHex(digest, actual)) valid = true;
+  }
+  if (!valid) throw new IngestError("unauthorized_source");
+  enforceSourcePolicy(source, context);
   return source;
 }
 export function validateBatch(input: unknown, source: SourceConfig, now = Date.now()): readonly AnalyticsEvent[] {
   if (!input || typeof input !== "object" || !Array.isArray((input as {events?:unknown}).events))
     throw new IngestError("invalid_batch");
   const rawEvents = (input as {events: unknown[]}).events;
-  if (rawEvents.length === 0 || rawEvents.length > MAX_EVENTS)
+  if (rawEvents.length === 0 || rawEvents.length > Math.min(MAX_EVENTS, allowedBatchSize(source)))
     throw new IngestError("invalid_batch_size");
-  if (encoder.encode(JSON.stringify(input)).byteLength > MAX_BYTES)
+  if (encoder.encode(JSON.stringify(input)).byteLength > Math.min(MAX_BYTES, allowedBatchBytes(source)))
     throw new IngestError("batch_too_large");
   let events: readonly AnalyticsEvent[];
   try { events = Schema.decodeUnknownSync(EventBatch)(input).events; }
@@ -76,11 +84,12 @@ export function validateBatch(input: unknown, source: SourceConfig, now = Date.n
   for (const event of events) {
     if (!identifier.test(event.eventId) || !eventNamePattern.test(event.eventName))
       throw new IngestError("invalid_event_identifier");
-    if (!allowed(event.eventName,source.allowedEvents))
+    if (!Array.isArray(source.allowedEvents) || !allowed(event.eventName,source.allowedEvents))
       throw new IngestError("event_not_allowed");
     const time = Date.parse(event.occurredAt);
     if (!Number.isFinite(time) || time < now-MAX_AGE_MS || time > now+MAX_FUTURE_MS)
       throw new IngestError("invalid_timestamp");
+    if (event.objects.length > 16) throw new IngestError("too_many_objects");
     for (const obj of event.objects) {
       if (!identifier.test(obj.id) || !identifier.test(obj.type) || !identifier.test(obj.role))
         throw new IngestError("invalid_object");
@@ -91,6 +100,7 @@ export function validateBatch(input: unknown, source: SourceConfig, now = Date.n
       if (!keys.includes(key)) throw new IngestError("property_not_allowed");
     }
   }
+  enforceBatchPolicy(events, source);
   return events;
 }
 function asString(value: string | undefined): string { return value ?? ""; }

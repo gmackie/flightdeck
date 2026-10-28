@@ -10,7 +10,9 @@
     "setup": "node scripts/setup.mjs",
     "setup:console": "node scripts/setup-console.mjs",
     "doctor": "node scripts/doctor.mjs",
-    "source:add": "node scripts/source.mjs"
+    "source:add": "node scripts/source.mjs",
+    "source:govern": "node scripts/source-governance.mjs",
+    "test:govern": "node --test scripts/source-governance.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
