@@ -97,7 +97,7 @@ test("account capability endpoint is read-only and rejects permissions before in
  });
  await new Promise(resolve=>server.server.listen(0,"127.0.0.1",resolve));
  const base="http://127.0.0.1:"+server.server.address().port;
- const post=async path,body=>{
+ const post=async (path,body)=>{
   const res=await fetch(base+path,{method:"POST",headers:{
     "Origin":base,"Content-Type":"application/json","X-Flightdeck-CSRF":server.secret
   },body:JSON.stringify(body)});
