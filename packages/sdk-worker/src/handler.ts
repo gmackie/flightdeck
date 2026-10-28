@@ -81,7 +81,11 @@ export function createBrowserEventHandler<T extends AuthenticatedActor>(
       });
     }
     try {
-      const receipt=await options.client(actor,request).batch(events);
+      const client=options.client(actor,request);
+      // hasConsent is application-owned and evaluated after authentication.
+      // Never trust a browser-supplied consent field.
+      const trusted=options.hasConsent?client.withConsent(true):client;
+      const receipt=await trusted.batch(events);
       return json(receipt,202);
     } catch {
       return json({error:"ingestion_unavailable",retryable:true},503);

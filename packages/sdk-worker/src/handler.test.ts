@@ -34,3 +34,35 @@ describe("authenticated first-party forwarding",()=>{
   expect((await handler(request("https://app.example",[{eventName:"other",properties:{}}]))).status).toBe(403);
  });
 });
+
+describe("trusted consent propagation",()=>{
+ it("sets consentGranted only after the application verifies consent",async()=>{
+  const received:CaptureRequest[]=[];
+  const handler=createBrowserEventHandler({
+    authenticate:async()=>({id:"verified_user"}),
+    hasConsent:async()=>true,
+    client:()=>createFlightdeck({
+      binding:{captureBatch:async(request)=>{received.push(request);return receipt;}},
+      sourceId:"trusted_worker",sourceToken:"z".repeat(40)
+    }),
+    policy:{origins:["https://app.example"],events:{"page.viewed":{properties:["route"]}}},
+  });
+  const r=await handler(request("https://app.example",[{eventName:"page.viewed",properties:{route:"/"}}]));
+  expect(r.status).toBe(202);
+  expect(received[0]?.context.consentGranted).toBe(true);
+ });
+ it("rejects missing application-owned consent without calling private analytics RPC",async()=>{
+  const binding=vi.fn(async(_request:CaptureRequest)=>receipt);
+  const handler=createBrowserEventHandler({
+    authenticate:async()=>({id:"verified_user"}),
+    hasConsent:async()=>false,
+    client:()=>createFlightdeck({
+      binding:{captureBatch:binding},sourceId:"trusted_worker",sourceToken:"z".repeat(40)
+    }),
+    policy:{origins:["https://app.example"],events:{"page.viewed":{properties:[]}}}
+  });
+  const r=await handler(request("https://app.example",[{eventName:"page.viewed",properties:{}}]));
+  expect(r.status).toBe(403);
+  expect(binding).not.toHaveBeenCalled();
+ });
+});
