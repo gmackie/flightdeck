@@ -18,7 +18,8 @@
     "@flightdeck/discovery": "workspace:*",
     "@flightdeck/journey-model": "workspace:*",
     "@flightdeck/investigations": "workspace:*",
-    "@flightdeck/experiments": "workspace:*"
+    "@flightdeck/experiments": "workspace:*",
+    "@flightdeck/simulator": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
