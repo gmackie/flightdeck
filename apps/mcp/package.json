@@ -1,0 +1,23 @@
+{
+  "name": "@flightdeck/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "wrangler deploy --dry-run --config wrangler.jsonc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
+    "agents": "0.27.0",
+    "jose": "^6.1.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261028.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.47.0",
+    "vitest": "^4.1.0"
+  }
+}
