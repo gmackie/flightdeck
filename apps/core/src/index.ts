@@ -1,6 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import type { CaptureRequest, CaptureReceipt } from "@flightdeck/contracts";
-import { IngestError, ingestBatch, type SourceConfig } from "./ingest";
+import { IngestError, ingestBatch, type SourceConfig, type SinkRecord, type EventSink } from "./ingest";
 import { basinSink, r2Sink, type BasinBinding, type R2Like } from "./sinks";
 
 export interface Env {
@@ -10,6 +10,8 @@ export interface Env {
   SINK_MODE: string;
   STREAM?: BasinBinding;
   EVENTS?: R2Like;
+  /** Optional at-least-once live path, not atomic with the historical sink. */
+  JOURNEY_QUEUE?: { sendBatch(messages: ReadonlyArray<{body:SinkRecord}>): Promise<void> };
 }
 function readSources(serialized: string): Record<string,SourceConfig> {
   try {
@@ -25,7 +27,18 @@ export default class AnalyticsCore extends WorkerEntrypoint<Env> {
       : mode === "r2" && this.env.EVENTS ? r2Sink(this.env.EVENTS)
       : undefined;
     if (!sink) throw new IngestError("sink_not_configured");
-    return ingestBatch(request,readSources(this.env.SOURCE_CREDENTIALS),sink);
+    const queue = this.env.JOURNEY_QUEUE;
+    const effective: EventSink = queue ? {
+      durability: sink.durability,
+      write: async (records) => {
+        await sink.write(records);
+        // Historical stream is authoritative. Queue is optional and independently retried.
+        this.ctx.waitUntil(queue.sendBatch(records.map(body => ({body}))).catch(err => {
+          console.error("Flightdeck journey delivery failed; history remains authoritative", err);
+        }));
+      }
+    } : sink;
+    return ingestBatch(request,readSources(this.env.SOURCE_CREDENTIALS),effective);
   }
   /** Never serve ingestion over public HTTP; use RPC from a service binding. */
   override async fetch(): Promise<Response> {
