@@ -1,3 +1,4 @@
+import {simulateJourney,type SimulationResult,type ObservedTransition} from "@flightdeck/simulator";
 import {useEffect,useMemo,useState,type ReactNode} from "react";
 
 type Row = Record<string,unknown>;
@@ -290,6 +291,73 @@ function JourneyDefinitions(){
   </Panel>
  </div>;
 }
+function JourneySimulator({data}:{data:Row[]}){
+ const edges=useMemo<ObservedTransition[]>(()=>data.filter(x=>
+   typeof x.from_event==="string"&&typeof x.to_event==="string"&&
+   Number.isSafeInteger(Number(x.transitions))&&Number(x.transitions)>0
+ ).map(x=>({from_event:String(x.from_event),to_event:String(x.to_event),
+   transitions:Number(x.transitions)})),[data]);
+ const names=useMemo(()=>[...new Set(edges.flatMap(x=>[x.from_event,x.to_event]))].sort(),[edges]);
+ const [start,setStart]=useState("");
+ const [goal,setGoal]=useState("");
+ const [scenarioFrom,setScenarioFrom]=useState("");
+ const [scenarioTo,setScenarioTo]=useState("");
+ const [multiplier,setMultiplier]=useState(1.5);
+ const [maxSteps,setMaxSteps]=useState(12);
+ const actualStart=start||edges[0]?.from_event||"";
+ const actualGoal=goal||edges[edges.length-1]?.to_event||"";
+ const from=scenarioFrom||edges[0]?.from_event||"";
+ const to=scenarioTo||edges[0]?.to_event||"";
+ const outcomes=useMemo(()=>{
+  if(!edges.length||!actualStart||!actualGoal)return null;
+  try{
+   return {
+    baseline:simulateJourney({start:actualStart,goal:actualGoal,maxSteps,transitions:edges}),
+    scenario:simulateJourney({start:actualStart,goal:actualGoal,maxSteps,transitions:edges,
+      scenario:{from,to,multiplier}})
+   };
+  }catch{return null;}
+ },[edges,actualStart,actualGoal,from,to,multiplier,maxSteps]);
+ const pct=(n:number)=>(100*n).toFixed(1)+"%";
+ const outcomeCard=(label:string,x:SimulationResult)=><div className="simulation-outcome">
+  <span className="eyebrow">{label}</span>
+  <strong>{pct(x.successProbability)}</strong>
+  <p>Modeled goal reachability in {maxSteps} steps</p>
+  <div className="simulation-metrics">
+   <div><b>{pct(x.deadEndProbability)}</b><small>Dead ends</small></div>
+   <div><b>{pct(x.unresolvedProbability)}</b><small>Unresolved</small></div>
+   <div><b>{x.expectedStepsToSuccess?.toFixed(1)??"—"}</b><small>Steps to success</small></div>
+  </div>
+ </div>;
+ return <Panel title="Process Twin / What-if Lab" sub="A bounded transition model, not a causal prediction">
+  <div className="insight-form">
+   <label>Starting event<select value={actualStart} onChange={e=>setStart(e.target.value)}>
+    {names.map(n=><option value={n} key={n}>{n}</option>)}</select></label>
+   <label>Target event<select value={actualGoal} onChange={e=>setGoal(e.target.value)}>
+    {names.map(n=><option value={n} key={n}>{n}</option>)}</select></label>
+   <label>Maximum transitions<select value={maxSteps} onChange={e=>setMaxSteps(Number(e.target.value))}>
+    {[5,8,12,20,30].map(n=><option key={n} value={n}>{n} steps</option>)}</select></label>
+  </div>
+  <div className="simulation-config">
+   <span className="eyebrow">WHAT-IF ASSUMPTION</span>
+   <p>Multiply an observed edge's frequency by an assumed factor, then renormalize its outgoing choices.</p>
+   <div className="insight-form">
+    <label>From event<select value={from} onChange={e=>setScenarioFrom(e.target.value)}>
+     {names.map(n=><option value={n} key={n}>{n}</option>)}</select></label>
+    <label>To event<select value={to} onChange={e=>setScenarioTo(e.target.value)}>
+     {names.map(n=><option value={n} key={n}>{n}</option>)}</select></label>
+    <label>Edge multiplier <b>{multiplier.toFixed(2)}×</b>
+     <input type="range" min={0} max={3} step={0.25} value={multiplier}
+       onChange={e=>setMultiplier(Number(e.target.value))}/></label>
+   </div>
+  </div>
+  {outcomes?<div className="simulation-grid">
+    {outcomeCard("OBSERVED BASELINE MODEL",outcomes.baseline)}
+    {outcomeCard("HYPOTHETICAL SCENARIO",outcomes.scenario)}
+   </div>:<div className="empty">Collect journey transitions to simulate a model.</div>}
+  <p className="note">This is a Markov approximation built from aggregate event-to-event frequencies. Changes are assumed, not effects established by an experiment. It does not model identity changes, hidden states, or uncertainty from unobserved events.</p>
+ </Panel>;
+}
 function Journeys({days,refresh}:{days:number;refresh:number}){
  const q=useData("/api/journeys",days,refresh);
  const [proposals,setProposals]=useState<Array<{
@@ -313,6 +381,7 @@ function Journeys({days,refresh}:{days:number;refresh:number}){
  }
  return <div className="stack">
   <JourneyDefinitions/>
+  <JourneySimulator data={q.data}/>
   <Panel title="Observed journey transitions" sub="A directly-follows graph discovered from ordered, actor-scoped events">
    <Message loading={q.loading} error={q.error} empty={!q.data.length}/>
    {!!q.data.length&&<div className="transition-list">{q.data.map((r,i)=><div className="transition" key={i}>

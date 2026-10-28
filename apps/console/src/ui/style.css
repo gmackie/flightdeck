@@ -43,3 +43,16 @@
 
 .experiment-warning{margin:17px 0;padding:17px;border-radius:9px;background:#31281a;border:1px solid #6a5231;color:#efce9c}
 .experiment-warning b{font-size:12px}.experiment-warning p{font-size:11px;color:#d9bb96;line-height:1.6;margin:7px 0}
+
+.simulation-config{background:#101b2b;border:1px solid #314054;padding:18px;border-radius:9px;margin:15px 0}
+.simulation-config p{font-size:11px;color:#9daec3}
+.simulation-config input[type=range]{width:100%;accent-color:#5fdbc4}
+.simulation-config .insight-form{margin-top:12px}
+.simulation-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:15px 0}
+.simulation-outcome{border:1px solid #31455b;padding:20px;border-radius:10px;background:#132037}
+.simulation-outcome strong{display:block;font-size:29px;margin:10px 0;color:#78e3ce}
+.simulation-outcome p{font-size:11px;color:#aabacf;margin-bottom:15px}
+.simulation-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.simulation-metrics b{display:block;font-size:14px;color:#eef5fc}
+.simulation-metrics small{display:block;font-size:10px;color:#8a9db6;margin-top:5px}
+@media(max-width:700px){.simulation-grid{grid-template-columns:1fr}}
