@@ -2,7 +2,7 @@
  * Wizard orchestration. All Cloudflare mutations require apply=true. Stages
  * are persisted after success so a failed install can resume safely.
  */
-import {readFileSync,writeFileSync,existsSync,chmodSync,mkdirSync,unlinkSync} from "node:fs";
+import {readFileSync,writeFileSync,existsSync,chmodSync,mkdirSync,unlinkSync,readdirSync} from "node:fs";
 import {randomBytes,createHash} from "node:crypto";
 import {Shell,Manifest,InstallerError,workerHost,validateInstallOptions} from "./engine.mjs";
 import {CloudflareApi,chooseAccount,ensureAccess,ensureWorkersSubdomain} from "./cloudflare.mjs";
@@ -66,6 +66,36 @@ function ensureNoSecrets(cfg){
   if(/SOURCE_CREDENTIALS|BASIN_SQL_TOKEN.*[a-z0-9]{40}/i.test(serialized))
     throw new Error("Configuration appears to contain credentials");
 }
+/** Hash deployable source/config, never local credentials or generated artifacts. */
+function deploymentRevision(input){
+  const digest=createHash("sha256");
+  const ignored=new Set(["node_modules","dist",".wrangler",".vite","dist-packages"]);
+  function visit(path){
+    if(!existsSync(path))return;
+    for(const entry of readdirSync(path,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))){
+      if(ignored.has(entry.name)||entry.name.startsWith(".")||entry.name.includes(".generated."))continue;
+      const file=path+"/"+entry.name;
+      if(entry.isDirectory())visit(file);
+      else if(entry.isFile()&&!entry.name.endsWith(".test.ts")&&!entry.name.endsWith(".test.mjs")){
+        digest.update(file+"\0");digest.update(readFileSync(file));
+      }
+    }
+  }
+  for(const path of ["apps","packages","scripts","migrations","basin"])visit(path);
+  for(const path of ["package.json","pnpm-lock.yaml","pnpm-workspace.yaml"])
+    if(existsSync(path)){digest.update(path+"\0");digest.update(readFileSync(path));}
+  digest.update(JSON.stringify(input));
+  return digest.digest("hex");
+}
+function prepareRevision(manifest,revision){
+  if(manifest.state.targetRevision===revision)return;
+  // Provisioned identities survive upgrades; revision-specific work does not.
+  for(const step of ["migrations","private_core","journey","locked_console","locked_mcp",
+    "console_final","mcp_final","verified","deployed"])
+    delete manifest.state.steps[step];
+  manifest.state.targetRevision=revision;
+  manifest.save();
+}
 function loggedStep(label,fn,{manifest,logger=console.log}){
   if(manifest.has(label)){
     logger("  ✓ "+label+" (recorded, skipped)");
@@ -128,7 +158,7 @@ async function accessProbe(host,fetcher=fetch){
     }
     if(response.status===200)throw new InstallerError("console_access_bypass",
       "SECURITY FAILURE: anonymous request returned HTTP 200 on "+path);
-    if(![301,302,303,307,308,401,403,404,503].includes(response.status))
+    if(![302,303,307,308,401,403].includes(response.status))
       throw new InstallerError("console_access_unexpected",
         "Unexpected anonymous response "+response.status+" from "+path);
   }
@@ -140,6 +170,20 @@ export async function applyWizard({
 }){
   const options=validateInstallOptions(input),names=options.names;
   manifest.assertIdentity(options.accountId,options.slug);
+  const immutable={adminEmails:options.adminEmails,mode:options.mode,enableMcp:input.enableMcp!==false};
+  if(manifest.state.installOptions && JSON.stringify(manifest.state.installOptions)!==JSON.stringify(immutable))
+    throw new InstallerError("install_options_changed",
+      "Changing administrator access, mode or MCP topology requires an explicit migration; reuse the recorded options.");
+  if(manifest.has("bootstrap_source")&&!existsSync(localCreds))
+    throw new InstallerError("credentials_missing","Restore the installation credentials from your secure backup; refusing to silently replace source credentials.");
+  manifest.state.installOptions=immutable;
+  manifest.save();
+  // Build failures must happen before any provider resource mutations.
+  shell.exec("pnpm",["build"]);
+  const revision=deploymentRevision({options,enableAI:input.enableAI===true,
+    enableMcp:input.enableMcp!==false,queryUnits:input.queryUnits??50000});
+  const upgrading=!!manifest.state.deployedRevision || manifest.has("deployed");
+  prepareRevision(manifest,revision);
   const account=options.accountId;
   shell.env.CLOUDFLARE_ACCOUNT_ID=account;
   api??=new CloudflareApi({accountId:account,fetcher});
@@ -148,10 +192,13 @@ export async function applyWizard({
     enableJourneys:options.mode==="intelligence",enableMcp:input.enableMcp!==false,
     enableAI:input.enableAI===true,queryUnits:input.queryUnits??50000};
   let creds=ensureCredentials();
-  await stage("preflight",async()=>{
+  await (async()=>{
     const readiness=await preflightAccount({api,shell,accountId:account,mode:options.mode});
-    return {preflightVerifiedAt:readiness.verifiedAt};
-  });
+    manifest.mark("preflight",{preflightVerifiedAt:readiness.verifiedAt});
+  })();
+  if(!manifest.has("basin")&&!prompt&&!(shell.env.FLIGHTDECK_CATALOG_TOKEN?.length>=20))
+    throw new InstallerError("basin_token_required",
+      "Unattended install needs FLIGHTDECK_CATALOG_TOKEN before resources can be created.");
   await stage("d1",()=>ensureD1({api,shell,names,manifest}));
   await stage("workers_subdomain",()=>ensureWorkersSubdomain({api,shell,accountId:account,manifest}));
   await stage("r2",()=>ensureR2Bucket({api,shell,names,manifest}));
@@ -165,7 +212,7 @@ export async function applyWizard({
   writeConfigs(staticConfig);
   await stage("migrations",async()=>{
     // Backup if this isn't a first install; Wrangler tracks applied migrations.
-    if(manifest.has("deployed")){
+    if(upgrading){
       shell.wrangler(["d1","export",names.database,"--remote",
         "--output",metadataDir+"/preupgrade-"+Date.now()+".sql","--config",consolePath]);
     }
@@ -240,15 +287,18 @@ export async function applyWizard({
     shell.wrangler(["deploy","--config",mcpPath]);
     return {mcpDeployed:true};
   });
-  await stage("verified",async()=>{
-    await accessProbe(manifest.resources.consoleHost,fetcher);
-    return {verifiedAt:now()};
-  });
+  // Security verification is fresh on every run and distinct from data readiness.
+  await accessProbe(manifest.resources.consoleHost,fetcher);
+  if(settings.enableMcp)await accessProbe(manifest.resources.mcpHost,fetcher);
+  manifest.mark("verified",{verifiedAt:now(),functionalReadiness:"pending"});
+  manifest.state.deployedRevision=revision;
+  manifest.save();
   manifest.mark("deployed",{});
   return {
     consoleUrl:"https://"+manifest.resources.consoleHost,
     mcpUrl:settings.enableMcp?"https://"+manifest.resources.mcpHost+"/mcp":null,
     sourceId:names.source,sourceTokenFile:localCreds,
     accountId:account,verifiedAt:manifest.resources.verifiedAt,
+    functionalReadiness:"pending",revision,
   };
 }

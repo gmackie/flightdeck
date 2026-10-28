@@ -8,6 +8,7 @@ import { handleInvestigations } from "./investigations";
 import { handleExperimentAnalysis } from "./experiment-api";
 import { handleAgentHandoff } from "./handoff";
 import {handleAdmin,isFlightdeckAdmin} from "./admin";
+import {consoleHealth} from "./health";
 import {suggestJourneys,type AIProvider} from "./ai";
 
 interface Env extends ControlEnv {
@@ -71,6 +72,10 @@ export default {
     const principal=await authorize(request,env);
     if(!principal)return json({error:"unauthorized"},401);
     const url=new URL(request.url);
+    if(url.pathname==="/api/health"){
+      if(request.method!=="GET")return json({error:"method_not_allowed"},405);
+      return consoleHealth(env);
+    }
     if(url.pathname.startsWith("/api/")){
       const administrative=await handleAdmin(request,env,principal);
       if(administrative)return administrative;
