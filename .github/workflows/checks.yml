@@ -1,7 +1,7 @@
 name: checks
 on: [push, pull_request]
 jobs:
-  typecheck-and-test:
+  build-test-package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,7 +15,29 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm --filter @flightdeck/sdk-worker pack --pack-destination ../../dist-packages
+      - name: Validate installers without mutating Cloudflare
+        run: |
+          node --check scripts/setup.mjs
+          node --check scripts/setup-console.mjs
+          node --check scripts/doctor.mjs
+          node --check scripts/source.mjs
+          node scripts/setup.mjs --dry-run --mode r2 --yes
+          node scripts/setup-console.mjs --dry-run --yes --host analytics.example.com --access-domain example.cloudflareaccess.com --access-aud 0123456789abcdef0123456789abcdef --account-id 0123456789abcdef0123456789abcdef
+      - name: Bundle Core Worker (dry run)
+        run: pnpm exec wrangler deploy --dry-run --config apps/core/wrangler.jsonc
+      - name: Bundle Console Worker (dry run)
+        run: pnpm exec wrangler deploy --dry-run --config apps/console/wrangler.jsonc
+      - name: Pack reusable SDKs
+        run: |
+          pnpm --filter @flightdeck/contracts pack --pack-destination ./dist-packages
+          pnpm --filter @flightdeck/sdk-worker pack --pack-destination ./dist-packages
+          pnpm --filter @flightdeck/sdk-effect pack --pack-destination ./dist-packages
+          pnpm --filter @flightdeck/browser pack --pack-destination ./dist-packages
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: flightdeck-sdk-packages
+          path: dist-packages/*.tgz
       - uses: actions/upload-artifact@v4
         if: always()
         with:
