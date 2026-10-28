@@ -1,7 +1,7 @@
 name: checks
 on: [push, pull_request]
 jobs:
-  typecheck:
+  typecheck-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -11,5 +11,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm typecheck
+      - run: pnpm test

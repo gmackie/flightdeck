@@ -1,0 +1,94 @@
+{
+  "fields": [
+    {
+      "name": "event_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "event_name",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "event_kind",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "project_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "source_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "environment",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "occurred_at",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "received_at",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "actor_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "anonymous_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "session_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "page_view_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "interaction_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "trace_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "deployment_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "objects_json",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "properties_json",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "batch_id",
+      "type": "string",
+      "required": true
+    }
+  ]
+}

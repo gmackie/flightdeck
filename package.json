@@ -3,9 +3,13 @@
   "private": true,
   "packageManager": "pnpm@10.18.0",
   "scripts": {
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.47.0"
   }
 }

@@ -1,45 +1,70 @@
-import type { AnalyticsBinding, AnalyticsEvent, CaptureReceipt, ObjectRef } from "@flightdeck/contracts";
+import type {
+  AnalyticsBinding, AnalyticsEvent, CaptureReceipt, EventKind, ObjectReference
+} from "@flightdeck/contracts";
 
 export type TrackOptions = {
-  eventId?: string; occurredAt?: string; anonymousId?: string; actorId?: string;
-  sessionId?: string; pageViewId?: string; interactionId?: string; traceId?: string;
-  objects?: ObjectRef[];
+  eventId?: string; occurredAt?: string; kind?: EventKind;
+  anonymousId?: string; actorId?: string; sessionId?: string; pageViewId?: string;
+  interactionId?: string; traceId?: string; deploymentId?: string;
+  objects?: readonly ObjectReference[];
 };
-export type FlightdeckOptions = {
+export interface FlightdeckOptions {
   binding: AnalyticsBinding;
   sourceId: string;
   sourceToken: string;
   environment?: string;
-  defaults?: () => Partial<TrackOptions>;
-};
+  defaults?: () => TrackOptions;
+}
 export class Flightdeck {
   constructor(private readonly options: FlightdeckOptions) {}
-  async track(name: string, properties: Record<string, unknown> = {}, opts: TrackOptions = {}): Promise<CaptureReceipt> {
-    const d = { ...this.options.defaults?.(), ...opts };
+  withContext(context: TrackOptions): Flightdeck {
+    const { defaults, ...rest } = this.options;
+    return new Flightdeck({ ...rest, defaults: () => ({...defaults?.(), ...context}) });
+  }
+  track(
+    name: string, properties: Record<string, unknown> = {}, options: TrackOptions = {}
+  ): Promise<CaptureReceipt> {
+    const defaults = { ...this.options.defaults?.(), ...options };
     const event: AnalyticsEvent = {
-      eventId: d.eventId ?? crypto.randomUUID(), eventName: name,
-      occurredAt: d.occurredAt ?? new Date().toISOString(),
-      objects: d.objects ?? [], properties: properties as AnalyticsEvent["properties"],
-      ...(d.actorId ? { actorId: d.actorId } : {}),
-      ...(d.anonymousId ? { anonymousId: d.anonymousId } : {}),
-      ...(d.sessionId ? { sessionId: d.sessionId } : {}),
-      ...(d.pageViewId ? { pageViewId: d.pageViewId } : {}),
-      ...(d.interactionId ? { interactionId: d.interactionId } : {}),
-      ...(d.traceId ? { traceId: d.traceId } : {}),
+      eventId: defaults.eventId ?? crypto.randomUUID(),
+      eventName: name, occurredAt: defaults.occurredAt ?? new Date().toISOString(),
+      objects: [...(defaults.objects ?? [])],
+      properties: properties as AnalyticsEvent["properties"],
+      ...(defaults.kind ? {kind:defaults.kind} : {}),
+      ...(defaults.actorId ? {actorId:defaults.actorId} : {}),
+      ...(defaults.anonymousId ? {anonymousId:defaults.anonymousId} : {}),
+      ...(defaults.sessionId ? {sessionId:defaults.sessionId} : {}),
+      ...(defaults.pageViewId ? {pageViewId:defaults.pageViewId} : {}),
+      ...(defaults.interactionId ? {interactionId:defaults.interactionId} : {}),
+      ...(defaults.traceId ? {traceId:defaults.traceId} : {}),
+      ...(defaults.deploymentId ? {deploymentId:defaults.deploymentId} : {}),
     };
     return this.batch([event]);
   }
-  async batch(events: readonly AnalyticsEvent[]): Promise<CaptureReceipt> {
+  batch(events: readonly AnalyticsEvent[]): Promise<CaptureReceipt> {
     return this.options.binding.captureBatch({
-      context: { sourceId: this.options.sourceId, sourceToken: this.options.sourceToken, environment: this.options.environment },
-      events,
+      context: {
+        sourceId: this.options.sourceId,
+        sourceToken: this.options.sourceToken,
+        ...(this.options.environment ? {environment:this.options.environment}:{}),
+      }, events,
     });
   }
-  async identify(actorId: string, properties: Record<string, unknown> = {}): Promise<CaptureReceipt> {
-    return this.track("identity.identified", properties, { actorId });
+  identify(actorId: string, properties:Record<string,unknown>={}): Promise<CaptureReceipt> {
+    return this.track("identity.identified",properties,{actorId});
   }
-  async expose(flagKey: string, variant: string, opts: TrackOptions = {}): Promise<CaptureReceipt> {
-    return this.track("feature.exposed", { flagKey, variant }, opts);
+  expose(flagKey:string,variant:string,options:TrackOptions={}): Promise<CaptureReceipt> {
+    return this.track("feature.exposed",{flagKey,variant}, {...options,kind:"exposure"});
+  }
+  /** Explicit best effort; do not use as a substitute for a transactional business outbox. */
+  trackLater(
+    ctx: Pick<ExecutionContext,"waitUntil">,
+    eventName: string, properties:Record<string,unknown>={}, options:TrackOptions={},
+    onError:(error:unknown)=>void = console.error
+  ):void {
+    ctx.waitUntil(this.track(eventName,properties,options).then(()=>{},onError));
   }
 }
-export function createFlightdeck(options: FlightdeckOptions): Flightdeck { return new Flightdeck(options); }
+export function createFlightdeck(options:FlightdeckOptions):Flightdeck {
+  return new Flightdeck(options);
+}
