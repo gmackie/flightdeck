@@ -58,7 +58,7 @@ export class Flightdeck {
   }
   /** Explicit best effort; do not use as a substitute for a transactional business outbox. */
   trackLater(
-    ctx: Pick<ExecutionContext,"waitUntil">,
+    ctx: { waitUntil(promise: Promise<unknown>): void },
     eventName: string, properties:Record<string,unknown>={}, options:TrackOptions={},
     onError:(error:unknown)=>void = console.error
   ):void {
