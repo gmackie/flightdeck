@@ -3,6 +3,8 @@ import type { QueryKind, QuerySpec } from "@flightdeck/query";
 import { executeBasinQuery } from "./query-runtime";
 import { handleControl, type ControlEnv, type Principal } from "./control";
 import { handleJourneyControl } from "./journey-control";
+import { handleGraph } from "./graph";
+import { handleInvestigations } from "./investigations";
 import {suggestJourneys,type AIProvider} from "./ai";
 
 interface Env extends ControlEnv {
@@ -14,6 +16,7 @@ interface Env extends ControlEnv {
   AI_MODEL?: string;
   JOURNEY_SERVICE?: Fetcher;
   JOURNEY_INTERNAL_KEY?: string;
+  AI_INVESTIGATION_DAILY_LIMIT?: string;
 }
 const jwksCache=new Map<string,ReturnType<typeof createRemoteJWKSet>>();
 function json(body:unknown,status=200):Response {
@@ -63,6 +66,10 @@ export default {
     if(!principal)return json({error:"unauthorized"},401);
     const url=new URL(request.url);
     if(url.pathname.startsWith("/api/")){
+      const graph=await handleGraph(request,env);
+      if(graph)return graph;
+      const investigation=await handleInvestigations(request,env,principal);
+      if(investigation)return investigation;
       const journey=await handleJourneyControl(request,env,principal);
       if(journey)return journey;
       const control=await handleControl(request,env,principal);

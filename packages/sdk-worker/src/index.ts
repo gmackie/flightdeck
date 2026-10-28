@@ -1,6 +1,7 @@
 import type {
-  AnalyticsBinding, AnalyticsEvent, CaptureReceipt, EventKind, ObjectReference
+  AnalyticsBinding, AnalyticsEvent, CaptureReceipt, EventKind, ObjectReference, GraphReceipt
 } from "@flightdeck/contracts";
+import type {GraphManifest} from "@flightdeck/knowledge";
 
 export type TrackOptions = {
   eventId?: string; occurredAt?: string; kind?: EventKind;
@@ -53,6 +54,18 @@ export class Flightdeck {
               ? this.options.consentGranted() : this.options.consentGranted}
           : {}),
       }, events,
+    });
+  }
+  /** Send a full, versioned architecture manifest from a trusted application Worker. */
+  registerGraph(manifest:GraphManifest):Promise<GraphReceipt>{
+    const rpc=this.options.binding.registerGraph;
+    if(!rpc)throw new Error("Flightdeck core does not support graph registration");
+    return rpc({
+      context:{
+        sourceId:this.options.sourceId,sourceToken:this.options.sourceToken,
+        ...(this.options.environment?{environment:this.options.environment}:{})
+      },
+      manifest,
     });
   }
   identify(actorId: string, properties:Record<string,unknown>={}): Promise<CaptureReceipt> {

@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useState,type ReactNode} from "react";
 
 type Row = Record<string,unknown>;
-type Section = "overview"|"events"|"insights"|"dashboards"|"funnels"|"retention"|"journeys"|"experience"|"experiments"|"sources";
+type Section = "overview"|"events"|"insights"|"dashboards"|"funnels"|"retention"|"journeys"|"experience"|"experiments"|"knowledge"|"investigations"|"sources";
 const sections:{id:Section;title:string;icon:string;group:string}[]=[
  {id:"overview",title:"Overview",icon:"▤",group:"Explore"},
  {id:"events",title:"Event Explorer",icon:"≡",group:"Explore"},
@@ -12,6 +12,8 @@ const sections:{id:Section;title:string;icon:string;group:string}[]=[
  {id:"journeys",title:"Journeys",icon:"↬",group:"Analyze"},
  {id:"experience",title:"Experience / RUM",icon:"⌁",group:"Observe"},
  {id:"experiments",title:"Experiments",icon:"◈",group:"Observe"},
+ {id:"knowledge",title:"Product Graph",icon:"⬡",group:"Intelligence"},
+ {id:"investigations",title:"Investigations",icon:"◇",group:"Intelligence"},
  {id:"sources",title:"Integrations",icon:"⚙",group:"Configure"},
 ];
 function rows(response:unknown):Row[]{
@@ -530,6 +532,165 @@ function Dashboards(){
   </Panel>}
  </div>;
 }
+
+type GraphNodeView={id:string;nodeId:string;sourceId:string;kind:string;label:string;revision:string;attributes:Record<string,unknown>};
+type GraphEdgeView={from:string;to:string;relation:string;provenance:string;confidence:number;evidence:string[]};
+function KnowledgeGraph(){
+ const [nodes,setNodes]=useState<GraphNodeView[]>([]);
+ const [edges,setEdges]=useState<GraphEdgeView[]>([]);
+ const [filter,setFilter]=useState("");
+ const [selected,setSelected]=useState<GraphNodeView|null>(null);
+ const [error,setError]=useState("");
+ const [loading,setLoading]=useState(true);
+ const [partial,setPartial]=useState(false);
+ useEffect(()=>{
+  const controller=new AbortController();
+  fetch("/api/graph",{credentials:"same-origin",signal:controller.signal})
+   .then(async res=>{const body=await res.json() as {nodes?:GraphNodeView[];edges?:GraphEdgeView[];partial?:boolean;error?:string};
+    if(!res.ok)throw new Error(body.error??"Graph not available");return body;})
+   .then(data=>{setNodes(data.nodes??[]);setEdges(data.edges??[]);setPartial(!!data.partial);setLoading(false);})
+   .catch(e=>{if(!controller.signal.aborted){setError(String(e.message));setLoading(false);}});
+  return ()=>controller.abort();
+ },[]);
+ const filtered=nodes.filter(n=>[n.kind,n.label,n.sourceId].some(x=>x.toLowerCase().includes(filter.toLowerCase())));
+ const related=selected?edges.filter(e=>e.from===selected.id||e.to===selected.id):[];
+ return <div className="stack">
+  <div className="metric-grid">
+   <Metric label="Known nodes" value={count(nodes.length)}/>
+   <Metric label="Dependencies" value={count(edges.length)}/>
+   <Metric label="Source Workers" value={count(new Set(nodes.map(x=>x.sourceId)).size)}/>
+   <Metric label="Inferred edges" value={count(edges.filter(x=>x.provenance==="inference").length)}/>
+  </div>
+  <Panel title="Product knowledge graph" sub="Source-authored architecture and evidence-backed relationships"
+   action={<input className="search" value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Find routes, APIs, workers"/>}>
+   <Message loading={loading} error={error} empty={!nodes.length&&!loading}/>
+   {partial&&<p className="note">This is a capped graph preview; more entities are stored in D1.</p>}
+   <div className="graph-layout">
+    <div className="graph-nodes">{filtered.map(node=><button key={node.id}
+     className={"graph-node "+(selected?.id===node.id?"selected":"")}
+     onClick={()=>setSelected(node)}>
+     <span className="eyebrow">{node.kind.replaceAll("_"," ")}</span>
+     <b>{node.label}</b><small>{node.sourceId}</small>
+    </button>)}</div>
+    <div className="graph-details">
+      {selected?<><span className="eyebrow">SELECTED ENTITY</span><h3>{selected.label}</h3>
+       <p>{selected.kind} · revision {selected.revision}</p>
+       <pre>{JSON.stringify(selected.attributes,null,2)}</pre>
+       <h4>Connections</h4>
+       {related.length?related.map((edge,i)=><div className="graph-edge" key={i}>
+        <b>{edge.relation}</b>
+        <span>{edge.from===selected.id?edge.to:edge.from}</span>
+        <small>{edge.provenance} · {Math.round(edge.confidence*100)}% confidence</small>
+       </div>):<p className="note">No connections in this preview.</p>}
+      </>:<div className="empty">Select an entity to inspect its relationships and evidence.</div>}
+    </div>
+   </div>
+  </Panel>
+  <Panel title="Integration model" sub="Application Workers register manifests through the same private service binding">
+   <p>Architecture metadata is source-scoped. Inference edges require explicit evidence IDs and are never assumed to be causal.</p>
+  </Panel>
+ </div>;
+}
+type InvestigationSummary={id:string;title:string;question:string;status:string;model_id:string;created_at:string};
+type ProposedAction={id:string;action_type:string;summary:string;status:string;acceptance:string[]};
+type InvestigationDetail={id:string;title:string;question:string;status:string;
+ modelId:string;evidence:Array<{key:string;current:number;baseline:number;changePercent:number|null}>;
+ proposal:{summary:string;hypotheses:Array<{description:string;confidence:string;evidenceKeys:string[]}>};
+ actions:ProposedAction[]};
+function Investigations(){
+ const [items,setItems]=useState<InvestigationSummary[]>([]);
+ const [selected,setSelected]=useState<InvestigationDetail|null>(null);
+ const [question,setQuestion]=useState("What changed in our most frequently used workflows during the past week?");
+ const [error,setError]=useState("");
+ const [message,setMessage]=useState("");
+ const [busy,setBusy]=useState(false);
+ async function load(){
+  try{
+   const response=await fetch("/api/investigations",{credentials:"same-origin"});
+   const body=await response.json() as {items?:InvestigationSummary[];error?:string};
+   if(!response.ok)throw new Error(body.error??"Investigation list unavailable");
+   setItems(body.items??[]);
+  }catch(e){setError(String((e as Error).message));}
+ }
+ useEffect(()=>{void load();},[]);
+ async function inspect(id:string){
+  setError("");
+  try{
+   const res=await fetch("/api/investigations/"+encodeURIComponent(id),{credentials:"same-origin"});
+   const body=await res.json() as InvestigationDetail & {error?:string};
+   if(!res.ok)throw new Error(body.error??"Investigation unavailable");
+   setSelected(body);
+  }catch(e){setError(String((e as Error).message));}
+ }
+ async function create(){
+  setBusy(true);setError("");setMessage("");
+  try{
+   const res=await fetch("/api/investigations",{
+    method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({question})
+   });
+   const body=await res.json() as {id?:string;error?:string};
+   if(!res.ok)throw new Error(body.error??"Investigation failed");
+   setMessage("Evidence-backed investigation saved. Proposed actions require separate review.");
+   await load();if(body.id)await inspect(body.id);
+  }catch(e){setError(String((e as Error).message));}
+  finally{setBusy(false);}
+ }
+ async function decide(id:string,decision:"approved"|"rejected"){
+  const rationale=window.prompt("Decision rationale (at least 12 characters)")??"";
+  if(rationale.trim().length<12)return;
+  setBusy(true);setError("");
+  try{
+   const res=await fetch("/api/proposed-actions/"+encodeURIComponent(id)+"/decision",{
+    method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({decision,rationale})
+   });
+   const body=await res.json() as {error?:string};
+   if(!res.ok)throw new Error(body.error??"Action review failed");
+   setMessage("Review decision saved; no external changes were executed.");
+   if(selected)await inspect(selected.id);
+  }catch(e){setError(String((e as Error).message));}
+  finally{setBusy(false);}
+ }
+ return <div className="stack">
+  <Panel title="Evidence-first investigation" sub="Compare bounded product events across two historical periods">
+   <label className="field-label">What should Flightdeck investigate?</label>
+   <textarea className="question-input" rows={3} value={question} onChange={e=>setQuestion(e.target.value)}/>
+   <div className="inline-form">
+    <button disabled={busy||question.trim().length<3} className="primary" onClick={()=>void create()}>
+     {busy?"Investigating…":"Investigate observed changes"}</button>
+    <span className="note">AI interpretation is opt-in and budget-limited.</span>
+   </div>
+   {error&&<div className="error-state">{error}</div>}
+   {message&&<p className="ok-label">{message}</p>}
+  </Panel>
+  <Panel title="Investigation history" sub="Project-scoped reports, with evidence provenance">
+   {items.length?<div className="transition-list">{items.map(x=><div className="integration" key={x.id}>
+    <div><b>{x.title}</b><span className="note">{x.status} · {x.model_id}</span></div>
+    <button className="tiny-button" onClick={()=>void inspect(x.id)}>Open evidence</button>
+   </div>)}</div>:<div className="empty">No investigations yet.</div>}
+  </Panel>
+  {selected&&<Panel title={selected.title} sub={"Model: "+selected.modelId+" · observations, not causal findings"}>
+   <p>{selected.proposal.summary}</p>
+   <div className="table-scroll"><table><thead><tr><th>Metric</th><th>Current</th><th>Baseline</th><th>Change</th></tr></thead>
+    <tbody>{selected.evidence.map(x=><tr key={x.key}><td>{x.key}</td><td>{count(x.current)}</td><td>{count(x.baseline)}</td>
+     <td>{x.changePercent===null?"N/A":x.changePercent.toFixed(1)+"%"}</td></tr>)}</tbody></table></div>
+   <h3>Hypotheses</h3>
+   {selected.proposal.hypotheses.map((h,i)=><div className="hypothesis" key={i}>
+    <b>{h.description}</b><small>{h.confidence} confidence · {h.evidenceKeys.join(", ")}</small>
+   </div>)}
+   <h3>Proposed actions</h3>
+   {selected.actions.map(action=><div className="integration" key={action.id}>
+    <div><b>{action.summary}</b><span className="note">{action.action_type} · {action.status}</span></div>
+    {action.status==="proposed"&&<div className="inline-actions">
+      <button className="tiny-button" disabled={busy} onClick={()=>void decide(action.id,"approved")}>Approve</button>
+      <button className="tiny-button" disabled={busy} onClick={()=>void decide(action.id,"rejected")}>Reject</button>
+    </div>}
+   </div>)}
+   <p className="note">Approving a proposal records a review decision only; Flightdeck never executes it autonomously.</p>
+  </Panel>}
+ </div>;
+}
 function Sources(){
  return <div className="stack"><Panel title="Self-hosted deployment" sub="Application-owned collection—no Flightdeck public collector required">
   <div className="integration"><div><span className="integration-icon">CF</span><div><h3>Workers service binding</h3><p>Calls from your Worker and Durable Objects to the private Analytics Core.</p></div></div><span className="ok-label">Recommended</span></div>
@@ -569,6 +730,8 @@ export function App(){
  case "journeys":content=<Journeys days={days} refresh={refresh}/>;break;
  case "experience":content=<Experience days={days} refresh={refresh}/>;break;
  case "experiments":content=<Experiments days={days} refresh={refresh}/>;break;
+ case "knowledge":content=<KnowledgeGraph/>;break;
+ case "investigations":content=<Investigations/>;break;
  case "sources":content=<Sources/>;break;
  }
  const navTitle=sections.find(s=>s.id===selected)?.title;

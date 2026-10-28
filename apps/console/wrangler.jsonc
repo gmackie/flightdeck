@@ -19,7 +19,8 @@
     "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
     "QUERY_QUOTA_REQUIRED": "true",
     "QUERY_MONTHLY_UNITS": "50000",
-    "ADMIN_EMAILS": ""
+    "ADMIN_EMAILS": "",
+    "AI_INVESTIGATION_DAILY_LIMIT": "3"
   },
   "observability": {
     "enabled": true

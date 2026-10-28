@@ -1,4 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
+import { registerGraph, type GraphSubmission } from "./graph";
+import type { GraphReceipt } from "@flightdeck/knowledge";
 import type { CaptureRequest, CaptureReceipt } from "@flightdeck/contracts";
 import { IngestError, ingestBatch, type SourceConfig, type SinkRecord, type EventSink } from "./ingest";
 import { basinSink, r2Sink, type BasinBinding, type R2Like } from "./sinks";
@@ -10,6 +12,7 @@ export interface Env {
   SINK_MODE: string;
   STREAM?: BasinBinding;
   EVENTS?: R2Like;
+  META?: D1Database;
   /** Optional at-least-once live path, not atomic with the historical sink. */
   JOURNEY_QUEUE?: { sendBatch(messages: ReadonlyArray<{body:SinkRecord}>): Promise<void> };
 }
@@ -39,6 +42,10 @@ export default class AnalyticsCore extends WorkerEntrypoint<Env> {
       }
     } : sink;
     return ingestBatch(request,readSources(this.env.SOURCE_CREDENTIALS),effective);
+  }
+  async registerGraph(request:GraphSubmission):Promise<GraphReceipt> {
+    if(!this.env.META)throw new IngestError("metadata_not_configured");
+    return registerGraph(request,readSources(this.env.SOURCE_CREDENTIALS),this.env.META);
   }
   /** Never serve ingestion over public HTTP; use RPC from a service binding. */
   override async fetch(): Promise<Response> {
