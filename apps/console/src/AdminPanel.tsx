@@ -26,6 +26,8 @@ export function AdminWorkspace(){
   const [sourceId,setSourceId]=useState("");
   const [events,setEvents]=useState("page.viewed,rum.*");
   const [requireConsent,setRequireConsent]=useState(false);
+  const [graphEnabled,setGraphEnabled]=useState(false);
+  const [propertyJson,setPropertyJson]=useState(JSON.stringify(defaults.allowedProperties,null,2));
   const [oneTimeSecret,setSecret]=useState<{id:string;token:string}|null>(null);
   const [copied,setCopied]=useState(false);
   const [activeStep,setActiveStep]=useState(0);
@@ -45,8 +47,12 @@ export function AdminWorkspace(){
     setBusy(true);setError("");setSecret(null);
     try{
       const names=events.split(",").map(x=>x.trim()).filter(Boolean);
+      const propertyMap:unknown=JSON.parse(propertyJson);
+      if(!propertyMap||typeof propertyMap!=="object"||Array.isArray(propertyMap))
+        throw new Error("Property allowlist must be a JSON object");
       const policy={...defaults,allowedEvents:names,consentRequired:requireConsent,
-        allowedProperties:Object.fromEntries(names.map(x=>[x,defaults.allowedProperties[x]??[]]))};
+        graphEnabled,
+        allowedProperties:propertyMap};
       const result=await api<{id:string;token:string}>("/api/admin/sources","POST",{
         id:sourceId.trim(),policy,confirm:"CREATE_SOURCE"
       });
@@ -134,6 +140,11 @@ export function AdminWorkspace(){
           <label>Source ID<input value={sourceId} onChange={e=>setSourceId(e.target.value)} placeholder="checkout-worker"/></label>
           <label>Allowed events<input value={events} onChange={e=>setEvents(e.target.value)}/></label>
         </div>
+        <label className="field-label">Allowed properties by event (JSON)</label>
+        <textarea className="question-input" rows={5} value={propertyJson}
+          onChange={e=>setPropertyJson(e.target.value)} spellCheck={false}/>
+        <label className="admin-checkbox"><input type="checkbox" checked={graphEnabled}
+          onChange={e=>setGraphEnabled(e.target.checked)}/> Allow source-authored application knowledge graph registration</label>
         <label className="admin-checkbox"><input type="checkbox" checked={requireConsent}
           onChange={e=>setRequireConsent(e.target.checked)}/> Require an authenticated application consent assertion</label>
         <button className="primary" disabled={busy||!sourceId.trim()} onClick={()=>void create()}>Create source and credential</button>
