@@ -16,7 +16,10 @@
     "BASIN_TABLE": "default.flightdeck_events",
     "PROJECT_ID": "default",
     "AI_ENABLED": "false",
-    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "QUERY_QUOTA_REQUIRED": "true",
+    "QUERY_MONTHLY_UNITS": "50000",
+    "ADMIN_EMAILS": ""
   },
   "observability": {
     "enabled": true

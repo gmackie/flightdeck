@@ -1,10 +1,12 @@
 import {useEffect,useMemo,useState,type ReactNode} from "react";
 
 type Row = Record<string,unknown>;
-type Section = "overview"|"events"|"funnels"|"retention"|"journeys"|"experience"|"experiments"|"sources";
+type Section = "overview"|"events"|"insights"|"dashboards"|"funnels"|"retention"|"journeys"|"experience"|"experiments"|"sources";
 const sections:{id:Section;title:string;icon:string;group:string}[]=[
  {id:"overview",title:"Overview",icon:"▤",group:"Explore"},
  {id:"events",title:"Event Explorer",icon:"≡",group:"Explore"},
+ {id:"insights",title:"Saved Insights",icon:"▣",group:"Explore"},
+ {id:"dashboards",title:"Dashboards",icon:"⊞",group:"Explore"},
  {id:"funnels",title:"Funnels",icon:"⋈",group:"Analyze"},
  {id:"retention",title:"Retention",icon:"▦",group:"Analyze"},
  {id:"journeys",title:"Journeys",icon:"↬",group:"Analyze"},
@@ -259,6 +261,165 @@ function Experiments({days,refresh}:{days:number;refresh:number}){
    <p className="muted">Exposure counts alone do not measure experimental lift. Randomized assignment provenance, goal attribution and statistical guardrails are required before presenting causal conclusions.</p>
   </Panel></div>;
 }
+type InsightItem = {
+ id:string;name:string;query:{kind:string;days:number;steps?:string[];eventName?:string};updated_at:string;
+};
+type DashboardItem = {
+ id:string;title:string;layout:Array<{insightId:string;x:number;y:number;w:number;h:number}>;updatedAt:string;
+};
+function DataTable({data}:{data:Row[]}){
+ if(!data.length)return <div className="empty">No rows returned.</div>;
+ const keys=Object.keys(data[0]??{}).slice(0,9);
+ return <div className="table-scroll"><table><thead><tr>{keys.map(k=><th key={k}>{k}</th>)}</tr></thead>
+  <tbody>{data.slice(0,50).map((item,i)=><tr key={i}>{keys.map(k=><td key={k}>{text(item[k])}</td>)}</tr>)}</tbody></table></div>;
+}
+function SavedInsights(){
+ const [items,setItems]=useState<InsightItem[]>([]);
+ const [name,setName]=useState("Activation funnel");
+ const [kind,setKind]=useState("funnel");
+ const [days,setDays]=useState(7);
+ const [steps,setSteps]=useState("signup.completed,project.created");
+ const [error,setError]=useState("");
+ const [busy,setBusy]=useState(false);
+ const [results,setResults]=useState<Row[]|null>(null);
+ const [active,setActive]=useState("");
+ async function load(){
+  try {
+   const response=await fetch("/api/insights",{credentials:"same-origin"});
+   const body=await response.json() as {items?:InsightItem[];error?:string};
+   if(!response.ok)throw new Error(body.error??"Unable to list insights");
+   setItems(body.items??[]);
+  }catch(e){setError(String((e as Error).message));}
+ }
+ useEffect(()=>{void load();},[]);
+ async function save(){
+  setBusy(true);setError("");
+  try{
+   const response=await fetch("/api/insights",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name,query:{kind,days,...(kind==="funnel"?{steps:steps.split(",").map(x=>x.trim())}:{})}})});
+   const body=await response.json() as {error?:string};
+   if(!response.ok)throw new Error(body.error??"Save failed");
+   await load();
+  }catch(e){setError(String((e as Error).message));}finally{setBusy(false);}
+ }
+ async function run(id:string){
+  setBusy(true);setActive(id);setError("");
+  try{
+   const response=await fetch("/api/insights/"+encodeURIComponent(id)+"/run",{
+    method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:"{}"
+   });
+   const body=await response.json() as {error?:string};
+   if(!response.ok)throw new Error(body.error??"Query failed");
+   setResults(rows(body));
+  }catch(e){setError(String((e as Error).message));setResults(null);}finally{setBusy(false);}
+ }
+ async function remove(id:string){
+  if(!window.confirm("Delete this saved insight?"))return;
+  setBusy(true);setError("");
+  try{
+   const response=await fetch("/api/insights/"+encodeURIComponent(id),{
+    method:"DELETE",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:"{}"
+   });
+   const body=await response.json() as {error?:string};
+   if(!response.ok)throw new Error(body.error??"Delete failed");
+   await load();
+  }catch(e){setError(String((e as Error).message));}finally{setBusy(false);}
+ }
+ return <div className="stack">
+  <Panel title="Create a saved insight" sub="Reusable, project-scoped queries with rolling time windows">
+   <div className="insight-form">
+    <label>Title<input value={name} onChange={e=>setName(e.target.value)} maxLength={120}/></label>
+    <label>Analysis<select value={kind} onChange={e=>setKind(e.target.value)}>
+     {["overview","top-events","trends","recent-events","funnel","retention","rum","experiments","transitions"].map(x=><option key={x} value={x}>{x}</option>)}
+    </select></label>
+    <label>Window<select value={days} onChange={e=>setDays(Number(e.target.value))}>
+     {[1,7,14,30].map(x=><option key={x} value={x}>Last {x} days</option>)}
+    </select></label>
+   </div>
+   {kind==="funnel"&&<label className="insight-steps">Ordered event steps<input value={steps} onChange={e=>setSteps(e.target.value)}/></label>}
+   <button disabled={busy} onClick={()=>void save()} className="primary">Save insight</button>
+  </Panel>
+  <Panel title="Saved insights" sub="Available to authenticated Flightdeck users; editing requires admin permission">
+   {error&&<p className="error-state">{error}</p>}
+   {items.length===0?<div className="empty">No saved insights yet, or metadata database not configured.</div>:
+   <div className="table-scroll"><table><thead><tr><th>Title</th><th>Type</th><th>Window</th><th>Actions</th></tr></thead>
+   <tbody>{items.map(item=><tr key={item.id}><td>{item.name}</td><td>{item.query.kind}</td>
+    <td>{item.query.days} days</td>
+    <td><button className="tiny-button" disabled={busy} onClick={()=>void run(item.id)}>Run</button>{" "}
+      <button className="tiny-button" disabled={busy} onClick={()=>void remove(item.id)}>Delete</button></td></tr>)}
+   </tbody></table></div>}
+  </Panel>
+  {results&&<Panel title={"Query results · "+(items.find(x=>x.id===active)?.name??"Insight")}>
+   <DataTable data={results}/>
+  </Panel>}
+ </div>;
+}
+function DashboardWidget({insight}:{insight:InsightItem|undefined}){
+ const [data,setData]=useState<Row[]|null>(null),[error,setError]=useState("");
+ useEffect(()=>{
+  if(!insight)return;
+  const c=new AbortController();
+  fetch("/api/insights/"+encodeURIComponent(insight.id)+"/run",{
+   method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:"{}",signal:c.signal
+  }).then(async r=>{const p=await r.json() as {error?:string};if(!r.ok)throw new Error(p.error??"Query failed");return rows(p);})
+   .then(setData).catch(e=>{if(!c.signal.aborted)setError(String(e.message));});
+  return ()=>c.abort();
+ },[insight?.id]);
+ return <div className="dashboard-widget"><h3>{insight?.name??"Missing insight"}</h3>
+  {error?<div className="error-state">{error}</div>:data?<DataTable data={data}/>:<div className="empty">Loading…</div>}</div>;
+}
+function Dashboards(){
+ const [items,setItems]=useState<DashboardItem[]>([]);
+ const [insights,setInsights]=useState<InsightItem[]>([]);
+ const [name,setName]=useState("Product health");
+ const [selected,setSelected]=useState<string[]>([]);
+ const [active,setActive]=useState<string|null>(null);
+ const [error,setError]=useState("");
+ async function load(){
+  try{
+   const responses=await Promise.all(["/api/dashboards","/api/insights"].map(url=>fetch(url,{credentials:"same-origin"})));
+   const [d,i]=await Promise.all(responses.map(r=>r.json() as Promise<{items?:any[];error?:string}>));
+   if(!responses[0]?.ok||!responses[1]?.ok)throw new Error(d.error??i.error??"Metadata unavailable");
+   setItems(d.items??[]);setInsights(i.items??[]);
+  }catch(e){setError(String((e as Error).message));}
+ }
+ useEffect(()=>{void load();},[]);
+ async function save(){
+  setError("");
+  const layout=selected.map((insightId,i)=>({insightId,x:(i%2)*6,y:Math.floor(i/2)*4,w:6,h:4}));
+  try{
+   const response=await fetch("/api/dashboards",{method:"POST",headers:{"Content-Type":"application/json"},
+    credentials:"same-origin",body:JSON.stringify({title:name,layout})});
+   const payload=await response.json() as {error?:string};
+   if(!response.ok)throw new Error(payload.error??"Create failed");
+   await load();
+  }catch(e){setError(String((e as Error).message));}
+ }
+ const dashboard=items.find(x=>x.id===active);
+ return <div className="stack">
+  <Panel title="Dashboard composer" sub="Combine saved, bounded analytics queries into a reusable workspace">
+   <label className="field-label">Dashboard name</label>
+   <input className="search" value={name} onChange={e=>setName(e.target.value)}/>
+   <p>Choose up to 12 saved insights to display.</p>
+   <div className="checkbox-grid">{insights.map(i=><label key={i.id}>
+    <input type="checkbox" checked={selected.includes(i.id)} onChange={e=>setSelected(prev=>e.target.checked?
+      [...prev,i.id].slice(0,12):prev.filter(id=>id!==i.id))}/> {i.name}</label>)}</div>
+   <button className="primary" onClick={()=>void save()} disabled={!selected.length}>Create dashboard</button>
+  </Panel>
+  <Panel title="Available dashboards">
+   {error&&<div className="error-state">{error}</div>}
+   {items.length===0?<div className="empty">No dashboards yet.</div>:
+   <div className="transition-list">{items.map(d=><div className="integration" key={d.id}>
+    <div><b>{d.title}</b><span className="note">{d.layout.length} widgets</span></div>
+    <button className="tiny-button" onClick={()=>setActive(d.id)}>Open</button>
+   </div>)}</div>}
+  </Panel>
+  {dashboard&&<Panel title={dashboard.title} sub="Queries run with server-side project isolation and budget checks">
+   <div className="dashboard-grid">{dashboard.layout.map((w,i)=>
+    <DashboardWidget key={i} insight={insights.find(x=>x.id===w.insightId)}/>)}</div>
+  </Panel>}
+ </div>;
+}
 function Sources(){
  return <div className="stack"><Panel title="Self-hosted deployment" sub="Application-owned collection—no Flightdeck public collector required">
   <div className="integration"><div><span className="integration-icon">CF</span><div><h3>Workers service binding</h3><p>Calls from your Worker and Durable Objects to the private Analytics Core.</p></div></div><span className="ok-label">Recommended</span></div>
@@ -291,6 +452,8 @@ export function App(){
  switch(selected){
  case "overview":content=<Overview days={days} refresh={refresh}/>;break;
  case "events":content=<Events days={days} refresh={refresh}/>;break;
+ case "insights":content=<SavedInsights/>;break;
+ case "dashboards":content=<Dashboards/>;break;
  case "funnels":content=<Funnels days={days}/>;break;
  case "retention":content=<Retention days={days} refresh={refresh}/>;break;
  case "journeys":content=<Journeys days={days} refresh={refresh}/>;break;
