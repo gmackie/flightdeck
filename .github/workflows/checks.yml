@@ -11,7 +11,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: generated-lockfile
+          path: pnpm-lock.yaml
