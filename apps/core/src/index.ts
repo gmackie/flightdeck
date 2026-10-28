@@ -16,6 +16,31 @@ export interface Env {
   /** Optional at-least-once live path, not atomic with the historical sink. */
   JOURNEY_QUEUE?: { sendBatch(messages: ReadonlyArray<{body:SinkRecord}>): Promise<void> };
 }
+export async function resolveSources(
+  sourceId:string, db:D1Database|undefined, registry:string
+):Promise<Record<string,SourceConfig>>{
+  if(db){
+    const record=await db.prepare(
+      "SELECT project_id,token_sha256,previous_sha256,policy_json,enabled FROM source_credentials WHERE source_id=? LIMIT 2"
+    ).bind(sourceId).all<{
+      project_id:string;token_sha256:string;previous_sha256:string|null;
+      policy_json:string;enabled:number
+    }>();
+    if(record.results.length>1)throw new IngestError("ambiguous_source_id");
+    const row=record.results[0];
+    if(row){
+      const policy=JSON.parse(row.policy_json) as Partial<SourceConfig>;
+      return {[sourceId]:{
+        ...policy,projectId:row.project_id,sha256:row.token_sha256,
+        rotatingSha256:row.previous_sha256?[row.previous_sha256]:[],
+        enabled:row.enabled===1,
+        allowedEvents:policy.allowedEvents??[],
+        allowedProperties:policy.allowedProperties??{}
+      }};
+    }
+  }
+  return readSources(registry);
+}
 function readSources(serialized: string): Record<string,SourceConfig> {
   try {
     const value: unknown = JSON.parse(serialized);
@@ -41,11 +66,13 @@ export default class AnalyticsCore extends WorkerEntrypoint<Env> {
         }));
       }
     } : sink;
-    return ingestBatch(request,readSources(this.env.SOURCE_CREDENTIALS),effective);
+    const registry=await resolveSources(request?.context?.sourceId??"",this.env.META,this.env.SOURCE_CREDENTIALS);
+    return ingestBatch(request,registry,effective);
   }
   async registerGraph(request:GraphSubmission):Promise<GraphReceipt> {
     if(!this.env.META)throw new IngestError("metadata_not_configured");
-    return registerGraph(request,readSources(this.env.SOURCE_CREDENTIALS),this.env.META);
+    const registry=await resolveSources(request?.context?.sourceId??"",this.env.META,this.env.SOURCE_CREDENTIALS);
+    return registerGraph(request,registry,this.env.META);
   }
   /** Never serve ingestion over public HTTP; use RPC from a service binding. */
   override async fetch(): Promise<Response> {

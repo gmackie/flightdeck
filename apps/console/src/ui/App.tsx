@@ -1,8 +1,9 @@
+import {AdminWorkspace} from "./Admin";
 import {simulateJourney,type SimulationResult,type ObservedTransition} from "@flightdeck/simulator";
 import {useEffect,useMemo,useState,type ReactNode} from "react";
 
 type Row = Record<string,unknown>;
-type Section = "overview"|"events"|"insights"|"dashboards"|"funnels"|"retention"|"journeys"|"experience"|"experiments"|"knowledge"|"investigations"|"sources";
+type Section = "overview"|"events"|"insights"|"dashboards"|"funnels"|"retention"|"journeys"|"experience"|"experiments"|"knowledge"|"investigations"|"sources"|"admin";
 const sections:{id:Section;title:string;icon:string;group:string}[]=[
  {id:"overview",title:"Overview",icon:"▤",group:"Explore"},
  {id:"events",title:"Event Explorer",icon:"≡",group:"Explore"},
@@ -16,6 +17,7 @@ const sections:{id:Section;title:string;icon:string;group:string}[]=[
  {id:"knowledge",title:"Product Graph",icon:"⬡",group:"Intelligence"},
  {id:"investigations",title:"Investigations",icon:"◇",group:"Intelligence"},
  {id:"sources",title:"Integrations",icon:"⚙",group:"Configure"},
+ {id:"admin",title:"Admin & Setup",icon:"▦",group:"Configure"},
 ];
 function rows(response:unknown):Row[]{
   const v=response as any;
@@ -887,6 +889,7 @@ export function App(){
  case "knowledge":content=<KnowledgeGraph/>;break;
  case "investigations":content=<Investigations/>;break;
  case "sources":content=<Sources/>;break;
+ case "admin":content=<AdminWorkspace/>;break;
  }
  const navTitle=sections.find(s=>s.id===selected)?.title;
  return <div className="shell">

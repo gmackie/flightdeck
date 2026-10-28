@@ -15,6 +15,7 @@ Review and merge PRs in order only after validation.
 8. PR #8 — optional Access-authenticated read-only MCP for coding agents.
 9. PR #9 — bounded observational process twin / what-if explorer.
 10. PR #10 — admin-approved, one-time GitHub issue handoff for engineering agents.
+11. PR #11 — guided local wizard, dynamic source administration, Admin UI and admin MCP.
 
 All PRs remain draft until reviewed; **do not squash a child PR onto main before its parent branch**.
 

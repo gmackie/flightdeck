@@ -12,6 +12,8 @@ interface Env{
   ACCESS_TEAM_DOMAIN:string;
   ACCESS_AUD:string;
   CONSOLE:Fetcher;
+  ADMIN_EMAILS?:string;
+  ENABLE_ADMIN_MCP_WRITES?:string;
 }
 type Authenticated={id:string;email:string;assertion:string};
 const jwks=new Map<string,ReturnType<typeof createRemoteJWKSet>>();
@@ -31,14 +33,21 @@ async function authenticate(request:Request,env:Env):Promise<Authenticated|null>
 const response=(value:unknown)=>({
   content:[{type:"text" as const,text:typeof value==="string"?value:JSON.stringify(value)}],
 });
-async function fromConsole(env:Env,principal:Authenticated,path:string):Promise<unknown>{
+async function fromConsole(
+  env:Env,principal:Authenticated,path:string,
+  method:"GET"|"POST"="GET",payload?:unknown
+):Promise<unknown>{
   const url="https://flightdeck-console"+path;
   const result=await env.CONSOLE.fetch(url,{
-    method:"GET",
+    method,
     headers:{
       "Cf-Access-Jwt-Assertion":principal.assertion,
-      "Accept":"application/json"
-    }
+      "Accept":"application/json",
+      ...(method==="POST"?{
+        "Origin":"https://flightdeck-console","Content-Type":"application/json"
+      }:{})
+    },
+    ...(method==="POST"?{body:JSON.stringify(payload??{})}:{})
   });
   if(!result.ok){
     return {error:"flightdeck_unavailable",status:result.status};
@@ -92,6 +101,30 @@ function createServer(env:Env,principal:Authenticated){
     description:"View the current project's relative analytics query budget. Units are not actual Cloudflare billing.",
     inputSchema:z.object({})
   },async()=>response(await fromConsole(env,principal,"/api/query-budget")));
+  const adminEmails=(env.ADMIN_EMAILS??"").toLowerCase().split(",").map(x=>x.trim()).filter(Boolean);
+  const isAdmin=adminEmails.includes(principal.email.toLowerCase());
+  if(isAdmin){
+    server.registerTool("flightdeck_admin_status",{
+      description:"Read configured Flightdeck health and migration checks. Does not provision resources.",
+      inputSchema:z.object({})
+    },async()=>response(await fromConsole(env,principal,"/api/admin/status")));
+    server.registerTool("flightdeck_admin_sources",{
+      description:"List project-scoped sources and their policy without exposing credentials or token digests.",
+      inputSchema:z.object({})
+    },async()=>response(await fromConsole(env,principal,"/api/admin/sources")));
+    if(env.ENABLE_ADMIN_MCP_WRITES==="true"){
+      server.registerTool("flightdeck_admin_disable_source",{
+        description:"Disable an existing source after explicit operator confirmation. Cannot create credentials or re-enable sources.",
+        inputSchema:z.object({
+          sourceId:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
+          confirm:z.literal("APPLY_DISABLE")
+        })
+      },async({sourceId,confirm})=>response(await fromConsole(
+        env,principal,"/api/admin/sources/"+encodeURIComponent(sourceId)+"/disable",
+        "POST",{confirm}
+      )));
+    }
+  }
   server.registerTool("flightdeck_saved_insights",{
     description:"List metadata for reusable product analytics insight definitions.",
     inputSchema:z.object({})

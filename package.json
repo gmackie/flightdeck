@@ -18,7 +18,9 @@
     "workspace:restore": "node scripts/restore.mjs",
     "workspace:doctor": "node scripts/doctor-remote.mjs",
     "test:integration": "vitest run tests/integration",
-    "test:deployment": "node --test scripts/workspace-deploy.test.mjs"
+    "test:deployment": "node --test scripts/workspace-deploy.test.mjs",
+    "wizard": "node scripts/wizard.mjs",
+    "test:wizard": "node --test scripts/wizard.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

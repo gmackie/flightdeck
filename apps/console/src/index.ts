@@ -7,6 +7,7 @@ import { handleGraph } from "./graph";
 import { handleInvestigations } from "./investigations";
 import { handleExperimentAnalysis } from "./experiment-api";
 import { handleAgentHandoff } from "./handoff";
+import { handleAdmin } from "./admin";
 import {suggestJourneys,type AIProvider} from "./ai";
 
 interface Env extends ControlEnv {
@@ -70,6 +71,8 @@ export default {
     if(!principal)return json({error:"unauthorized"},401);
     const url=new URL(request.url);
     if(url.pathname.startsWith("/api/")){
+      const admin=await handleAdmin(request,env,principal);
+      if(admin)return admin;
       const handoff=await handleAgentHandoff(request,env,principal);
       if(handoff)return handoff;
       const experiment=await handleExperimentAnalysis(request,env,principal.sub);

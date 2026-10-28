@@ -56,3 +56,27 @@
 .simulation-metrics b{display:block;font-size:14px;color:#eef5fc}
 .simulation-metrics small{display:block;font-size:10px;color:#8a9db6;margin-top:5px}
 @media(max-width:700px){.simulation-grid{grid-template-columns:1fr}}
+
+.admin-health-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.admin-health-item{display:flex;gap:11px;align-items:center;border:1px solid #283b52;padding:12px;border-radius:8px;background:#101c2b}
+.admin-health-item b{display:block;font-size:12px;text-transform:capitalize}
+.admin-health-item small{display:block;color:#8da0b5;font-size:10px;margin-top:4px}
+.admin-check-ok,.admin-check-failed{display:grid;place-items:center;border-radius:50%;height:23px;width:23px;font-size:12px;font-weight:bold;background:#143f36;color:#80e2bd}
+.admin-check-failed{background:#4d332a;color:#f6b399}
+.admin-wizard{display:grid;grid-template-columns:210px 1fr;gap:18px;margin:16px 0}
+.admin-wizard-steps{display:flex;flex-direction:column;gap:5px}
+.admin-wizard-step{display:flex;align-items:center;gap:9px;color:#9eb2c7;font-size:11px;text-align:left;padding:11px;background:#121c2c;border:1px solid transparent;border-radius:8px}
+.admin-wizard-step span{display:grid;place-items:center;height:20px;width:20px;border:1px solid #456;border-radius:50%}
+.admin-wizard-step.active{background:#18333a;border-color:#2c7c75;color:#92f2d4}
+.admin-wizard-detail{border:1px solid #304254;border-radius:9px;background:#111c2e;padding:20px}
+.admin-wizard-detail h3{font-size:17px}
+.admin-wizard-detail .inline-actions{margin-top:16px}
+.admin-create{border-top:1px solid #28394d;margin-top:18px;padding-top:15px}
+.admin-create h3{font-size:13px}
+.admin-checkbox{display:flex;align-items:center;gap:8px;margin:10px 0 18px;font-size:11px;color:#c1cddd}
+.admin-secret{background:#18332d;border:1px solid #2e8774;border-radius:9px;padding:17px;margin-top:20px}
+.admin-secret h3{font-size:13px;margin-top:0}.admin-secret p{color:#9bc8b7;font-size:11px}
+.admin-secret code{display:block;overflow:auto;padding:11px;background:#0c1f1a;border-radius:6px;font-size:11px;color:#a5f3d3}
+.admin-secret .inline-actions{margin-top:12px}
+.admin-actions{white-space:nowrap}
+@media(max-width:760px){.admin-wizard{grid-template-columns:1fr}.admin-health-grid{grid-template-columns:1fr}}
