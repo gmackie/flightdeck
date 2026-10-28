@@ -12,7 +12,13 @@
     "doctor": "node scripts/doctor.mjs",
     "source:add": "node scripts/source.mjs",
     "source:govern": "node scripts/source-governance.mjs",
-    "test:govern": "node --test scripts/source-governance.test.mjs"
+    "test:govern": "node --test scripts/source-governance.test.mjs",
+    "workspace:deploy": "node scripts/workspace-deploy.mjs",
+    "workspace:backup": "node scripts/backup.mjs",
+    "workspace:restore": "node scripts/restore.mjs",
+    "workspace:doctor": "node scripts/doctor-remote.mjs",
+    "test:integration": "vitest run tests/integration",
+    "test:deployment": "node --test scripts/workspace-deploy.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

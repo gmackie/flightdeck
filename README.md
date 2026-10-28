@@ -4,7 +4,7 @@
 
 Flightdeck gives existing Workers and Durable Objects a typed, private **service binding** for analytics. Those Workers authenticate their own users, handle their own browser event endpoints, and submit approved events through the Flightdeck core. No mandatory public Flightdeck collector is necessary.
 
-[Installation guide](docs/installation.md) · [Service binding integration](docs/service-bindings.md) · [Architecture](docs/architecture.md) · [Source governance](docs/source-governance.md) · [Privacy](docs/privacy-and-retention.md) · [Console](docs/console.md) · [AI discovery](docs/ai-discovery.md)
+[Separate-workspace deployment](docs/deploy-workspace.md) · [Release gates](docs/release-gates.md) · [Installation guide](docs/installation.md) · [Service binding integration](docs/service-bindings.md) · [Architecture](docs/architecture.md) · [Source governance](docs/source-governance.md) · [Privacy](docs/privacy-and-retention.md) · [Console](docs/console.md) · [AI discovery](docs/ai-discovery.md)
 
 > **Beta status:** scaffolding and local typechecks/unit tests exist; fresh-account deployment, privacy retention/deletion, and full Basin pipeline verification remain pending. Use test resources, not sensitive production data.
 
@@ -24,6 +24,8 @@ Flightdeck gives existing Workers and Durable Objects a typed, private **service
 **Flagship remains separate.** Flags and rollouts live in the Cloudflare dashboard; Flightdeck only analyzes exposures and outcomes.
 
 ## Get started
+
+The release hardening stack also includes a dry-run-only account-owned deployment planner, D1 metadata backup/restore helpers, and a first-party browser → authenticated Worker → Core RPC → durable sink integration test.
 
 Node.js 22+, pnpm 10+, Cloudflare account with Workers Paid for Basin.
 
