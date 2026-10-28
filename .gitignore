@@ -10,3 +10,4 @@ apps/console/wrangler.generated.jsonc
 .env*
 !.env.example
 *.tsbuildinfo
+dist-packages/
