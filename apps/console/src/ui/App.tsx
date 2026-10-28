@@ -722,7 +722,7 @@ function KnowledgeGraph(){
  </div>;
 }
 type InvestigationSummary={id:string;title:string;question:string;status:string;model_id:string;created_at:string};
-type ProposedAction={id:string;action_type:string;summary:string;status:string;acceptance:string[]};
+type ProposedAction={id:string;action_type:string;summary:string;status:string;acceptance:string[];handoff_status?:string;handoff_issue_url?:string|null};
 type InvestigationDetail={id:string;title:string;question:string;status:string;
  modelId:string;evidence:Array<{key:string;current:number;baseline:number;changePercent:number|null}>;
  proposal:{summary:string;hypotheses:Array<{description:string;confidence:string;evidenceKeys:string[]}>};
@@ -763,6 +763,24 @@ function Investigations(){
    if(!res.ok)throw new Error(body.error??"Investigation failed");
    setMessage("Evidence-backed investigation saved. Proposed actions require separate review.");
    await load();if(body.id)await inspect(body.id);
+  }catch(e){setError(String((e as Error).message));}
+  finally{setBusy(false);}
+ }
+ async function createIssue(action:ProposedAction){
+  const confirmed=window.confirm(
+    "Create a GitHub issue in this Flightdeck installation's approved repository? This will NOT execute code.");
+  if(!confirmed)return;
+  setBusy(true);setError("");setMessage("");
+  try{
+   const response=await fetch("/api/proposed-actions/"+encodeURIComponent(action.id)+"/handoff",{
+     method:"POST",credentials:"same-origin",
+     headers:{"Content-Type":"application/json"},
+     body:JSON.stringify({confirm:"CREATE_ISSUE"})
+   });
+   const body=await response.json() as {error?:string;issueUrl?:string};
+   if(!response.ok)throw new Error(body.error??"Issue handoff failed");
+   setMessage("GitHub issue created for approved action; no code was executed.");
+   if(selected)await inspect(selected.id);
   }catch(e){setError(String((e as Error).message));}
   finally{setBusy(false);}
  }
@@ -812,6 +830,12 @@ function Investigations(){
    <h3>Proposed actions</h3>
    {selected.actions.map(action=><div className="integration" key={action.id}>
     <div><b>{action.summary}</b><span className="note">{action.action_type} · {action.status}</span></div>
+    {action.status==="approved"&&(action.handoff_status??"not_started")==="not_started"&&
+     <button className="tiny-button" disabled={busy} onClick={()=>void createIssue(action)}>Create GitHub issue</button>}
+    {action.handoff_status==="created"&&action.handoff_issue_url&&
+     <a href={action.handoff_issue_url} target="_blank" rel="noopener noreferrer" className="ok-label">Open issue ↗</a>}
+    {["uncertain","creating"].includes(action.handoff_status??"")&&
+     <span className="note">Handoff {action.handoff_status}: manual reconciliation required</span>}
     {action.status==="proposed"&&<div className="inline-actions">
       <button className="tiny-button" disabled={busy} onClick={()=>void decide(action.id,"approved")}>Approve</button>
       <button className="tiny-button" disabled={busy} onClick={()=>void decide(action.id,"rejected")}>Reject</button>

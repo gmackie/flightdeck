@@ -20,7 +20,8 @@
     "QUERY_QUOTA_REQUIRED": "true",
     "QUERY_MONTHLY_UNITS": "50000",
     "ADMIN_EMAILS": "",
-    "AI_INVESTIGATION_DAILY_LIMIT": "3"
+    "AI_INVESTIGATION_DAILY_LIMIT": "3",
+    "GITHUB_REPOSITORY": ""
   },
   "observability": {
     "enabled": true

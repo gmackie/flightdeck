@@ -6,6 +6,7 @@ import { handleJourneyControl } from "./journey-control";
 import { handleGraph } from "./graph";
 import { handleInvestigations } from "./investigations";
 import { handleExperimentAnalysis } from "./experiment-api";
+import { handleAgentHandoff } from "./handoff";
 import {suggestJourneys,type AIProvider} from "./ai";
 
 interface Env extends ControlEnv {
@@ -18,6 +19,8 @@ interface Env extends ControlEnv {
   JOURNEY_SERVICE?: Fetcher;
   JOURNEY_INTERNAL_KEY?: string;
   AI_INVESTIGATION_DAILY_LIMIT?: string;
+  GITHUB_REPOSITORY?: string;
+  GITHUB_ISSUES_TOKEN?: string;
 }
 const jwksCache=new Map<string,ReturnType<typeof createRemoteJWKSet>>();
 function json(body:unknown,status=200):Response {
@@ -67,6 +70,8 @@ export default {
     if(!principal)return json({error:"unauthorized"},401);
     const url=new URL(request.url);
     if(url.pathname.startsWith("/api/")){
+      const handoff=await handleAgentHandoff(request,env,principal);
+      if(handoff)return handoff;
       const experiment=await handleExperimentAnalysis(request,env,principal.sub);
       if(experiment)return experiment;
       const graph=await handleGraph(request,env);
