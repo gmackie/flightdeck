@@ -4,10 +4,13 @@ import type { GraphReceipt } from "@flightdeck/knowledge";
 import type { CaptureRequest, CaptureReceipt } from "@flightdeck/contracts";
 import { IngestError, ingestBatch, type SourceConfig, type SinkRecord, type EventSink } from "./ingest";
 import { basinSink, r2Sink, type BasinBinding, type R2Like } from "./sinks";
+import {sourceRegistry} from "./registry";
 
 export interface Env {
   /** Never public. Secret JSON source registry with SHA-256 token hashes. */
-  SOURCE_CREDENTIALS: string;
+  SOURCE_CREDENTIALS?: string;
+  SOURCE_REGISTRY_MODE?: string;
+  META?:D1Database;
   /** basin (recommended) or r2 (small-scale development fallback). */
   SINK_MODE: string;
   STREAM?: BasinBinding;
@@ -41,11 +44,13 @@ export default class AnalyticsCore extends WorkerEntrypoint<Env> {
         }));
       }
     } : sink;
-    return ingestBatch(request,readSources(this.env.SOURCE_CREDENTIALS),effective);
+    const registry=await sourceRegistry(this.env,request?.context?.sourceId);
+    return ingestBatch(request,registry,effective);
   }
   async registerGraph(request:GraphSubmission):Promise<GraphReceipt> {
     if(!this.env.META)throw new IngestError("metadata_not_configured");
-    return registerGraph(request,readSources(this.env.SOURCE_CREDENTIALS),this.env.META);
+    const registry=await sourceRegistry(this.env,request?.context?.sourceId);
+    return registerGraph(request,registry,this.env.META);
   }
   /** Never serve ingestion over public HTTP; use RPC from a service binding. */
   override async fetch(): Promise<Response> {

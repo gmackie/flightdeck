@@ -18,7 +18,9 @@
     "workspace:restore": "node scripts/restore.mjs",
     "workspace:doctor": "node scripts/doctor-remote.mjs",
     "test:integration": "vitest run tests/integration",
-    "test:deployment": "node --test scripts/workspace-deploy.test.mjs"
+    "test:deployment": "node --test scripts/workspace-deploy.test.mjs",
+    "install:cloudflare": "node scripts/install-cloudflare.mjs",
+    "test:installer": "node --test scripts/install/*.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

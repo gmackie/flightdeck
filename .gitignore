@@ -11,3 +11,5 @@ apps/console/wrangler.generated.jsonc
 !.env.example
 *.tsbuildinfo
 dist-packages/
+apps/journey/wrangler.generated.jsonc
+apps/mcp/wrangler.generated.jsonc

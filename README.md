@@ -23,6 +23,17 @@ Flightdeck gives existing Workers and Durable Objects a typed, private **service
 
 **Flagship remains separate.** Flags and rollouts live in the Cloudflare dashboard; Flightdeck only analyzes exposures and outcomes.
 
+## Install into your Cloudflare account
+
+```bash
+pnpm install
+pnpm install:cloudflare
+```
+
+The guided wizard selects a Cloudflare account, provisions private service-binding ingestion, D1, R2/Basin Catalog, a Basin stream/pipeline, an Access-protected console, and optional Queue/DO, Workers AI, and MCP. It deploys the Console **locked first**, then configures Cloudflare Access and verifies anonymous requests are denied. Existing app Workers/DOs keep authentication and forward telemetry over private bindings.
+
+The wizard supports `--dry-run`, `--yes --apply`, resumable installation manifests, and a complete noninteractive mode with scoped Cloudflare API/Catalog tokens. Read [install wizard](docs/install-wizard.md) and [administrator UI/MCP](docs/admin.md).
+
 ## Get started
 
 The release hardening stack also includes a dry-run-only account-owned deployment planner, D1 metadata backup/restore helpers, and a first-party browser → authenticated Worker → Core RPC → durable sink integration test.

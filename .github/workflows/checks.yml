@@ -19,6 +19,8 @@ jobs:
         run: pnpm test:integration
       - name: Deployment and recovery CLI tests
         run: pnpm test:deployment
+      - name: Universal installer simulation tests
+        run: pnpm test:installer
       - run: pnpm test:govern
       - name: Validate installers without mutating Cloudflare
         run: |
@@ -28,6 +30,13 @@ jobs:
           node --check scripts/source.mjs
           node --check scripts/source-governance.mjs
           node --check scripts/workspace-deploy.mjs
+          node --check scripts/install-cloudflare.mjs
+          node --check scripts/install/engine.mjs
+          node --check scripts/install/cloudflare.mjs
+          node --check scripts/install/basin.mjs
+          node --check scripts/install/config.mjs
+          node --check scripts/install/wizard.mjs
+          pnpm install:cloudflare -- --dry-run --account-id 0123456789abcdef0123456789abcdef --slug test --admin-emails owner@example.com --mode intelligence
           node --check scripts/backup.mjs
           node --check scripts/restore.mjs
           node --check scripts/doctor-remote.mjs
