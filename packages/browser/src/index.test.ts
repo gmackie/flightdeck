@@ -3,7 +3,7 @@ import {createBrowserFlightdeck} from "./index";
 describe("first-party browser SDK",()=>{
  it("never sends without consent and sends only to app endpoint",async()=>{
   let consent=false;
-  const send=vi.fn(async()=>new Response("ok",{status:202}));
+  const send=vi.fn(async (_url:RequestInfo|URL,_init?:RequestInit)=>new Response("ok",{status:202}));
   const sdk=createBrowserFlightdeck({consent:()=>consent,send,endpoint:"/api/analytics"});
   expect(sdk.track("page.viewed",{})).toBeNull();
   consent=true;
@@ -14,7 +14,7 @@ describe("first-party browser SDK",()=>{
   sdk.reset();
  });
  it("retries transient failure with same event ID",async()=>{
-  const send=vi.fn()
+  const send=vi.fn(async (_url:RequestInfo|URL,_init?:RequestInit)=>new Response('ok',{status:202}))
     .mockRejectedValueOnce(new Error("offline"))
     .mockResolvedValueOnce(new Response("ok",{status:202}));
   const sdk=createBrowserFlightdeck({consent:()=>true,send});
