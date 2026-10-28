@@ -19,6 +19,9 @@ export interface FlightdeckOptions {
 }
 export class Flightdeck {
   constructor(private readonly options: FlightdeckOptions) {}
+  withConsent(consentGranted:boolean):Flightdeck {
+    return new Flightdeck({...this.options,consentGranted});
+  }
   withContext(context: TrackOptions): Flightdeck {
     const { defaults, ...rest } = this.options;
     return new Flightdeck({ ...rest, defaults: () => ({...defaults?.(), ...context}) });
