@@ -220,7 +220,7 @@ export function Admin(){
       {section("Proposed administrative changes",
         "MCP agents can propose bounded operations. Only an authenticated administrator can review/apply them.",
         <div className="fd-admin-requests">{requests.map(row=><div className="fd-admin-request" key={row.id}>
-          <b>{row.operation.kind}</b><small>{row.status} · {row.proposed_by}</small>
+          <b>{String(row.operation.kind)}</b><small>{row.status} · {row.proposed_by}</small>
           <pre>{JSON.stringify(row.operation,null,2)}</pre><p>{row.rationale}</p>
           {row.status==="pending"&&<div className="fd-admin-buttons">
             <button className="fd-admin-primary" onClick={()=>void decide(row,"approve")}>Review & apply</button>
