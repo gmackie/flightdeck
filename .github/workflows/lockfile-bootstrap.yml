@@ -1,0 +1,29 @@
+name: Temporary lockfile bootstrap
+on:
+  push:
+    branches: ["feat/11-admin-console-mcp-wizard"]
+    paths:
+      - ".github/workflows/lockfile-bootstrap.yml"
+permissions:
+  contents: write
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --no-frozen-lockfile
+      - name: Commit reproducible lockfile to draft branch only
+        run: |
+          git add pnpm-lock.yaml
+          if git diff --cached --quiet; then
+            echo "Lockfile is already up to date"
+          else
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "chore: commit Flightdeck dependency lockfile [skip ci]"
+            git push origin HEAD:feat/11-admin-console-mcp-wizard
+          fi
