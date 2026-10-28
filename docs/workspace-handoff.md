@@ -15,6 +15,9 @@ Review and merge PRs in order only after validation.
 8. PR #8 — optional Access-authenticated read-only MCP for coding agents.
 9. PR #9 — bounded observational process twin / what-if explorer.
 10. PR #10 — admin-approved, one-time GitHub issue handoff for engineering agents.
+11. PR #11 — account-owned Cloudflare installer and dynamic D1 source registry.
+12. PR #12 — administrator Console UI, policy/credential management and approval-gated MCP tools.
+13. PR #13 — local browser installation wizard with CSRF/Origin/localhost controls.
 
 All PRs remain draft until reviewed; **do not squash a child PR onto main before its parent branch**.
 

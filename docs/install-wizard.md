@@ -1,5 +1,9 @@
 # Flightdeck universal Cloudflare installation wizard
 
+For a **local browser step-by-step setup** with account picker, resource review, permissions and progress, run pnpm install:web and open http://127.0.0.1:43217. It requires scoped tokens in environment variables for unattended provisioning. See [web installer](web-installer.md).
+
+The CLI alternative below uses the same provider engine and can delegate interactive Cloudflare authentication/Basin steps to the provider's own CLI.
+
 **Install into your own Cloudflare account, including the admin UI and optional MCP.** No hosted Flightdeck service or public collection endpoint is required.
 
 ## Prerequisites
