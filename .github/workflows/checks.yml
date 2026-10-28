@@ -21,6 +21,8 @@ jobs:
         run: pnpm test:deployment
       - name: Universal installer simulation tests
         run: pnpm test:installer
+      - name: Local web wizard security tests
+        run: pnpm test:install-web
       - run: pnpm test:govern
       - name: Validate installers without mutating Cloudflare
         run: |
@@ -31,6 +33,8 @@ jobs:
           node --check scripts/source-governance.mjs
           node --check scripts/workspace-deploy.mjs
           node --check scripts/install-cloudflare.mjs
+          node --check scripts/install-web.mjs
+          node --check scripts/install/ui.js
           node --check scripts/install/engine.mjs
           node --check scripts/install/cloudflare.mjs
           node --check scripts/install/basin.mjs

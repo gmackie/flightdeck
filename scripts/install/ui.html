@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="flightdeck-csrf" content="__FLIGHTDECK_CSRF__">
+<meta name="theme-color" content="#0b1120">
+<title>Flightdeck · Install to Cloudflare</title>
+<link rel="stylesheet" href="/ui.css">
+<script src="/ui.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-icon">F</span>
+      <div><strong>flightdeck</strong><small>SELF-HOSTED SETUP</small></div>
+    </div>
+    <div class="steps">
+      <div class="step active" data-step="1"><span>01</span><div><b>Account</b><small>Cloudflare account & access</small></div></div>
+      <div class="step" data-step="2"><span>02</span><div><b>Features</b><small>Choose deployment services</small></div></div>
+      <div class="step" data-step="3"><span>03</span><div><b>Review</b><small>Resources and permissions</small></div></div>
+      <div class="step" data-step="4"><span>04</span><div><b>Deploy</b><small>Provision & verify</small></div></div>
+    </div>
+    <div class="sidebar-bottom"><span class="dot"></span> Runs on your computer
+      <p>No Flightdeck-hosted service. Credentials stay in your local process.</p>
+      <a href="https://github.com/gmackie/flightdeck" target="_blank" rel="noopener noreferrer">View source ↗</a>
+    </div>
+  </aside>
+  <main>
+    <header class="toolbar"><span>Cloudflare account installer</span><span class="state" id="status-chip">Ready to configure</span></header>
+    <div class="content">
+      <div class="heading"><div class="eyebrow">BRING YOUR OWN CLOUDFLARE ACCOUNT</div>
+        <h1>Deploy Flightdeck.</h1>
+        <p>Self-host product analytics, journeys, experience monitoring, an admin console and MCP. Choose the account and approve the resources we'll create.</p>
+      </div>
+      <div id="alert" role="alert" aria-live="polite" hidden></div>
+
+      <section class="wizard-page active" id="page-1">
+        <div class="panel">
+          <div class="panel-head"><div><h2>Choose a Cloudflare account</h2>
+            <p>Only accounts accessible to your local Cloudflare credentials will be listed.</p></div>
+            <button class="ghost" id="reload-accounts">Refresh</button></div>
+          <label for="account">Installation account</label>
+          <select id="account"><option value="">Checking Cloudflare accounts…</option></select>
+          <div class="input-grid">
+            <div><label for="slug">Installation name</label>
+              <input id="slug" placeholder="myteam" value="default" autocomplete="off"/>
+              <div class="help">Creates namespaced resources such as flightdeck-default-core.</div></div>
+            <div><label for="admins">Administrator emails</label>
+              <input id="admins" placeholder="you@example.com" autocomplete="email"/>
+              <div class="help">Cloudflare Access allowlist; comma-separated for multiple admins.</div></div>
+          </div>
+          <div class="notice"><b>Authentication is enforced twice.</b> Cloudflare Access guards the hostname, and the Console Worker independently verifies Access JWTs before serving even static assets.</div>
+        </div>
+      </section>
+
+      <section class="wizard-page" id="page-2">
+        <div class="panel">
+          <h2>What should we install?</h2>
+          <p>The full product belongs to your Cloudflare account. Analytics ingestion is private—your existing Workers or Durable Objects collect their own browser events.</p>
+          <div class="option-grid">
+            <label class="option"><input type="radio" name="mode" value="standard">
+              <div><b>Analytics essentials</b><p>Basin/R2 lakehouse, private Core Worker, Access-protected React Console, D1 admin/source registry.</p></div></label>
+            <label class="option selected"><input type="radio" name="mode" value="intelligence" checked>
+              <div><b>Full Intelligence deployment</b><p>Everything above, plus Queues, dead-letter queue, object-centric Journey Durable Objects and replay.</p></div></label>
+          </div>
+          <label class="toggle"><input type="checkbox" id="mcp" checked>
+            <div><b>Include MCP server</b><span>Analytics tools plus separate administrator tools; admin writes require UI approval.</span></div></label>
+          <label class="toggle"><input type="checkbox" id="ai">
+            <div><b>Enable Workers AI</b><span>Optional semantic journey labeling and investigations. Off by default for cost/privacy.</span></div></label>
+          <div class="input-grid">
+            <div><label for="query-units">Monthly query-unit admission limit</label>
+              <input type="number" id="query-units" min="0" max="100000000" step="100" value="50000"/>
+              <div class="help">Relative complexity budget; Cloudflare billing is separate.</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="wizard-page" id="page-3">
+        <div class="panel">
+          <h2>Review installation</h2>
+          <p>One installation per unique suffix. Existing resources with the same names will not be adopted without the matching local manifest.</p>
+          <div id="plan-summary" class="review-grid"></div>
+          <h3>Provisioning steps</h3>
+          <ol id="plan-steps"></ol>
+          <div class="notice"><b>Cloudflare charges may apply.</b> Workers Paid, R2, Basin, D1, Queues and Workers AI have separate usage pricing. The wizard will refuse unsafe account/resource collisions.</div>
+          <div class="token-checks">
+            <div><span class="dot" id="api-token-dot"></span> Scoped Cloudflare API credential <span id="api-token-status">Checking…</span></div>
+            <div><span class="dot" id="catalog-token-dot"></span> R2 Catalog / Basin SQL credential <span id="catalog-token-status">Checking…</span></div>
+          </div>
+          <label class="confirmation">Type INSTALL to authorize creating resources in the selected account
+            <input id="confirmation" placeholder="INSTALL" autocomplete="off"/></label>
+          <p class="help">This local web wizard requires scoped tokens configured as process environment variables. Without them, use the interactive CLI wizard which delegates to Cloudflare login/setup.</p>
+        </div>
+      </section>
+
+      <section class="wizard-page" id="page-4">
+        <div class="panel">
+          <h2 id="deploy-title">Provisioning Flightdeck…</h2>
+          <p id="deploy-description">The installer records each verified step. If it fails, fix the issue and rerun with the same account/name.</p>
+          <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
+          <div class="progress-meta"><span id="progress-state">Preparing</span><span id="progress-count">0 events</span></div>
+          <div class="log-heading"><h3>Deployment log</h3><button class="ghost" id="copy-log">Copy</button></div>
+          <pre class="logs" id="install-log" tabindex="0">Installer has not started.</pre>
+          <div id="done-links" hidden>
+            <div class="notice success"><b>Deployment command finished.</b> Open the console after checking Access and the Basin pipeline diagnostics.</div>
+            <p>Run local diagnostics: <code>pnpm workspace:doctor</code> and review <code>docs/release-gates.md</code>.</p>
+          </div>
+        </div>
+      </section>
+
+      <footer class="actions">
+        <button class="ghost" id="back">Back</button>
+        <span id="footnote">Step 1 of 4</span>
+        <button class="primary" id="next">Continue</button>
+      </footer>
+    </div>
+  </main>
+</div>
+</body>
+</html>
