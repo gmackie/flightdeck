@@ -81,3 +81,37 @@ test("cannot deploy without explicit confirmation and installer tokens",async()=
   assert.equal(denied.status,412);
  });
 });
+
+test("account capability endpoint is read-only and rejects permissions before install",async()=>{
+ const account="a".repeat(32);
+ let preflightCalls=0;
+ const server=createInstallerServer({
+  secret:"s".repeat(43),
+  env:{CLOUDFLARE_API_TOKEN:"a".repeat(40),FLIGHTDECK_CATALOG_TOKEN:"b".repeat(40)},
+  accounts:async()=>[{id:account,name:"Team"}],
+  preflight:async(plan)=>{
+    preflightCalls++;
+    if(plan.slug==="blocked")throw new Error("Basin scope missing");
+    return {accountId:plan.accountId,checks:[{service:"basin",readable:true}]};
+  }
+ });
+ await new Promise(resolve=>server.server.listen(0,"127.0.0.1",resolve));
+ const base="http://127.0.0.1:"+server.server.address().port;
+ const post=async path,body=>{
+  const res=await fetch(base+path,{method:"POST",headers:{
+    "Origin":base,"Content-Type":"application/json","X-Flightdeck-CSRF":server.secret
+  },body:JSON.stringify(body)});
+  return res;
+ };
+ try{
+  const ok=await post("/api/preflight",{...input,accountId:account});
+  assert.equal(ok.status,200);
+  const blocked=await post("/api/preflight",{...input,slug:"blocked"});
+  assert.equal(blocked.status,412);
+  const unauthorized=await post("/api/preflight",{...input,accountId:"f".repeat(32)});
+  assert.equal(unauthorized.status,403);
+  assert.equal(preflightCalls,2);
+ }finally{
+  await new Promise(resolve=>server.server.close(resolve));
+ }
+});
