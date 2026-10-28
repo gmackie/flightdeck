@@ -11,7 +11,8 @@ import {parseArgs} from "node:util";
 import {createInterface} from "node:readline/promises";
 import process from "node:process";
 
-const {values}=parseArgs({options:{
+const argv=process.argv.slice(2).filter(x=>x!=="--");
+const {values}=parseArgs({args:argv,options:{
   name:{type:"string"},bucket:{type:"string"},mode:{type:"string"},
   "stream-id":{type:"string"},"source-id":{type:"string"},"project-id":{type:"string"},
   "dry-run":{type:"boolean",default:false},yes:{type:"boolean",default:false},

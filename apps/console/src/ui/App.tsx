@@ -179,14 +179,55 @@ function Retention({days,refresh}:{days:number;refresh:number}){
 }
 function Journeys({days,refresh}:{days:number;refresh:number}){
  const q=useData("/api/journeys",days,refresh);
- return <Panel title="Observed journey transitions" sub="A directly-follows graph discovered from ordered, actor-scoped events">
-  <Message loading={q.loading} error={q.error} empty={!q.data.length}/>
-  {!!q.data.length&&<div className="transition-list">{q.data.map((r,i)=><div className="transition" key={i}>
-   <span className="pill">{text(r.from_event)}</span><span className="arrow">→</span>
-   <span className="pill">{text(r.to_event)}</span><strong>{count(r.transitions)} transitions</strong>
-  </div>)}</div>}
-  <p className="note">This is deterministic process discovery; AI naming, cross-session object journeys, and DO compilation remain planned.</p>
- </Panel>;
+ const [proposals,setProposals]=useState<Array<{
+  candidate:{id:string;events:string[];minEdgeObservations:number};
+  interpretation?:{title:string;summary:string;hypothesis:string;confidence:string};
+  error?:string;
+ }>>([]);
+ const [aiLoading,setAiLoading]=useState(false);
+ const [aiError,setAiError]=useState("");
+ async function discover(){
+  setAiLoading(true);setAiError("");
+  try{
+   const response=await fetch("/api/discover",{
+    method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
+    body:"{}"
+   });
+   const payload=await response.json() as {suggestions?:typeof proposals;error?:string};
+   if(!response.ok)throw new Error(payload.error??"Discovery unavailable");
+   setProposals(payload.suggestions??[]);
+  }catch(e){setAiError(String((e as Error).message));}finally{setAiLoading(false);}
+ }
+ return <div className="stack">
+  <Panel title="Observed journey transitions" sub="A directly-follows graph discovered from ordered, actor-scoped events">
+   <Message loading={q.loading} error={q.error} empty={!q.data.length}/>
+   {!!q.data.length&&<div className="transition-list">{q.data.map((r,i)=><div className="transition" key={i}>
+    <span className="pill">{text(r.from_event)}</span><span className="arrow">→</span>
+    <span className="pill">{text(r.to_event)}</span><strong>{count(r.transitions)} transitions</strong>
+   </div>)}</div>}
+   <p className="note">Edge frequencies are not user-completion rates. Object-scoped journey machines use a separate optional DO runtime.</p>
+  </Panel>
+  <Panel title="AI Journey Discovery" sub="Semantic interpretation of measured aggregate paths; opt-in Workers AI">
+   <div className="inline-form">
+    <button className="primary" disabled={aiLoading} onClick={()=>void discover()}>{aiLoading?"Analyzing…":"Discover candidate journeys"}</button>
+    <span className="note">No raw user events are sent to the model.</span>
+   </div>
+   {aiError&&<div className="error-state">{aiError} — see the AI discovery configuration docs.</div>}
+   <div className="transition-list">
+    {proposals.map(item=><div className="discovery-card" key={item.candidate.id}>
+     <div><span className="eyebrow">PROPOSED PATH · NOT APPROVED</span>
+      <h3>{item.interpretation?.title??"Unnamed behavioral path"}</h3>
+      <p>{item.interpretation?.summary??"Deterministic path only. AI interpretation is unavailable."}</p>
+     </div>
+     <div className="transition">
+      {item.candidate.events.map((event,i)=><span key={i} className="pill">{event}{i<item.candidate.events.length-1?" → ":""}</span>)}
+     </div>
+     <p className="note">Minimum edge frequency: {item.candidate.minEdgeObservations} · Not a path completion count.</p>
+     {item.interpretation&&<p className="note">Hypothesis ({item.interpretation.confidence} confidence): {item.interpretation.hypothesis}</p>}
+    </div>)}
+   </div>
+  </Panel>
+ </div>;
 }
 function Experience({days,refresh}:{days:number;refresh:number}){
  const q=useData("/api/experience",days,refresh);

@@ -13,7 +13,8 @@
     "@flightdeck/query": "workspace:*",
     "jose": "^6.1.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "@flightdeck/discovery": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",

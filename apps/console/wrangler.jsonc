@@ -3,14 +3,25 @@
   "name": "flightdeck-console",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-27",
-  "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application" },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
   "vars": {
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
     "ACCOUNT_ID": "",
     "BASIN_BUCKET": "",
     "BASIN_TABLE": "default.flightdeck_events",
-    "PROJECT_ID": "default"
+    "PROJECT_ID": "default",
+    "AI_ENABLED": "false",
+    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
   },
-  "observability": { "enabled": true }
+  "observability": {
+    "enabled": true
+  },
+  "ai": {
+    "binding": "AI"
+  }
 }

@@ -1,5 +1,6 @@
 import {createRemoteJWKSet,jwtVerify} from "jose";
 import {compileQuery,QueryError,type QueryKind,type QuerySpec} from "@flightdeck/query";
+import {suggestJourneys,type AIProvider} from "./ai";
 
 interface Env {
   ASSETS: Fetcher;
@@ -10,6 +11,9 @@ interface Env {
   BASIN_TABLE:string;
   PROJECT_ID:string;
   BASIN_SQL_TOKEN:string;
+  AI?:AIProvider;
+  AI_ENABLED?:string;
+  AI_MODEL?:string;
 }
 const jwksCache=new Map<string,ReturnType<typeof createRemoteJWKSet>>();
 function json(body:unknown,status=200):Response {
@@ -26,6 +30,13 @@ async function authorize(request:Request,env:Env):Promise<boolean> {
     await jwtVerify(assertion,keys,{issuer:`https://${domain}`,audience:env.ACCESS_AUD,algorithms:["RS256"]});
     return true;
   }catch{return false;}
+}
+function extractRows(payload:unknown):Record<string,unknown>[] {
+  const x=payload as any;
+  for(const v of [x?.data?.result?.rows,x?.data?.result?.data,x?.data?.rows,x?.data?.data,x?.data?.result,x?.data]){
+    if(Array.isArray(v))return v.filter(r=>r&&typeof r==="object");
+  }
+  return [];
 }
 function querySpec(url:URL,kind:QueryKind):QuerySpec {
   const to=url.searchParams.get("to")??new Date().toISOString();
@@ -63,7 +74,20 @@ export default {
     if(!(await authorize(request,env)))return json({error:"unauthorized"},401);
     const url=new URL(request.url);
     if(url.pathname==="/api/config"){
-      return json({projectId:env.PROJECT_ID,mode:"basin",selfHosted:true,flagshipManagedExternally:true});
+      return json({projectId:env.PROJECT_ID,mode:"basin",selfHosted:true,flagshipManagedExternally:true,aiEnabled:env.AI_ENABLED==="true"});
+    }
+    if(url.pathname==="/api/discover"){
+      if(request.method!=="POST")return json({error:"method_not_allowed"},405);
+      if(request.headers.get("Origin")!==url.origin)return json({error:"origin_not_allowed"},403);
+      if(env.AI_ENABLED!=="true" || !env.AI)return json({error:"ai_discovery_disabled"},503);
+      const queryResponse=await queryBasin(querySpec(url,"transitions"),env);
+      if(!queryResponse.ok)return queryResponse;
+      const payload:unknown=await queryResponse.json();
+      const rows=extractRows(payload);
+      if(!rows.length)return json({suggestions:[],reason:"insufficient_transition_data"});
+      const suggestions=await suggestJourneys(rows,env.AI,
+        env.AI_MODEL||"@cf/meta/llama-3.3-70b-instruct-fp8-fast",true);
+      return json({suggestions,source:"aggregated_transitions",causal:false});
     }
     if(url.pathname==="/api/funnel"){
       if(request.method!=="POST")return json({error:"method_not_allowed"},405);

@@ -30,7 +30,7 @@ export class BrowserFlightdeck {
   }
   start():void {
     if(this.timer||this.stopped)return;
-    this.timer=setInterval(()=>{void this.flush()},this.options.intervalMs);
+    this.timer=setInterval(()=>{void this.flush().catch(()=>{})},this.options.intervalMs);
     if(typeof window!=="undefined"){
       window.addEventListener("pagehide",this.onPageHide);
       window.addEventListener("online",this.onOnline);
