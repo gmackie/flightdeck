@@ -21,8 +21,8 @@ describe("first-party browser SDK",()=>{
   sdk.track("page.viewed",{route:"/"},{eventId:"stable_event"});
   await expect(sdk.flush()).rejects.toThrow("offline");
   await sdk.flush();
-  const first=JSON.parse(send.mock.calls[0]![1].body).events[0];
-  const second=JSON.parse(send.mock.calls[1]![1].body).events[0];
+  const first=JSON.parse(String(send.mock.calls[0]?.[1]?.body)).events[0];
+  const second=JSON.parse(String(send.mock.calls[1]?.[1]?.body)).events[0];
   expect(first.eventId).toBe(second.eventId);
  });
 });
