@@ -15,3 +15,8 @@
 .checkbox-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px;padding:14px 0}
 .checkbox-grid label{font-size:11px;color:#b9c8db}
 @media(max-width:800px){.dashboard-grid{grid-template-columns:1fr}.checkbox-grid{grid-template-columns:1fr 1fr}}
+
+.journey-creator{margin-top:20px;border-top:1px solid #2c3b50;padding-top:16px}
+.journey-creator summary{font-size:12px;color:#72ddc9;font-weight:650;cursor:pointer;margin-bottom:17px}
+.journey-creator textarea{width:100%;min-height:120px;background:#0e1725;border:1px solid #34445d;border-radius:7px;color:#e7eff9;padding:12px;font:11px/1.5 ui-monospace,monospace;resize:vertical}
+.journey-creator .primary{margin-top:15px}

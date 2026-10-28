@@ -17,7 +17,8 @@ function decodeObjects(record:InputEvent):Array<{type:string;id:string}> {
 }
 function fromRow(r:DBJourney):JourneyDefinition {
  return validateJourney({id:r.id,projectId:r.project_id,objectType:r.object_type,
-  version:r.version,initialState:r.initial_state,transitions:JSON.parse(r.transitions_json)});
+  version:r.version,initialState:r.initial_state,transitions:JSON.parse(r.transitions_json),
+    terminalStates:JSON.parse(r.terminal_states_json),maxDurationDays:r.max_duration_days});
 }
 export class JourneyInstance extends DurableObject<Env> {
  constructor(ctx:DurableObjectState,env:Env){

@@ -2,6 +2,7 @@ import {createRemoteJWKSet,jwtVerify} from "jose";
 import type { QueryKind, QuerySpec } from "@flightdeck/query";
 import { executeBasinQuery } from "./query-runtime";
 import { handleControl, type ControlEnv, type Principal } from "./control";
+import { handleJourneyControl } from "./journey-control";
 import {suggestJourneys,type AIProvider} from "./ai";
 
 interface Env extends ControlEnv {
@@ -11,6 +12,8 @@ interface Env extends ControlEnv {
   AI?: AIProvider;
   AI_ENABLED?: string;
   AI_MODEL?: string;
+  JOURNEY_SERVICE?: Fetcher;
+  JOURNEY_INTERNAL_KEY?: string;
 }
 const jwksCache=new Map<string,ReturnType<typeof createRemoteJWKSet>>();
 function json(body:unknown,status=200):Response {
@@ -60,6 +63,8 @@ export default {
     if(!principal)return json({error:"unauthorized"},401);
     const url=new URL(request.url);
     if(url.pathname.startsWith("/api/")){
+      const journey=await handleJourneyControl(request,env,principal);
+      if(journey)return journey;
       const control=await handleControl(request,env,principal);
       if(control)return control;
     }

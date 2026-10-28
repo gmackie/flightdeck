@@ -28,6 +28,8 @@ jobs:
         run: pnpm exec wrangler deploy --dry-run --config apps/core/wrangler.jsonc
       - name: Bundle Console Worker (dry run)
         run: pnpm exec wrangler deploy --dry-run --config apps/console/wrangler.jsonc
+      - name: Bundle Journey Worker (dry run)
+        run: pnpm exec wrangler deploy --dry-run --config apps/journey/wrangler.jsonc
       - name: Pack reusable SDKs
         run: |
           pnpm --filter @flightdeck/contracts pack --pack-destination ./dist-packages
