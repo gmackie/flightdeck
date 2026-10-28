@@ -10,7 +10,7 @@ export const AnalyticsEvent = Schema.Struct({
   eventId: Schema.String,
   eventName: Schema.String,
   occurredAt: Schema.String,
-  kind: Schema.optionalKey(Schema.Literal("product", "rum", "error", "exposure", "agent")),
+  kind: Schema.optionalKey(Schema.Literals(["product", "rum", "error", "exposure", "agent"])),
   anonymousId: Schema.optionalKey(Schema.String),
   actorId: Schema.optionalKey(Schema.String),
   sessionId: Schema.optionalKey(Schema.String),
