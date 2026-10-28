@@ -1,5 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
+import {request as rawHttpRequest} from "node:http";
 import {createInstallerServer,validateWebInstall} from "./install-web.mjs";
 
 const account="a".repeat(32);
@@ -29,11 +30,20 @@ test("localhost wizard rejects invalid slugs and empty administrator allowlist",
 });
 test("host, origin and CSRF defenses protect install operations",async()=>{
  await testServer(async({base,secret})=>{
-  const host=new URL(base).host;
-  const invalidHost=await fetch(base+"/api/status",{
-    headers:{"Host":"evil.example","X-Flightdeck-CSRF":secret}
+  const invalidHost=await new Promise((resolve,reject)=>{
+    const address=new URL(base);
+    const request=rawHttpRequest({
+      hostname:"127.0.0.1",port:Number(address.port),
+      path:"/api/status",method:"GET",
+      headers:{"Host":"evil.example","X-Flightdeck-CSRF":secret}
+    },response=>{
+      response.resume();
+      response.on("end",()=>resolve(response.statusCode));
+    });
+    request.on("error",reject);
+    request.end();
   });
-  assert.equal(invalidHost.status,403);
+  assert.equal(invalidHost,403);
   const missing=await fetch(base+"/api/plan",{method:"POST",
     headers:{"Content-Type":"application/json","Origin":base},
     body:JSON.stringify(input)});
