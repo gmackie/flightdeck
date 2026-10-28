@@ -1,41 +1,75 @@
-# Flightdeck 🚀
+# Flightdeck
 
-Open-source, account-owned **product analytics, RUM and behavioral intelligence** on Cloudflare.
+**Open-source, account-owned behavioral analytics and application intelligence on Cloudflare.**
 
-> **Status:** architecture and bootstrap scaffold only. The ingestion Worker fails closed until identity, privacy policy and durable event storage are wired up. Not ready for production traffic.
+Flightdeck gives existing Workers and Durable Objects a typed, private **service binding** for analytics. Those Workers authenticate their own users, handle their own browser event endpoints, and submit approved events through the Flightdeck core. No mandatory public Flightdeck collector is necessary.
 
-## Vision
+[Installation guide](docs/installation.md) · [Service binding integration](docs/service-bindings.md) · [Architecture](docs/architecture.md) · [Console](docs/console.md) · [AI discovery](docs/ai-discovery.md)
 
-Flightdeck collects product events and real-user experience metrics, relates them to observability and deployment data, discovers object-centric user journeys, and eventually supports evidence-grounded AI investigations and experiments.
+> **Beta status:** scaffolding and local typechecks/unit tests exist; fresh-account deployment, privacy retention/deletion, and full Basin pipeline verification remain pending. Use test resources, not sensitive production data.
 
-**Flagship stays separate:** Flagship flags remain managed in the Cloudflare dashboard. Flightdeck consumes exposure events and measures outcomes.
+## Platform
 
-## Why account-owned?
+| Capability | Implementation |
+| --- | --- |
+| Private analytics ingestion | Effect schemas, native Worker RPC, per-source authenticated capture |
+| Durable event history | Basin Pipelines → R2 Iceberg, optional direct R2 fallback |
+| Application integration | `@flightdeck/sdk-worker`, `@flightdeck/sdk-effect`, `@flightdeck/browser` |
+| First-party browser collection | Authenticated app route + explicit event/property allowlist |
+| Analytics console | React + Vite, Worker and Cloudflare Access JWT validation |
+| Insights | Events, trends, funnels, cohorts, RUM, Flagship exposure counts |
+| Live journeys | Optional Queue and SQLite Durable Object state machines |
+| AI journey interpretation | Optional Workers AI; aggregate graph-derived evidence only |
 
-Inspired by [Coworkers](https://github.com/fayazara/coworkers), the intended installation provisions resources into **your Cloudflare account**, with no required hosted Flightdeck backend. We want an interactive installer, repeatable CLI upgrades, fail-closed Cloudflare Access setup, diagnostics, migration support and explicit cost controls.
+**Flagship remains separate.** Flags and rollouts live in the Cloudflare dashboard; Flightdeck only analyzes exposures and outcomes.
 
-## Stack
+## Get started
 
-- Effect for typed services and contracts; Cloudflare service bindings for private Worker RPC.
-- Public browser ingestion endpoint; validated, scoped and rate-limited before private ingestion.
-- Basin → R2/Iceberg for historical analytics, D1 for project configuration.
-- Queues and SQLite Durable Objects for opt-in live journey monitors.
-- Workers Observability and browser RUM for performance and errors.
-- Workers AI, Workflows and Containers for proposed journey discovery and investigations.
+Node.js 22+, pnpm 10+, Cloudflare account with Workers Paid for Basin.
 
-## Development
-
-Node.js 22+, pnpm 10+. The scaffold can be inspected and typechecked without a Cloudflare account.
-
-```bash
+```sh
 pnpm install
 pnpm typecheck
+pnpm test
+pnpm build
+pnpm exec wrangler login
 ```
 
-Do **not** deploy the example collector expecting functioning analytics: it deliberately returns a service-unavailable response until a secure durable sink is implemented.
+Set up the Basin stream through `pnpm exec wrangler basin pipelines setup` using `basin/events.schema.json`. Then:
 
-Read [architecture](docs/architecture.md), [deployment](docs/deployment.md), [roadmap](docs/roadmap.md) and [agent guidance](AGENTS.md).
+```sh
+pnpm setup -- --mode basin --stream-id YOUR_STREAM_ID
+pnpm doctor
+```
+
+Deploy the console with `pnpm setup:console` after configuring Cloudflare Access. Details and security checks are in [installation](docs/installation.md).
+
+## Sample Worker
+
+```ts
+import { createFlightdeck } from "@flightdeck/sdk-worker";
+
+const analytics=createFlightdeck({
+  binding:env.FLIGHTDECK,
+  sourceId:env.FLIGHTDECK_SOURCE_ID,
+  sourceToken:env.FLIGHTDECK_SOURCE_TOKEN,
+}).withContext({ actorId: user.id });
+
+await analytics.track("project.opened",{template:"blank"});
+```
+
+Your app's `wrangler.jsonc` needs:
+
+```json
+{ "services":[{"binding":"FLIGHTDECK","service":"flightdeck-core"}] }
+```
+
+See [Worker](examples/worker-collector.ts) and [Durable Object](examples/durable-object.ts) integrations.
+
+## Engineering
+
+See [AGENTS.md](AGENTS.md), [roadmap](docs/roadmap.md), and [deployment RFC](docs/deployment.md). The repo is a pnpm monorepo with tests for source isolation, ingestion failure, SDK dispatch, browser forwarding, bounded Basin SQL, and deterministic journey models.
 
 ## License
 
-No license has been selected yet. Redistribution and reuse rights are **not** implicitly granted. Selecting an open-source license is required before announcing a public release.
+MIT.

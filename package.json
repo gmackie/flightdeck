@@ -8,6 +8,7 @@
     "test": "pnpm -r --if-present test",
     "build": "pnpm -r --if-present build",
     "setup": "node scripts/setup.mjs",
+    "setup:console": "node scripts/setup-console.mjs",
     "doctor": "node scripts/doctor.mjs",
     "source:add": "node scripts/source.mjs"
   },

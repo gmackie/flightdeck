@@ -6,6 +6,7 @@ dist/
 .flightdeck/
 flightdeck.deploy.json
 apps/core/wrangler.generated.jsonc
+apps/console/wrangler.generated.jsonc
 .env*
 !.env.example
 *.tsbuildinfo
