@@ -40,7 +40,7 @@ function useData(endpoint:string,days:number,refresh:number){
   const u=endpoint+"?from="+encodeURIComponent(before.toISOString())+"&to="+encodeURIComponent(now.toISOString());
   setLoading(true);setError("");
   fetch(u,{signal:ctrl.signal,credentials:"same-origin",cache:"no-store"})
-    .then(async res=>{const json=await res.json();if(!res.ok)throw new Error(json.error??"Query failed");return json;})
+    .then(async res=>{const json=await res.json() as {error?:string;data?:unknown};if(!res.ok)throw new Error(json.error??"Query failed");return json;})
     .then(json=>{setData(rows(json));setLoading(false);})
     .catch(err=>{if(!ctrl.signal.aborted){setError(String(err.message??err));setLoading(false);}});
   return ()=>ctrl.abort();
@@ -137,7 +137,7 @@ function Funnels({days}:{days:number}){
    const to=new Date(),from=new Date(to.getTime()-days*86_400_000);
    const res=await fetch("/api/funnel",{method:"POST",credentials:"same-origin",
     headers:{"Content-Type":"application/json"},body:JSON.stringify({from:from.toISOString(),to:to.toISOString(),steps:steps.split(",").map(x=>x.trim()).filter(Boolean)})});
-   const data=await res.json();if(!res.ok)throw new Error(data.error??"Query failed");
+   const data=await res.json() as {error?:string;data?:unknown};if(!res.ok)throw new Error(data.error??"Query failed");
    setResult(rows(data));
   }catch(e){setError(String((e as Error).message));}finally{setRunning(false);}
  }
@@ -243,7 +243,7 @@ export function App(){
  useEffect(()=>{
   const listener=()=>{setSelected(getSection());setMenuOpen(false);};
   window.addEventListener("hashchange",listener);
-  fetch("/api/config",{credentials:"same-origin"}).then(r=>r.ok?r.json():null).then(v=>{if(v?.projectId)setProject(v.projectId);}).catch(()=>{});
+  fetch("/api/config",{credentials:"same-origin"}).then(r=>r.ok?r.json():null).then(v=>{const config=v as {projectId?:string}|null;if(config?.projectId)setProject(config.projectId);}).catch(()=>{});
   return()=>window.removeEventListener("hashchange",listener);
  },[]);
  let content:ReactNode;
