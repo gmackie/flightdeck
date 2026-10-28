@@ -37,3 +37,5 @@ The user-owned resources include D1 metadata, R2 Basin Catalog/Iceberg, Basin st
 The browser wizard requires scoped Cloudflare and R2 Catalog tokens to run unattended. Access identity-provider setup may still need Cloudflare Zero Trust account onboarding and policy agreement. A fresh Cloudflare account must have Workers Paid/R2/Basin entitlement. This local browser wizard is not a hosted one-click OAuth installer.
 
 The code has mock-provider and localhost security tests in CI; a real fresh-account end-to-end deployment is a separate release gate. Before production, validate Basin schema, Access JWT, source registry, query console, DO replay, metrics, backups and privacy lifecycle.
+
+On first-ever Cloudflare Workers use, the wizard checks GET /accounts/{account}/workers/subdomain and creates a unique account-level workers.dev subdomain only when missing. It never modifies an existing account subdomain. This requires Workers Scripts Write permission.

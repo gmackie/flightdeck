@@ -179,3 +179,66 @@ export async function ensureAccess({
     hosts:[...hosts]
   };
 }
+
+
+/**
+ * Ensure that a fresh account has a workers.dev hostname before the first
+ * locked Console deployment. This is an account-global setting, so an
+ * existing subdomain is ALWAYS preserved and never renamed.
+ */
+export async function ensureWorkersSubdomain({api,shell,accountId,manifest}) {
+  if(!accountIdPattern.test(accountId))throw new InstallerError("invalid_account_id");
+  const expected=manifest.resources.workersSubdomain;
+  let current=null;
+  if(api?.enabled){
+    try{
+      current=from(await api.call("/accounts/"+accountId+"/workers/subdomain"));
+    }catch(error){
+      if(error?.code!=="provider_request_failed"||!/[(]404[)]/.test(error.message))throw error;
+    }
+  }else{
+    const cli=shell.cf(["workers","subdomains","get"],{allowFailure:true});
+    if(cli.ok){
+      try{current=from(JSON.parse(cli.stdout));}catch{
+        throw new InstallerError("subdomain_response_invalid",
+          "Cloudflare CLI returned unexpected Workers subdomain metadata.");
+      }
+    }else if(!/\b404\b|not.?found|does not exist/i.test(cli.stderr+" "+cli.stdout)){
+      throw new InstallerError("workers_subdomain_probe_failed",
+        "Unable to inspect the account's Workers subdomain; check Cloudflare permissions.");
+    }
+  }
+  const currentName=current?.subdomain;
+  if(currentName){
+    if(!/^[a-z0-9][a-z0-9-]{1,62}$/.test(currentName))
+      throw new InstallerError("workers_subdomain_invalid");
+    if(expected && expected!==currentName)throw new InstallerError("workers_subdomain_changed",
+      "Existing account-wide Workers subdomain changed; inspect before continuing.");
+    return {workersSubdomain:currentName};
+  }
+  if(expected)throw new InstallerError("workers_subdomain_missing",
+    "The account's previously recorded Workers subdomain is missing. Do not change account-global naming automatically.");
+  const proposed="flightdeck-"+accountId.slice(0,14);
+  let created;
+  if(api?.enabled){
+    created=from(await api.call("/accounts/"+accountId+"/workers/subdomain",{
+      method:"PUT",body:{subdomain:proposed}
+    }));
+  }else{
+    // cf is a generated CLI for the Cloudflare API; Wrangler's Worker
+    // deployment alone cannot reliably initialize a fresh account subdomain.
+    const result=shell.cf(["workers","subdomains","update","--body",JSON.stringify({
+      subdomain:proposed
+    })]);
+    try{created=from(JSON.parse(result.stdout));}catch{
+      throw new InstallerError("workers_subdomain_create_unverified",
+        "Workers subdomain creation returned no JSON. Inspect account Workers settings and rerun.");
+    }
+  }
+  if(created?.subdomain!==proposed)throw new InstallerError("workers_subdomain_create_unverified",
+    "Cloudflare did not confirm the expected new Workers subdomain.");
+  // Save immediately: partial failures must never result in an untracked
+  // account-global change when this wizard resumes.
+  manifest.mark("workers_subdomain_created",{workersSubdomain:proposed});
+  return {workersSubdomain:proposed};
+}
