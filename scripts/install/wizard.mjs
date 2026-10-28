@@ -170,6 +170,18 @@ export async function applyWizard({
     writeSourceSeed(shell,names,creds);
     return {bootstrapSourceId:names.source};
   });
+  // Service-bound targets must exist before Console deploy. Core and Journey
+  // are private (workers_dev=false) and safe to deploy before Access.
+  await stage("private_core",async()=>{
+    shell.wrangler(["deploy","--config",corePath]);
+    return {coreWorker:names.core};
+  });
+  if(settings.enableJourneys)await stage("journey",async()=>{
+    shell.wrangler(["deploy","--config",journeyPath]);
+    shell.wrangler(["secret","put","JOURNEY_INTERNAL_TOKEN","--config",journeyPath],
+      {input:creds.journeyToken+"\n"});
+    return {journeyWorker:names.journey};
+  });
   await stage("locked_console",async()=>{
     shell.exec("pnpm",["--filter","@flightdeck/console","build"]);
     const result=shell.wrangler(["deploy","--config",consolePath]);
@@ -201,18 +213,9 @@ export async function applyWizard({
     teamDomain:manifest.resources.accessTeamDomain,aud:manifest.resources.accessAud,
   };
   const readyConfig=buildConfigs({...settings,
-    d1Id:manifest.resources.d1Id,streamId:manifest.resources.streamId,access});
+    d1Id:manifest.resources.d1Id,streamId:manifest.resources.streamId,access,
+    consoleHost:manifest.resources.consoleHost});
   assertReady(readyConfig,access);writeConfigs(readyConfig);
-  await stage("private_core",async()=>{
-    shell.wrangler(["deploy","--config",corePath]);
-    return {coreWorker:names.core};
-  });
-  if(settings.enableJourneys)await stage("journey",async()=>{
-    shell.wrangler(["deploy","--config",journeyPath]);
-    shell.wrangler(["secret","put","JOURNEY_INTERNAL_TOKEN","--config",journeyPath],
-      {input:creds.journeyToken+"\n"});
-    return {journeyWorker:names.journey};
-  });
   // The SQL token must exist before any Worker is published with valid Access.
   const sqlToken=shell.env.FLIGHTDECK_CATALOG_TOKEN;
   if(typeof sqlToken!=="string"||sqlToken.length<20)throw new InstallerError("sql_token_required",

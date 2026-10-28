@@ -1,8 +1,9 @@
+import {Admin} from "./Admin";
 import {simulateJourney,type SimulationResult,type ObservedTransition} from "@flightdeck/simulator";
 import {useEffect,useMemo,useState,type ReactNode} from "react";
 
 type Row = Record<string,unknown>;
-type Section = "overview"|"events"|"insights"|"dashboards"|"funnels"|"retention"|"journeys"|"experience"|"experiments"|"knowledge"|"investigations"|"sources";
+type Section = "overview"|"events"|"insights"|"dashboards"|"funnels"|"retention"|"journeys"|"experience"|"experiments"|"knowledge"|"investigations"|"sources"|"admin";
 const sections:{id:Section;title:string;icon:string;group:string}[]=[
  {id:"overview",title:"Overview",icon:"▤",group:"Explore"},
  {id:"events",title:"Event Explorer",icon:"≡",group:"Explore"},
@@ -16,6 +17,7 @@ const sections:{id:Section;title:string;icon:string;group:string}[]=[
  {id:"knowledge",title:"Product Graph",icon:"⬡",group:"Intelligence"},
  {id:"investigations",title:"Investigations",icon:"◇",group:"Intelligence"},
  {id:"sources",title:"Integrations",icon:"⚙",group:"Configure"},
+ {id:"admin",title:"Administration",icon:"⚒",group:"Configure"},
 ];
 function rows(response:unknown):Row[]{
   const v=response as any;
@@ -866,11 +868,18 @@ export function App(){
  const [days,setDays]=useState(30);
  const [refresh,setRefresh]=useState(0);
  const [project,setProject]=useState("Flightdeck");
+ const [canAdmin,setCanAdmin]=useState(false);
  const [menuOpen,setMenuOpen]=useState(false);
  useEffect(()=>{
   const listener=()=>{setSelected(getSection());setMenuOpen(false);};
   window.addEventListener("hashchange",listener);
-  fetch("/api/config",{credentials:"same-origin"}).then(r=>r.ok?r.json():null).then(v=>{const config=v as {projectId?:string}|null;if(config?.projectId)setProject(config.projectId);}).catch(()=>{});
+  fetch("/api/config",{credentials:"same-origin"})
+    .then(r=>r.ok?r.json():null)
+    .then(v=>{
+      const config=v as {projectId?:string;administrator?:boolean}|null;
+      if(config?.projectId)setProject(config.projectId);
+      setCanAdmin(config?.administrator===true);
+    }).catch(()=>{});
   return()=>window.removeEventListener("hashchange",listener);
  },[]);
  let content:ReactNode;
@@ -887,13 +896,14 @@ export function App(){
  case "knowledge":content=<KnowledgeGraph/>;break;
  case "investigations":content=<Investigations/>;break;
  case "sources":content=<Sources/>;break;
+ case "admin":content=<Admin/>;break;
  }
  const navTitle=sections.find(s=>s.id===selected)?.title;
  return <div className="shell">
   <aside className={"sidebar "+(menuOpen?"open":"")}>
    <a className="brand" href="#overview"><span className="brand-mark">F</span><span><b>flightdeck</b><small>PRODUCT INTELLIGENCE</small></span></a>
    <div className="workspace"><span className="workspace-avatar">{project.slice(0,1).toUpperCase()}</span><div><b>{project}</b><small>Self-hosted · Cloudflare</small></div></div>
-   <nav>{sections.map((item,i)=><div key={item.id}>
+   <nav>{sections.filter(item=>item.id!=="admin"||canAdmin).map((item,i)=><div key={item.id}>
     {(i===0||sections[i-1]?.group!==item.group)&&<span className="nav-group">{item.group}</span>}
     <a href={"#"+item.id} aria-current={selected===item.id?"page":undefined} className={"nav-link "+(selected===item.id?"active":"")}>
       <span className="nav-icon">{item.icon}</span>{item.title}

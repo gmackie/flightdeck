@@ -19,6 +19,11 @@ export interface Env {
   JOURNEY_QUEUE?: { sendBatch(messages: ReadonlyArray<{body:SinkRecord}>): Promise<void> };
 }
 export default class AnalyticsCore extends WorkerEntrypoint<Env> {
+  /** Minimal private health contract; never expose source tokens or registry rows. */
+  async status():Promise<{ok:true;mode:string;sourceRegistryMode:string;metadataBound:boolean;streamBound:boolean}>{
+    return {ok:true,mode:this.env.SINK_MODE,sourceRegistryMode:this.env.SOURCE_REGISTRY_MODE??"secret",
+      metadataBound:!!this.env.META,streamBound:!!this.env.STREAM};
+  }
   async captureBatch(request: CaptureRequest): Promise<CaptureReceipt> {
     const mode = this.env.SINK_MODE;
     const sink = mode === "basin" && this.env.STREAM ? basinSink(this.env.STREAM)

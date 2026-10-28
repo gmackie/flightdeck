@@ -4,7 +4,8 @@
  */
 import {guardedConfig} from "./engine.mjs";
 export function buildConfigs({accountId,names,d1Id,streamId,adminEmails,access,
-  enableJourneys=true,enableAI=false,enableMcp=true,queryUnits=50000}){
+  enableJourneys=true,enableAI=false,enableMcp=true,queryUnits=50000,
+  consoleHost}){
   const base={
     "$schema":"../../node_modules/wrangler/config-schema.json",
     account_id:accountId,
@@ -70,7 +71,7 @@ export function buildConfigs({accountId,names,d1Id,streamId,adminEmails,access,
       ACCESS_TEAM_DOMAIN:access?.teamDomain??"locked.invalid",
       ACCESS_AUD:access?.aud??"locked",
       ADMIN_EMAILS:adminEmails.join(","),
-      CONSOLE_ORIGIN:"https://"+names.console+".invalid",
+      CONSOLE_ORIGIN:consoleHost?"https://"+consoleHost:"https://locked.invalid",
     },
   }:null;
   return {core,journey,console:consoleConfig,mcp};
