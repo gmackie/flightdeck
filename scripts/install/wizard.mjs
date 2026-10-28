@@ -202,7 +202,7 @@ export async function applyWizard({
   await stage("d1",()=>ensureD1({api,shell,names,manifest}));
   await stage("workers_subdomain",()=>ensureWorkersSubdomain({api,shell,accountId:account,manifest}));
   await stage("r2",()=>ensureR2Bucket({api,shell,names,manifest}));
-  await stage("catalog",()=>ensureCatalog({shell,names}));
+  manifest.mark("catalog",await ensureCatalog({api,shell,names}));
   await stage("basin",()=>ensureBasin({api,shell,names,manifest,prompt,logger}));
   if(settings.enableJourneys)await stage("queues",()=>ensureQueues({shell,names,manifest}));
   const staticConfig=buildConfigs({...settings,

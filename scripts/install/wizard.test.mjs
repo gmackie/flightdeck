@@ -23,6 +23,7 @@ class FakeAPI {
   if(path.endsWith("/queues")&&method==="GET")return [];
   if(path.includes("/r2/buckets/"))throw new InstallerError("provider_request_failed","(404)");
   if(path.endsWith("/r2/buckets"))return {name:"flightdeck-test-events"};
+  if(path.includes("/r2-catalog/"))return {status:"active"};
   if(path.endsWith("/streams")){
    if(method==="GET")return this.streams;
    this.streams.push({id:streamId,name:body.name});return this.streams.at(-1);

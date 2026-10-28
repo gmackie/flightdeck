@@ -46,10 +46,18 @@ export async function ensureR2Bucket({api,shell,names,manifest}){
   }
   return {bucketName:names.bucket};
 }
-export function ensureCatalog({shell,names}){
+export async function ensureCatalog({api,shell,names}){
+  if(api?.enabled){
+    const path=api.account("/r2-catalog/"+names.bucket);
+    let catalog;
+    try{catalog=await api.call(path);}catch(e){if(!is404(e))throw e;}
+    if(catalog?.status!=="active")await api.call(path+"/enable",{method:"POST"});
+    return {catalogBucket:names.bucket};
+  }
   const probe=shell.wrangler(["basin","catalog","get",names.bucket],{allowFailure:true});
-  if(!probe.ok){
-    if(!/not.?found|404|not enabled|does not exist/i.test(probe.stderr+" "+probe.stdout))
+  const missing=/not.?found|404|not enabled|does not exist/i.test(probe.stderr+" "+probe.stdout);
+  if(!probe.ok||missing){
+    if(!missing)
       throw new InstallerError("catalog_probe_failed","Could not inspect the selected Basin Catalog.");
     shell.wrangler(["basin","catalog","enable",names.bucket]);
   }
