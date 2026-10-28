@@ -284,7 +284,7 @@ function JourneyDefinitions(){
     <label>Object ID<input value={inspectId} onChange={e=>setInspectId(e.target.value)}/></label>
    </div>
    <button className="primary" disabled={!inspectId} onClick={()=>void inspect()}>Inspect state</button>
-   {snapshot&&<pre>{JSON.stringify(snapshot,null,2)}</pre>}
+   {snapshot!==null?<pre>{JSON.stringify(snapshot,null,2)}</pre>:null}
   </Panel>
  </div>;
 }
