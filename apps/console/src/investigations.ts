@@ -38,7 +38,13 @@ function eventCounts(data:unknown):Record<string,number>{
   return out;
 }
 async function reserveAI(env:InvestigationEnv):Promise<boolean>{
-  const limit=Number(env.AI_INVESTIGATION_DAILY_LIMIT??"3");
+  let limit=Number(env.AI_INVESTIGATION_DAILY_LIMIT??"3");
+  try{
+    const setting=await env.META!.prepare(
+      "SELECT ai_investigations_daily FROM admin_settings WHERE project_id=?"
+    ).bind(env.PROJECT_ID).first<{ai_investigations_daily:number}>();
+    if(setting)limit=setting.ai_investigations_daily;
+  }catch{/* legacy installations retain the environment limit */}
   if(!Number.isSafeInteger(limit)||limit<0||limit>100)return false;
   const day=new Date().toISOString().slice(0,10),db=env.META!;
   const result=await db.batch([

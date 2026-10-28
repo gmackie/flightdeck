@@ -34,6 +34,12 @@ The guided wizard selects a Cloudflare account, provisions private service-bindi
 
 The wizard supports `--dry-run`, `--yes --apply`, resumable installation manifests, and a complete noninteractive mode with scoped Cloudflare API/Catalog tokens. Read [install wizard](docs/install-wizard.md) and [administrator UI/MCP](docs/admin.md).
 
+## Administrator UI and MCP
+
+Flightdeck includes an Access-protected Administration workspace for application Worker/DO registration, source token rotation, collection policies, query/AI budgets, system health and reviewable change requests. The optional MCP server can inspect administration status and propose typed changes; a separate administrator must approve them in the UI. No source credentials are returned through MCP.
+
+See [Admin console](docs/admin.md) and [Admin MCP](docs/admin-mcp.md).
+
 ## Get started
 
 The release hardening stack also includes a dry-run-only account-owned deployment planner, D1 metadata backup/restore helpers, and a first-party browser → authenticated Worker → Core RPC → durable sink integration test.

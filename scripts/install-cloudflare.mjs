@@ -97,12 +97,14 @@ async function main(){
  const admins=values["admin-emails"]??await ask("Who may administer Flightdeck? (emails)",
    manifest.state.adminEmails?.join(",")??"");
  const mode=values.mode??await ask("Install mode: standard or intelligence","intelligence");
+ const enableAI=values["enable-ai"] || (mode==="intelligence" && interactive &&
+   (await ask("Enable paid Workers AI analysis? (y/N)","n")).toLowerCase()==="y");
  const queryUnits=values["query-units"]===undefined?50000:Number(values["query-units"]);
  if(!Number.isSafeInteger(queryUnits)||queryUnits<0||queryUnits>100_000_000)
    throw new InstallerError("invalid_query_budget");
  const input={
    accountId,slug,adminEmails:admins,mode,
-   enableAI:values["enable-ai"],enableMcp:!values["skip-mcp"],queryUnits
+   enableAI,enableMcp:!values["skip-mcp"],queryUnits
  };
  const plan=installationPlan(input);
  console.log("\n◆ Installation plan");
@@ -148,6 +150,10 @@ async function main(){
  if(result.mcpUrl)console.log("  MCP: "+result.mcpUrl);
  console.log("  Default application source: "+result.sourceId);
  console.log("  Local source token recovery file: "+result.sourceTokenFile);
+ console.log("  Service binding (add to your application wrangler.jsonc):");
+ console.log('    {"services":[{"binding":"FLIGHTDECK","service":"'+
+   "flightdeck-"+slug+'-core"}]}');
+ console.log("  Add the source ID and token to each consuming Worker as secrets.");
  console.log("\nNext: register additional Workers/DOs from Flightdeck Admin, then");
  console.log("verify a test event reaches Basin SQL using docs/installation.md.");
 }

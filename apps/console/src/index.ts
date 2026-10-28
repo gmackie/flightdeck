@@ -7,6 +7,7 @@ import { handleGraph } from "./graph";
 import { handleInvestigations } from "./investigations";
 import { handleExperimentAnalysis } from "./experiment-api";
 import { handleAgentHandoff } from "./handoff";
+import {handleAdmin,isFlightdeckAdmin} from "./admin";
 import {suggestJourneys,type AIProvider} from "./ai";
 
 interface Env extends ControlEnv {
@@ -21,6 +22,7 @@ interface Env extends ControlEnv {
   AI_INVESTIGATION_DAILY_LIMIT?: string;
   GITHUB_REPOSITORY?: string;
   GITHUB_ISSUES_TOKEN?: string;
+  CORE?:{status():Promise<unknown>};
 }
 const jwksCache=new Map<string,ReturnType<typeof createRemoteJWKSet>>();
 function json(body:unknown,status=200):Response {
@@ -70,6 +72,8 @@ export default {
     if(!principal)return json({error:"unauthorized"},401);
     const url=new URL(request.url);
     if(url.pathname.startsWith("/api/")){
+      const administrative=await handleAdmin(request,env,principal);
+      if(administrative)return administrative;
       const handoff=await handleAgentHandoff(request,env,principal);
       if(handoff)return handoff;
       const experiment=await handleExperimentAnalysis(request,env,principal.sub);
@@ -84,7 +88,7 @@ export default {
       if(control)return control;
     }
     if(url.pathname==="/api/config"){
-      return json({projectId:env.PROJECT_ID,mode:"basin",selfHosted:true,flagshipManagedExternally:true,aiEnabled:env.AI_ENABLED==="true",queryGovernance:true});
+      return json({projectId:env.PROJECT_ID,mode:"basin",selfHosted:true,flagshipManagedExternally:true,aiEnabled:env.AI_ENABLED==="true",queryGovernance:true,administrator:isFlightdeckAdmin(env,principal)});
     }
     if(url.pathname==="/api/discover"){
       if(request.method!=="POST")return json({error:"method_not_allowed"},405);

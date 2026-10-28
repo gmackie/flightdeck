@@ -17,3 +17,7 @@ Use dry-run installation first and explicit operator approval for remote actions
 - Any remote resource mutation requires operator approval; CI dry-runs are side-effect-free.
 - Shared Zero Trust organizations/IdPs must not be overwritten.
 - Admin MCP writes are proposals requiring review in the UI; no hidden deployment or shell capability.
+
+## Administrator MCP and UI
+
+Source credentials may be displayed once only to Access-authenticated admins via the Console API; never return them in inventory views or MCP. Admin MCP can propose typed, project-scoped D1 changes, but cannot directly apply or approve changes. Versioned source policy edits, one-time credential rotation, audit and quota governance must be server-enforced.

@@ -36,7 +36,18 @@ export async function reserveQueryBudget(
   env:QueryRuntimeEnv,units:number,now=Date.now()
 ):Promise<"accepted"|"exhausted"|"not_configured"> {
   if (!env.META) return "not_configured";
-  const id=period(now),limit=monthlyLimit(env);
+  const id=period(now);
+  let limit=monthlyLimit(env);
+  try{
+    const configured=await env.META.prepare(
+      "SELECT query_units_monthly FROM admin_settings WHERE project_id=?"
+    ).bind(env.PROJECT_ID).first<{query_units_monthly:number}>();
+    if(configured && Number.isSafeInteger(configured.query_units_monthly) &&
+       configured.query_units_monthly>=0 && configured.query_units_monthly<=100_000_000)
+      limit=configured.query_units_monthly;
+  }catch{
+    // Legacy account without admin_settings migration uses the strict env limit.
+  }
   const results=await env.META.batch([
     env.META.prepare(
       "INSERT OR IGNORE INTO query_budgets(project_id,period,units_used,units_limit) VALUES(?,?,0,?)"

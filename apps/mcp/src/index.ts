@@ -11,6 +11,7 @@ import {createRemoteJWKSet,jwtVerify} from "jose";
 interface Env{
   ACCESS_TEAM_DOMAIN:string;
   ACCESS_AUD:string;
+  ADMIN_EMAILS?:string;
   CONSOLE:Fetcher;
 }
 type Authenticated={id:string;email:string;assertion:string};
@@ -47,6 +48,29 @@ async function fromConsole(env:Env,principal:Authenticated,path:string):Promise<
   if(raw.length>15_000)
     return {error:"result_exceeds_agent_budget",maxCharacters:15_000};
   try{return JSON.parse(raw);}catch{return {error:"invalid_query_result"};}
+}
+function adminAllowed(env:Env,principal:Authenticated):boolean{
+  return (env.ADMIN_EMAILS??"").toLowerCase().split(",").map(x=>x.trim()).filter(Boolean)
+    .includes(principal.email.toLowerCase());
+}
+async function proposeAdminChange(
+  env:Env,principal:Authenticated,operation:unknown,rationale:string
+):Promise<unknown>{
+  const result=await env.CONSOLE.fetch("https://flightdeck-console/api/admin/requests",{
+    method:"POST",
+    headers:{
+      "Cf-Access-Jwt-Assertion":principal.assertion,
+      "Accept":"application/json",
+      "Content-Type":"application/json",
+      "Origin":"https://flightdeck-console"
+    },
+    body:JSON.stringify({operation,rationale})
+  });
+  const raw=await result.text();
+  if(raw.length>10000)return {error:"admin_result_exceeds_budget"};
+  let body:unknown;try{body=JSON.parse(raw);}catch{return {error:"invalid_admin_response"};}
+  if(!result.ok)return {error:"admin_request_rejected",status:result.status,details:body};
+  return body;
 }
 function createServer(env:Env,principal:Authenticated){
   const server=new McpServer({name:"flightdeck",version:"0.1.0"});
@@ -96,6 +120,67 @@ function createServer(env:Env,principal:Authenticated){
     description:"List metadata for reusable product analytics insight definitions.",
     inputSchema:z.object({})
   },async()=>response(await fromConsole(env,principal,"/api/insights")));
+  if(adminAllowed(env,principal)){
+    server.registerTool("flightdeck_admin_status",{
+      description:"Read private Flightdeck Core/source/Access health for this project. No secrets.",
+      inputSchema:z.object({})
+    },async()=>response(await fromConsole(env,principal,"/api/admin/overview")));
+    server.registerTool("flightdeck_admin_sources",{
+      description:"List this project's enabled/disabled Worker and DO source policies; never returns source credentials.",
+      inputSchema:z.object({})
+    },async()=>response(await fromConsole(env,principal,"/api/admin/sources")));
+    server.registerTool("flightdeck_admin_budgets",{
+      description:"Read administrator-configured analytics query/AI budgets and current usage (relative units).",
+      inputSchema:z.object({})
+    },async()=>response(await fromConsole(env,principal,"/api/admin/budgets")));
+    server.registerTool("flightdeck_admin_audit",{
+      description:"Read recent project administration and approval audit events. No tokens.",
+      inputSchema:z.object({})
+    },async()=>response(await fromConsole(env,principal,"/api/admin/audit")));
+    server.registerTool("flightdeck_admin_pending_changes",{
+      description:"List restricted admin change requests with their review status.",
+      inputSchema:z.object({})
+    },async()=>response(await fromConsole(env,principal,"/api/admin/requests")));
+    const sourceChange=z.object({
+      sourceId:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
+      rationale:z.string().min(12).max(512)
+    });
+    server.registerTool("flightdeck_admin_propose_disable_source",{
+      description:"Propose disabling collection for one source. ONLY CREATES A REVIEW REQUEST; administrator must approve in the UI.",
+      inputSchema:sourceChange
+    },async({sourceId,rationale})=>response(await proposeAdminChange(env,principal,
+      {kind:"source.disable",sourceId},rationale)));
+    server.registerTool("flightdeck_admin_propose_enable_source",{
+      description:"Propose enabling one Worker/DO source. Does not apply until separately approved in Admin UI.",
+      inputSchema:sourceChange
+    },async({sourceId,rationale})=>response(await proposeAdminChange(env,principal,
+      {kind:"source.enable",sourceId},rationale)));
+    server.registerTool("flightdeck_admin_propose_query_budget",{
+      description:"Propose a new monthly relative query admission limit, without changing billing or applying it.",
+      inputSchema:z.object({units:z.number().int().min(0).max(100000000),
+        rationale:z.string().min(12).max(512)})
+    },async({units,rationale})=>response(await proposeAdminChange(env,principal,
+      {kind:"budget.query",units},rationale)));
+    server.registerTool("flightdeck_admin_propose_ai_budget",{
+      description:"Propose a new daily AI investigation request limit. Requires Admin UI approval.",
+      inputSchema:z.object({dailyLimit:z.number().int().min(0).max(100),
+        rationale:z.string().min(12).max(512)})
+    },async({dailyLimit,rationale})=>response(await proposeAdminChange(env,principal,
+      {kind:"budget.ai",dailyLimit},rationale)));
+    server.registerTool("flightdeck_admin_propose_source_policy",{
+      description:"Propose a source event allowlist/policy JSON change; never applies directly.",
+      inputSchema:z.object({
+        sourceId:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
+        policyJson:z.string().min(2).max(12000),
+        rationale:z.string().min(12).max(512)
+      })
+    },async({sourceId,policyJson,rationale})=>{
+      let policy:unknown;
+      try{policy=JSON.parse(policyJson);}catch{return response({error:"invalid_policy_json"});}
+      return response(await proposeAdminChange(env,principal,
+        {kind:"source.policy",sourceId,policy},rationale));
+    });
+  }
   return server;
 }
 export default {
