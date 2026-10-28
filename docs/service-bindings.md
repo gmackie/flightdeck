@@ -1,22 +1,49 @@
-# Worker and Durable Object integration
+# Flightdeck for existing Workers and Durable Objects
 
-Flightdeck does **not** require a public collector. Your application Worker/DO authenticates its own browser requests, validates and redacts submitted events, and calls a private Flightdeck Worker over a service binding.
+**There is no mandatory public Flightdeck collector.** Each consuming Worker/DO already owns authentication to its app and can expose whatever first-party frontend telemetry endpoint it chooses. It then calls Analytics Core over a Cloudflare service binding, not an external HTTP URL.
 
-## Setup
+## Deploy Analytics Core
 
-1. Provision R2 bucket `flightdeck-events` in your Cloudflare account.
-2. Deploy `apps/core` with its R2 binding and a `SOURCE_CREDENTIALS` secret mapping source IDs to per-source random tokens and project IDs.
-3. In each consuming Worker, add `{ "binding": "FLIGHTDECK", "service": "flightdeck-core", "entrypoint": "default" }` to `services`.
-4. Add server-side `FLIGHTDECK_SOURCE_ID` and `FLIGHTDECK_SOURCE_TOKEN` secrets to the consuming Worker; never expose the token to a browser.
-5. Instantiate `createFlightdeck({ binding: env.FLIGHTDECK, sourceId: ..., sourceToken: ... })`. Call `track`, `batch`, `identify` or `expose`. Durable Objects use the same service binding through their `env`.
-6. Expose your own authenticated `/api/telemetry` endpoint only if the frontend needs it. Explicitly allowlist event names/properties and derive actor IDs from your session. See `examples/worker-collector.ts`.
+```sh
+pnpm install
+pnpm setup -- --mode basin --stream-id YOUR_BASIN_STREAM_ID
+pnpm doctor
+```
 
-## Delivery and security
+`setup` provisions/deploys a private Core Worker and attaches the durable stream. It writes `.flightdeck/deploy.json`, `.flightdeck/sources.json`, and `.flightdeck/source-tokens.json` locally (gitignored). The source registry contains token hashes; tokens themselves are stored server-side as Worker secrets.
 
-The initial core stores one JSON record per event in R2 and acknowledges only completed writes. This is a **bootstrap durable sink**, not Basin/Iceberg or a queryable analytics warehouse. Partial R2 writes followed by a failure can be retried with stable event IDs. There is no transactional multi-event commit or guaranteed immutable event ID uniqueness. Source credentials are required even over private RPC to isolate projects and limit confused-deputy risks.
+For an unprovisioned account, follow [Basin setup](basin.md) to create a Catalog and structured Pipeline stream. There is also an R2-only mode for small-scale fallback.
 
-Important: a Cloudflare service binding is a trusted internal call path, **not** automatic per-caller authorization. Source credentials are therefore enforced inside core. The caller must validate its own users; Flightdeck does not trust actor IDs originating from unauthenticated browsers.
+## Consumer Worker configuration
 
-## Next production steps
+```json
+{ "services": [{ "binding": "FLIGHTDECK", "service": "flightdeck-core" }] }
+```
 
-Add credential rotation, source registry in D1, consent/redaction policies, event schema limits, R2-to-Basin pipeline or native Basin ingestion, query engine, deletion/retention, and integration tests. Benchmark per-event R2 writes before high-volume production use.
+Set `FLIGHTDECK_SOURCE_ID` and `FLIGHTDECK_SOURCE_TOKEN` as server-side Worker secrets; do **not** put them in frontend bundles. Each consuming Worker/DO can use `@flightdeck/sdk-worker`.
+
+```ts
+const analytics = createFlightdeck({
+  binding: env.FLIGHTDECK,
+  sourceId: env.FLIGHTDECK_SOURCE_ID,
+  sourceToken: env.FLIGHTDECK_SOURCE_TOKEN,
+}).withContext({ actorId: user.id });
+
+await analytics.track("project.created", { template: "blank" }, {
+  objects: [{ type:"project", id:project.id, role:"target" }]
+});
+```
+
+Use `effectFlightdeck(analytics).track(...)` from Effect programs; never turn critical transaction logging into a best-effort side effect unless explicitly allowed.
+
+## Browser to own Worker
+
+The browser SDK `@flightdeck/browser` defaults to `/api/analytics` on **your own origin**. The application Worker authenticates the request and can use `createBrowserEventHandler` from `@flightdeck/sdk-worker/handler`. That helper enforces allowed origins, exact event names/properties, payload-size limits, and replaces browser actor identity with the application's authenticated subject. You must additionally provide your application's rate limiter and consent/privacy controls.
+
+The browser SDK does not transmit events without explicit `consent:()=>true`. Optional Web Vitals use `web-vitals` and collect no form bodies.
+
+## Source policies
+
+`SOURCE_CREDENTIALS` is a private Core secret mapping source ID to {sha256, projectId, allowedEvents, allowedProperties}. `pnpm source:add -- APP SOURCE_PROJECT` adds a source locally; republish its registry with Wrangler secret put. Unknown sources, unregistered events and properties are rejected. Inbound project IDs from browser payloads are ignored.
+
+No distributed exactly-once guarantee. Basin stream acceptance means ingestion, not immediate SQL visibility. Repeated event IDs should be deduplicated in downstream projections; event registry retention and privacy deletion remain required work.

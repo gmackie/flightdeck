@@ -1,11 +1,15 @@
 {
   "name": "flightdeck",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@10.18.0",
   "scripts": {
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r --if-present test",
-    "build": "pnpm -r --if-present build"
+    "build": "pnpm -r --if-present build",
+    "setup": "node scripts/setup.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "source:add": "node scripts/source.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
