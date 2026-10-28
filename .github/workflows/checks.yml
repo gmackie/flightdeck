@@ -41,6 +41,8 @@ jobs:
         run: pnpm exec wrangler deploy --dry-run --config apps/console/wrangler.jsonc
       - name: Bundle Journey Worker (dry run)
         run: pnpm exec wrangler deploy --dry-run --config apps/journey/wrangler.jsonc
+      - name: Bundle optional MCP Worker (dry run)
+        run: pnpm exec wrangler deploy --dry-run --config apps/mcp/wrangler.jsonc
       - name: Pack reusable SDKs
         run: |
           pnpm --filter @flightdeck/contracts pack --pack-destination ./dist-packages
