@@ -1,7 +1,7 @@
 const csrf=document.querySelector('meta[name="flightdeck-csrf"]').content;
 const $=id=>document.getElementById(id);
 let currentStep=1,installationStarted=false,poll=null;
-let lastPlan=null;
+let lastPlan=null,preflightReady=false;
 async function call(path,method="GET",payload){
   const response=await fetch(path,{
     method,credentials:"same-origin",cache:"no-store",
@@ -99,6 +99,24 @@ async function refreshAccounts(){
     alertBox(error.message+" — Run cf auth login or configure CLOUDFLARE_API_TOKEN.");
   }
 }
+async function verifyAccountCapabilities(){
+  preflightReady=false;
+  const el=$("account-preflight"),desc=$("account-preflight-text");
+  el.className="notice";desc.textContent="Checking D1, R2, Basin, Workers and optional Queues read permissions…";
+  try{
+    const result=await call("/api/preflight","POST",planInput());
+    const checks=result.readiness?.checks??[];
+    desc.textContent="Confirmed read access: "+checks.map(x=>x.service).join(", ")+
+      ". This does not prove Workers Paid entitlement or available quota.";
+    el.className="notice success";
+    preflightReady=true;
+  }catch(error){
+    desc.textContent=error.message+
+      ". No resources have been created. Check your account permissions or billing and retry the review.";
+    el.className="notice";
+    preflightReady=false;
+  }
+}
 async function updatePrerequisites(){
   try{
     const p=await call("/api/prerequisites");
@@ -111,6 +129,7 @@ async function updatePrerequisites(){
   }catch(error){alertBox(error.message);}
 }
 async function startInstall(){
+  if(!preflightReady)throw new Error("Account preflight is not complete. Recheck the account permissions.");
   const confirmation=$("confirmation").value.trim();
   if(confirmation!=="INSTALL")throw new Error("Type INSTALL exactly to confirm this account deployment");
   const request={...planInput(),confirmation};
@@ -160,6 +179,7 @@ async function advance(){
       renderPlan(data.plan);
       await updatePrerequisites();
       showStep(3);
+      await verifyAccountCapabilities();
     }else if(currentStep===3){
       await startInstall();
     }

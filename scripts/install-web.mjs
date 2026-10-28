@@ -10,6 +10,8 @@ import {resolve,dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 import {randomBytes,timingSafeEqual} from "node:crypto";
 import {installationPlan} from "./install/wizard.mjs";
+import {CloudflareApi} from "./install/cloudflare.mjs";
+import {preflightAccount} from "./install/preflight.mjs";
 import {normalizeList,accountIdPattern} from "./install/engine.mjs";
 
 const projectRoot=resolve(dirname(fileURLToPath(import.meta.url)),"..");
@@ -85,6 +87,13 @@ export function createInstallerServer(options={}){
   const secret=options.secret??randomBytes(32).toString("base64url");
   const env=options.env??process.env;
   const processLauncher=options.spawn??spawn;
+  const providerPreflight=options.preflight??(async(plan)=>{
+    if(!accountsFromEnvironment(env))throw new Error("Scoped Cloudflare API token required");
+    return preflightAccount({
+      accountId:plan.accountId,mode:plan.mode,
+      api:new CloudflareApi({accountId:plan.accountId,token:env.CLOUDFLARE_API_TOKEN})
+    });
+  });
   const listAccounts=options.accounts??(async()=>{
     if(accountsFromEnvironment(env)){
       const response=await fetch("https://api.cloudflare.com/client/v4/accounts",{
@@ -164,6 +173,24 @@ export function createInstallerServer(options={}){
         const plan=validateWebInstall(input);
         reply(res,200,{plan});return;
       }
+      if(req.method==="POST"&&url.pathname==="/api/preflight"){
+        const input=await parseJson(req);
+        const plan=validateWebInstall(input);
+        if(!accountsFromEnvironment(env)){
+          reply(res,412,{error:"cloudflare_token_required"});return;
+        }
+        const available=await listAccounts();
+        if(!available.some(a=>a.id===plan.accountId)){
+          reply(res,403,{error:"account_not_authorized"});return;
+        }
+        try{
+          const readiness=await providerPreflight(plan);
+          reply(res,200,{readiness});return;
+        }catch(error){
+          reply(res,412,{error:"account_preflight_failed",
+            message:clean(error instanceof Error?error.message:String(error))});return;
+        }
+      }
       if(req.method==="POST"&&url.pathname==="/api/install"){
         if(state.running){reply(res,409,{error:"installation_running"});return;}
         const input=await parseJson(req);
@@ -177,6 +204,12 @@ export function createInstallerServer(options={}){
         const allowed=await listAccounts();
         if(!allowed.some(a=>a.id===plan.accountId)){
           reply(res,403,{error:"account_not_authorized"});return;
+        }
+        let readiness;
+        try{readiness=await providerPreflight(plan);}
+        catch(error){
+          reply(res,412,{error:"account_preflight_failed",
+            message:clean(error instanceof Error?error.message:String(error))});return;
         }
         const selected=plan.options;
         const args=[

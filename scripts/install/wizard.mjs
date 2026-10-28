@@ -8,6 +8,7 @@ import {Shell,Manifest,InstallerError,workerHost,validateInstallOptions} from ".
 import {CloudflareApi,chooseAccount,ensureAccess,ensureWorkersSubdomain} from "./cloudflare.mjs";
 import {ensureD1,ensureR2Bucket,ensureCatalog,ensureBasin,ensureQueues} from "./basin.mjs";
 import {buildConfigs,writeConfigs,assertLocked,assertReady} from "./config.mjs";
+import {preflightAccount} from "./preflight.mjs";
 
 const consolePath="apps/console/wrangler.generated.jsonc";
 const corePath="apps/core/wrangler.generated.jsonc";
@@ -89,7 +90,7 @@ export function installationPlan(input){
       queue:n.queue,deadLetterQueue:n.dlq,
     },
     steps:[
-      "Check authentication, account capabilities and workers.dev subdomain",
+      "Verify D1, R2, Basin, optional Queues, and Workers account permissions before resource mutations",
       "Provision project-scoped D1 metadata",
       "Create R2 bucket + Basin Catalog",
       "Create authenticated Worker-binding Basin stream, Catalog sink and SQL pipeline",
@@ -147,6 +148,10 @@ export async function applyWizard({
     enableJourneys:options.mode==="intelligence",enableMcp:input.enableMcp!==false,
     enableAI:input.enableAI===true,queryUnits:input.queryUnits??50000};
   let creds=ensureCredentials();
+  await stage("preflight",async()=>{
+    const readiness=await preflightAccount({api,shell,accountId:account,mode:options.mode});
+    return {preflightVerifiedAt:readiness.verifiedAt};
+  });
   await stage("d1",()=>ensureD1({api,shell,names,manifest}));
   await stage("workers_subdomain",()=>ensureWorkersSubdomain({api,shell,accountId:account,manifest}));
   await stage("r2",()=>ensureR2Bucket({api,shell,names,manifest}));

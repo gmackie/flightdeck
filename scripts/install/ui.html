@@ -88,6 +88,10 @@
             <div><span class="dot" id="api-token-dot"></span> Scoped Cloudflare API credential <span id="api-token-status">Checking…</span></div>
             <div><span class="dot" id="catalog-token-dot"></span> R2 Catalog / Basin SQL credential <span id="catalog-token-status">Checking…</span></div>
           </div>
+          <div id="account-preflight" class="notice" role="status">
+            <b>Account capability check</b>
+            <p id="account-preflight-text">Read-only checks run before installation; no resources are created during this review.</p>
+          </div>
           <label class="confirmation">Type INSTALL to authorize creating resources in the selected account
             <input id="confirmation" placeholder="INSTALL" autocomplete="off"/></label>
           <p class="help">This local web wizard requires scoped tokens configured as process environment variables. Without them, use the interactive CLI wizard which delegates to Cloudflare login/setup.</p>
