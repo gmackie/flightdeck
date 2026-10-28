@@ -179,6 +179,115 @@ function Retention({days,refresh}:{days:number;refresh:number}){
   <p className="note">The query limits displayed cohort cells for cost. It is not yet a complete retention materialization.</p>
  </Panel>;
 }
+type DefinitionItem={
+ id:string;objectType:string;initialState:string;version:number;enabled:boolean;
+ transitions:Array<{from:string;event:string;to:string}>;
+ terminalStates?:string[];maxDurationDays?:number;
+};
+function JourneyDefinitions(){
+ const [items,setItems]=useState<DefinitionItem[]>([]);
+ const [id,setId]=useState("first-project");
+ const [objectType,setObjectType]=useState("project");
+ const [initial,setInitial]=useState("created");
+ const [terminal,setTerminal]=useState("activated");
+ const [transitions,setTransitions]=useState('[{"from":"created","event":"project.opened","to":"configuring"},{"from":"configuring","event":"project.created","to":"activated"}]');
+ const [error,setError]=useState("");
+ const [message,setMessage]=useState("");
+ const [busy,setBusy]=useState(false);
+ const [inspectType,setInspectType]=useState("project");
+ const [inspectId,setInspectId]=useState("");
+ const [snapshot,setSnapshot]=useState<unknown>(null);
+ async function load(){
+  try{
+   const res=await fetch("/api/journey-definitions",{credentials:"same-origin"});
+   const body=await res.json() as {items?:DefinitionItem[];error?:string};
+   if(!res.ok)throw new Error(body.error??"Unable to load definitions");
+   setItems(body.items??[]);
+  }catch(err){setError(String((err as Error).message));}
+ }
+ useEffect(()=>{void load();},[]);
+ async function create(){
+  setBusy(true);setError("");setMessage("");
+  try{
+   const body={
+    id,objectType,initialState:initial,
+    terminalStates:terminal.split(",").map(x=>x.trim()).filter(Boolean),
+    maxDurationDays:30,
+    transitions:JSON.parse(transitions),
+   };
+   const res=await fetch("/api/journey-definitions",{
+    method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)
+   });
+   const payload=await res.json() as {error?:string};
+   if(!res.ok)throw new Error(payload.error??"Creation failed");
+   setMessage("Draft created. It is disabled until reviewed and explicitly approved.");
+   await load();
+  }catch(err){setError(String((err as Error).message));}
+  finally{setBusy(false);}
+ }
+ async function toggle(item:DefinitionItem){
+  const approval=item.enabled?"":window.prompt("Approval rationale (min. 12 characters)")??"";
+  if(!item.enabled&&!approval)return;
+  setBusy(true);setError("");setMessage("");
+  try{
+   const res=await fetch("/api/journey-definitions/"+encodeURIComponent(item.id),{
+    method:"PATCH",credentials:"same-origin",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({expectedVersion:item.version,enabled:!item.enabled,approval})
+   });
+   const payload=await res.json() as {error?:string};
+   if(!res.ok)throw new Error(payload.error??"Update failed");
+   setMessage("Definition status updated. New events will use approved version "+item.version+".");
+   await load();
+  }catch(err){setError(String((err as Error).message));}
+  finally{setBusy(false);}
+ }
+ async function inspect(){
+  setError("");setSnapshot(null);
+  try{
+   const params=new URLSearchParams({type:inspectType,objectId:inspectId});
+   const res=await fetch("/api/journey-state?"+params,{credentials:"same-origin"});
+   const payload=await res.json() as {error?:string};
+   if(!res.ok)throw new Error(payload.error??"State unavailable");
+   setSnapshot(payload);
+  }catch(err){setError(String((err as Error).message));}
+ }
+ return <div className="stack">
+  <Panel title="Executable journey definitions" sub="Compiled, versioned state machines; disabled until explicitly approved">
+   {error&&<div className="error-state">{error}</div>}
+   {message&&<p className="ok-label">{message}</p>}
+   {!items.length?<div className="empty">No journey definitions configured.</div>:
+    <div className="table-scroll"><table><thead><tr>
+     <th>Journey</th><th>Object</th><th>Version</th><th>Status</th><th>Action</th>
+    </tr></thead><tbody>{items.map(item=><tr key={item.id}>
+     <td>{item.id}</td><td>{item.objectType}</td><td>v{item.version}</td>
+     <td>{item.enabled?<span className="ok-label">Active</span>:"Draft"}</td>
+     <td><button className="tiny-button" disabled={busy} onClick={()=>void toggle(item)}>
+      {item.enabled?"Disable":"Review & enable"}</button></td>
+    </tr>)}</tbody></table></div>}
+   <details className="journey-creator"><summary>Author a deterministic definition</summary>
+    <div className="insight-form">
+     <label>Definition ID<input value={id} onChange={e=>setId(e.target.value)}/></label>
+     <label>Object type<input value={objectType} onChange={e=>setObjectType(e.target.value)}/></label>
+     <label>Initial state<input value={initial} onChange={e=>setInitial(e.target.value)}/></label>
+     <label>Terminal states<input value={terminal} onChange={e=>setTerminal(e.target.value)}/></label>
+    </div>
+    <label className="field-label">Transitions (JSON array)</label>
+    <textarea value={transitions} onChange={e=>setTransitions(e.target.value)} rows={5}/>
+    <p className="note">The server validates state reachability and deterministic transitions. Creation never enables execution.</p>
+    <button className="primary" disabled={busy} onClick={()=>void create()}>Create disabled definition</button>
+   </details>
+  </Panel>
+  <Panel title="Inspect a live object" sub="Administrator-only inspection through the private Journey Worker service binding">
+   <div className="insight-form">
+    <label>Object type<input value={inspectType} onChange={e=>setInspectType(e.target.value)}/></label>
+    <label>Object ID<input value={inspectId} onChange={e=>setInspectId(e.target.value)}/></label>
+   </div>
+   <button className="primary" disabled={!inspectId} onClick={()=>void inspect()}>Inspect state</button>
+   {snapshot!==null?<pre>{JSON.stringify(snapshot,null,2)}</pre>:null}
+  </Panel>
+ </div>;
+}
 function Journeys({days,refresh}:{days:number;refresh:number}){
  const q=useData("/api/journeys",days,refresh);
  const [proposals,setProposals]=useState<Array<{
@@ -201,6 +310,7 @@ function Journeys({days,refresh}:{days:number;refresh:number}){
   }catch(e){setAiError(String((e as Error).message));}finally{setAiLoading(false);}
  }
  return <div className="stack">
+  <JourneyDefinitions/>
   <Panel title="Observed journey transitions" sub="A directly-follows graph discovered from ordered, actor-scoped events">
    <Message loading={q.loading} error={q.error} empty={!q.data.length}/>
    {!!q.data.length&&<div className="transition-list">{q.data.map((r,i)=><div className="transition" key={i}>

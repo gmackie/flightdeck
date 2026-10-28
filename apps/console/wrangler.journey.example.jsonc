@@ -1,0 +1,12 @@
+{
+  "services": [
+    {
+      "binding": "JOURNEY_SERVICE",
+      "service": "flightdeck-journey"
+    }
+  ],
+  "secrets": [
+    "JOURNEY_INTERNAL_KEY"
+  ],
+  "notes": "Example fragment only: merge services into generated console Wrangler config and add secret with wrangler secret put"
+}
