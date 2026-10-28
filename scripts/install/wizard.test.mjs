@@ -30,6 +30,8 @@ class FakeAPI {
   if(path.endsWith("/sinks")){
    if(method==="GET")return this.sinks;
    assert.equal(body.config.token,"catalog-secret-not-for-manifest");
+   assert.equal(body.type,"r2_data_catalog");
+   assert.deepEqual(body.format,{type:"parquet",compression:"zstd"});
    this.sinks.push({id:sinkId,name:body.name});return this.sinks.at(-1);
   }
   if(path.endsWith("/pipelines")){

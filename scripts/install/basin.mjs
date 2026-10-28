@@ -120,9 +120,10 @@ export async function ensureBasin({api,shell,names,manifest,prompt,logger=consol
     if(!sinkId){
       if(priorSink)throw new InstallerError("unowned_basin_sink","Named Basin sink exists without install record.");
       const sink=await api.call(base+"/sinks",{method:"POST",body:{
-        name:names.sink,type:"basin_catalog",
+        name:names.sink,type:"r2_data_catalog",
+        format:{type:"parquet",compression:"zstd"},
         config:{
-          token:catalogToken,account_id:api.accountId,bucket:names.bucket,
+          token:catalogToken,bucket:names.bucket,
           namespace:"default",table_name:names.table,
           rolling_policy:{interval_seconds:60,file_size_bytes:100_000_000},
         },
