@@ -1,0 +1,11 @@
+{
+  "name": "flightdeck",
+  "private": true,
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
