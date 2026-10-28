@@ -31,7 +31,7 @@ function fromRow(row:SourceRow):SourceConfig {
      Array.isArray(p.allowedProperties))
     throw new IngestError("source_policy_missing");
   return {
-    ...p as SourceConfig,
+    ...(p as unknown as SourceConfig),
     sha256:row.token_sha256,
     rotatingSha256:rotating as string[],
     enabled:true,
