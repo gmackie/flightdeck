@@ -15,6 +15,10 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
+      - name: End-to-end in-memory Worker, browser and private RPC test
+        run: pnpm test:integration
+      - name: Deployment and recovery CLI tests
+        run: pnpm test:deployment
       - run: pnpm test:govern
       - name: Validate installers without mutating Cloudflare
         run: |
@@ -22,6 +26,13 @@ jobs:
           node --check scripts/setup-console.mjs
           node --check scripts/doctor.mjs
           node --check scripts/source.mjs
+          node --check scripts/source-governance.mjs
+          node --check scripts/workspace-deploy.mjs
+          node --check scripts/backup.mjs
+          node --check scripts/restore.mjs
+          node --check scripts/doctor-remote.mjs
+          node scripts/workspace-deploy.mjs --d1-id 12345678-1234-1234-1234-123456789abc --stream-id stream_1234 --account-id 0123456789abcdef0123456789abcdef --host analytics.example.com --access-domain team.cloudflareaccess.com --access-aud 0123456789abcdef0123456789abcdef --admin-email owner@example.com --dry-run
+
           node scripts/setup.mjs --dry-run --mode r2 --yes
           node scripts/setup-console.mjs --dry-run --yes --host analytics.example.com --access-domain example.cloudflareaccess.com --access-aud 0123456789abcdef0123456789abcdef --account-id 0123456789abcdef0123456789abcdef
       - name: Bundle Core Worker (dry run)
