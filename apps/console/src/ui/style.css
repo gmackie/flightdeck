@@ -3,3 +3,15 @@
 .discovery-card h3{margin:5px 0 0;font-size:14px;color:#e0f6f1}
 .discovery-card p{margin:2px 0!important}
 .discovery-card .transition{flex-wrap:wrap;border:0;padding:0;background:none}
+
+/* Saved insights and dashboard composition */
+.insight-form{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.insight-form label,.insight-steps{display:flex;flex-direction:column;gap:7px;color:#a8b8cb;font-size:11px;flex:1;min-width:140px}
+.insight-form input,.insight-form select,.insight-steps input{background:#0e1725;border:1px solid #34445d;border-radius:7px;color:#e7eff9;padding:9px 11px;min-width:0}
+.insight-steps{margin-bottom:14px}
+.dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.dashboard-widget{border:1px solid #2b3c52;border-radius:9px;padding:15px;background:#0f1727;overflow:hidden}
+.dashboard-widget h3{font-size:13px;margin:0 0 15px}
+.checkbox-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 16px;padding:14px 0}
+.checkbox-grid label{font-size:11px;color:#b9c8db}
+@media(max-width:800px){.dashboard-grid{grid-template-columns:1fr}.checkbox-grid{grid-template-columns:1fr 1fr}}
