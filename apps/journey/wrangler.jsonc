@@ -1,0 +1,12 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "flightdeck-journey",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-27",
+  "workers_dev": false,
+  "durable_objects": { "bindings": [{ "name": "JOURNEYS", "class_name": "JourneyInstance" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["JourneyInstance"] }],
+  "queues": { "consumers": [{ "queue": "flightdeck-journeys", "max_batch_size": 10, "max_batch_timeout": 5, "max_retries": 5, "dead_letter_queue": "flightdeck-journeys-dlq" }] },
+  "d1_databases": [{ "binding": "META", "database_name": "flightdeck-meta", "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_UUID", "migrations_dir": "../../migrations" }],
+  "observability": { "enabled": true }
+}

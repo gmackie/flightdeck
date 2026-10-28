@@ -1,0 +1,26 @@
+{
+  "name": "@flightdeck/console",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@flightdeck/query": "workspace:*",
+    "jose": "^6.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "@flightdeck/discovery": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@cloudflare/workers-types": "^5.20261028.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0"
+  }
+}

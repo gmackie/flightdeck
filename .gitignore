@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars*
+!.dev.vars.example
+.flightdeck/
+flightdeck.deploy.json
+apps/core/wrangler.generated.jsonc
+apps/console/wrangler.generated.jsonc
+.env*
+!.env.example
+*.tsbuildinfo
+dist-packages/

@@ -1,0 +1,11 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "flightdeck-core",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-27",
+  "workers_dev": false,
+  "vars": { "SINK_MODE": "basin" },
+  "pipelines": [{ "binding": "STREAM", "stream": "REPLACE_WITH_YOUR_STREAM_ID" }],
+  "queues": { "producers": [{ "binding": "JOURNEY_QUEUE", "queue": "flightdeck-journeys" }] },
+  "observability": { "enabled": true }
+}

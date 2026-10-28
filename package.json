@@ -1,0 +1,20 @@
+{
+  "name": "flightdeck",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@10.18.0",
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build",
+    "setup": "node scripts/setup.mjs",
+    "setup:console": "node scripts/setup-console.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "source:add": "node scripts/source.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.47.0"
+  }
+}

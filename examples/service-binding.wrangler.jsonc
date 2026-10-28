@@ -1,0 +1,3 @@
+{
+  "services": [{ "binding": "FLIGHTDECK", "service": "flightdeck-core" }]
+}
