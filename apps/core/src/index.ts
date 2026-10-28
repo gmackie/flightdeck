@@ -2,7 +2,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { registerGraph, type GraphSubmission } from "./graph";
 import type { GraphReceipt } from "@flightdeck/knowledge";
 import type { CaptureRequest, CaptureReceipt } from "@flightdeck/contracts";
-import { IngestError, ingestBatch, type SourceConfig, type SinkRecord, type EventSink } from "./ingest";
+import { IngestError, ingestBatch, type SinkRecord, type EventSink } from "./ingest";
 import { basinSink, r2Sink, type BasinBinding, type R2Like } from "./sinks";
 import {sourceRegistry} from "./registry";
 
@@ -15,16 +15,8 @@ export interface Env {
   SINK_MODE: string;
   STREAM?: BasinBinding;
   EVENTS?: R2Like;
-  META?: D1Database;
   /** Optional at-least-once live path, not atomic with the historical sink. */
   JOURNEY_QUEUE?: { sendBatch(messages: ReadonlyArray<{body:SinkRecord}>): Promise<void> };
-}
-function readSources(serialized: string): Record<string,SourceConfig> {
-  try {
-    const value: unknown = JSON.parse(serialized);
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error();
-    return value as Record<string,SourceConfig>;
-  } catch { throw new IngestError("source_configuration_missing"); }
 }
 export default class AnalyticsCore extends WorkerEntrypoint<Env> {
   async captureBatch(request: CaptureRequest): Promise<CaptureReceipt> {
