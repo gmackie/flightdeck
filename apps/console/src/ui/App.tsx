@@ -1,4 +1,4 @@
-import {AdminWorkspace} from "../Admin";
+import {AdminWorkspace} from "../AdminPanel";
 import {simulateJourney,type SimulationResult,type ObservedTransition} from "@flightdeck/simulator";
 import {useEffect,useMemo,useState,type ReactNode} from "react";
 
