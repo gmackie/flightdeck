@@ -20,3 +20,23 @@
 .journey-creator summary{font-size:12px;color:#72ddc9;font-weight:650;cursor:pointer;margin-bottom:17px}
 .journey-creator textarea{width:100%;min-height:120px;background:#0e1725;border:1px solid #34445d;border-radius:7px;color:#e7eff9;padding:12px;font:11px/1.5 ui-monospace,monospace;resize:vertical}
 .journey-creator .primary{margin-top:15px}
+
+/* Application architecture and evidence-based investigations */
+.graph-layout{display:grid;grid-template-columns:minmax(230px,1.15fr) minmax(240px,1fr);gap:18px}
+.graph-nodes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:10px}
+.graph-node{display:flex;flex-direction:column;text-align:left;gap:5px;padding:13px;border-radius:8px;background:#162239;border:1px solid #2c445d;color:#d4e5f0;min-width:0}
+.graph-node:hover,.graph-node.selected{border-color:#4fd3b5;background:#17313d}
+.graph-node b{font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.graph-node small{font-size:10px;color:#889fb7}
+.graph-details{background:#101a2a;border:1px solid #2b3c50;padding:19px;border-radius:9px;min-width:0}
+.graph-details h3{font-size:16px}.graph-details h4{font-size:12px}
+.graph-details pre{max-height:220px;overflow:auto}
+.graph-edge{padding:10px 0;border-top:1px solid #283b4d;display:flex;flex-direction:column;gap:5px}
+.graph-edge b{color:#69d8bb;font-size:11px}
+.graph-edge span,.graph-edge small{font-size:10px;overflow-wrap:anywhere;color:#9caec3}
+.question-input{width:100%;box-sizing:border-box;background:#0e1725;border:1px solid #34445d;border-radius:7px;color:#e7eff9;padding:12px;font-size:12px;line-height:1.5;margin-bottom:12px;resize:vertical}
+.hypothesis{display:flex;flex-direction:column;gap:5px;background:#121f2e;border:1px solid #2a3c51;border-radius:8px;padding:13px;margin:10px 0}
+.hypothesis b{font-size:11px}.hypothesis small{font-size:10px;color:#8fa7be}
+.inline-actions{display:flex;gap:7px}
+@media(max-width:850px){.graph-layout{grid-template-columns:1fr}}
+@media(max-width:480px){.graph-nodes{grid-template-columns:1fr}}

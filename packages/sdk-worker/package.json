@@ -19,7 +19,8 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@flightdeck/contracts": "workspace:*"
+    "@flightdeck/contracts": "workspace:*",
+    "@flightdeck/knowledge": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

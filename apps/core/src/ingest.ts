@@ -15,6 +15,8 @@ export type SourceConfig = SourceGovernance & {
   projectId: string;
   allowedEvents: string[];
   allowedProperties: Record<string, string[]>;
+  /** Explicit authorization for architecture manifest registration. */
+  graphEnabled?: boolean;
 };
 export type SinkRecord = {
   event_id: string; event_name: string; event_kind: string;

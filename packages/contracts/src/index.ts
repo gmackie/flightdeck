@@ -45,6 +45,11 @@ export type CaptureReceipt = {
   durability: Durability;
   eventIds: string[];
 };
+export type GraphReceipt = {
+  projectId:string;sourceId:string;revision:string;nodes:number;edges:number;
+  durability:"d1_persisted";
+};
 export interface AnalyticsBinding {
   captureBatch(request: CaptureRequest): Promise<CaptureReceipt>;
+  registerGraph?(request:{context:CaptureContext;manifest:unknown}):Promise<GraphReceipt>;
 }

@@ -16,7 +16,8 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "@flightdeck/discovery": "workspace:*",
-    "@flightdeck/journey-model": "workspace:*"
+    "@flightdeck/journey-model": "workspace:*",
+    "@flightdeck/investigations": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",

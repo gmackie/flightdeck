@@ -36,6 +36,7 @@ jobs:
           pnpm --filter @flightdeck/sdk-worker pack --pack-destination ./dist-packages
           pnpm --filter @flightdeck/sdk-effect pack --pack-destination ./dist-packages
           pnpm --filter @flightdeck/browser pack --pack-destination ./dist-packages
+          pnpm --filter @flightdeck/knowledge pack --pack-destination ./dist-packages
       - uses: actions/upload-artifact@v4
         if: success()
         with:

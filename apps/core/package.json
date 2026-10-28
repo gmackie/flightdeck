@@ -8,7 +8,8 @@
   },
   "dependencies": {
     "@flightdeck/contracts": "workspace:*",
-    "effect": "^4.0.0"
+    "effect": "^4.0.0",
+    "@flightdeck/knowledge": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
