@@ -44,3 +44,22 @@ describe("private service-bound ingestion",()=>{
     expect(()=>validateBatch({events:[future]},config,now)).toThrow("invalid_timestamp");
   });
 });
+
+describe("credential rotation and disabled sources",()=>{
+  it("accepts overlapping hashes while denying disabled or nonconsenting sources",async()=>{
+    const source={...config,sha256:await sha256("b".repeat(40)),rotatingSha256:[await sha256(secret)]};
+    const accepted=await authenticate(batch().context,{worker_a:source});
+    expect(accepted.projectId).toBe("project_1");
+    await expect(authenticate(batch().context,{worker_a:{...source,enabled:false}}))
+      .rejects.toMatchObject({code:"source_disabled"});
+    await expect(authenticate(batch().context,{worker_a:{...source,consentRequired:true}}))
+      .rejects.toMatchObject({code:"consent_required"});
+  });
+  it("rejects duplicate identifiers and sensitive nested properties",()=>{
+    expect(()=>validateBatch({events:[...batch().events,...batch().events]},config,now))
+      .toThrow("duplicate_event_id_in_batch");
+    const e={...batch().events[0]!,properties:{template:{password:"secret"}}};
+    expect(()=>validateBatch({events:[e]},config,now))
+      .toThrow("sensitive_property_name");
+  });
+});

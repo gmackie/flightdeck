@@ -13,6 +13,7 @@ export interface FlightdeckOptions {
   sourceId: string;
   sourceToken: string;
   environment?: string;
+  consentGranted?: boolean | (() => boolean);
   defaults?: () => TrackOptions;
 }
 export class Flightdeck {
@@ -47,6 +48,10 @@ export class Flightdeck {
         sourceId: this.options.sourceId,
         sourceToken: this.options.sourceToken,
         ...(this.options.environment ? {environment:this.options.environment}:{}),
+        ...(this.options.consentGranted !== undefined
+          ? {consentGranted: typeof this.options.consentGranted === "function"
+              ? this.options.consentGranted() : this.options.consentGranted}
+          : {}),
       }, events,
     });
   }
