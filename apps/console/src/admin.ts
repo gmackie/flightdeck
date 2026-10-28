@@ -11,7 +11,8 @@ export interface AdminEnv {
   QUERY_QUOTA_REQUIRED?:string;AI_ENABLED?:string;GITHUB_REPOSITORY?:string;
 }
 type SourceRow={
-  source_id:string;enabled:number;policy_json:string;created_at:string;updated_at:string;
+  source_id:string;enabled:number;policy_json:string;
+  previous_sha256:string|null;created_at:string;updated_at:string;
 };
 type SourcePolicy={
   allowedEvents:string[];allowedProperties:Record<string,string[]>;
@@ -115,10 +116,11 @@ export async function handleAdmin(req:Request,env:AdminEnv,principal:Principal):
     if(path==="/api/admin/sources"){
       if(method==="GET"){
         const result=await db.prepare(
-          "SELECT source_id,enabled,policy_json,created_at,updated_at FROM source_credentials WHERE project_id=? ORDER BY created_at DESC LIMIT 100"
+          "SELECT source_id,enabled,policy_json,previous_sha256,created_at,updated_at FROM source_credentials WHERE project_id=? ORDER BY created_at DESC LIMIT 100"
         ).bind(project).all<SourceRow>();
         return json({items:result.results.map(x=>({
-          id:x.source_id,enabled:x.enabled===1,policy:JSON.parse(x.policy_json),
+          id:x.source_id,enabled:x.enabled===1,rotationPending:!!x.previous_sha256,
+          policy:JSON.parse(x.policy_json),
           createdAt:x.created_at,updatedAt:x.updated_at
         }))});
       }
@@ -137,13 +139,23 @@ export async function handleAdmin(req:Request,env:AdminEnv,principal:Principal):
       }
       return json({error:"method_not_allowed"},405);
     }
-    const match=path.match(/^\/api\/admin\/sources\/([A-Za-z0-9._:-]{1,128})\/(rotate|disable|enable)$/);
+    const match=path.match(/^\/api\/admin\/sources\/([A-Za-z0-9._:-]{1,128})\/(rotate|retire-old|disable|enable)$/);
     if(match){
       if(method!=="POST")return json({error:"method_not_allowed"},405);
       if(!mutationAllowed(req,env,principal))return json({error:"origin_not_allowed"},403);
       const sourceId=match[1]!,action=match[2]!;
       const parsed=await body(req) as {confirm?:unknown};
-      if(parsed?.confirm!=="APPLY_"+action.toUpperCase())return json({error:"confirmation_required"},400);
+      if(parsed?.confirm!==(action==="retire-old"?"APPLY_RETIRE_OLD":"APPLY_"+action.toUpperCase()))
+        return json({error:"confirmation_required"},400);
+      if(action==="retire-old"){
+        if(parsed?.confirm!=="APPLY_RETIRE_OLD")return json({error:"confirmation_required"},400);
+        const result=await db.prepare(
+          "UPDATE source_credentials SET previous_sha256=NULL,updated_at=datetime('now') WHERE project_id=? AND source_id=? AND previous_sha256 IS NOT NULL"
+        ).bind(project,sourceId).run();
+        if(Number(result.meta?.changes??0)!==1)return json({error:"no_rotation_pending"},409);
+        await audit(db,project,principal,"source.old_key_retired",sourceId);
+        return json({id:sourceId,previousTokenStillAccepted:false});
+      }
       if(action==="rotate"){
         // Zero-downtime rotation: temporarily accept both hashes until old one is retired.
         const secret=token(),digest=await shaToken(secret);

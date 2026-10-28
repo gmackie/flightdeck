@@ -1,4 +1,4 @@
-import {describe,expect,it,vi} from "vitest";
+import {describe,expect,it} from "vitest";
 import {adminAllowed,handleAdmin,validateSourcePolicy} from "./admin";
 const principal={sub:"admin-1",email:"admin@example.com"};
 const env={PROJECT_ID:"sample",ADMIN_EMAILS:"admin@example.com"};

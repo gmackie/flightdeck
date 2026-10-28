@@ -14,3 +14,5 @@ For cookie-based access, mutations require the request Origin to match the conso
 Rotation initially accepts both old and new tokens. Operators must update consumers and retire the old hash separately before treating rotation as complete. No source-provisioning API may modify Cloudflare account settings or expose project-scoped tokens to read-only MCP clients.
 
 Dynamic sources require D1 migration `0007_admin_sources.sql` and a Core Worker binding named `META`. The Core must resolve configured source IDs through D1 before ingesting events; never treat D1 UI management as authoritative until this service integration is verified.
+
+After rotating a source, update all consuming Workers/DOs with the new token. Then use `POST /api/admin/sources/:id/retire-old` with `confirm: "APPLY_RETIRE_OLD"` to stop accepting the previous digest. This avoids losing events during rotation and makes revocation explicit. Source listings expose only a rotation-pending boolean, never the hashes.

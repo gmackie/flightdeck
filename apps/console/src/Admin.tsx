@@ -3,7 +3,7 @@ import {useEffect,useState} from "react";
 type Check={id:string;ok:boolean;description:string};
 type Status={projectId:string;accountId?:string;checks:Check[];activeSources:number;setupComplete:boolean;note:string};
 type SourcePolicy={allowedEvents:string[];allowedProperties:Record<string,string[]>;allowedEnvironments:string[];allowedKinds:string[];consentRequired:boolean;graphEnabled:boolean};
-type Source={id:string;enabled:boolean;policy:SourcePolicy;createdAt:string;updatedAt:string};
+type Source={id:string;enabled:boolean;rotationPending?:boolean;policy:SourcePolicy;createdAt:string;updatedAt:string};
 const defaults:SourcePolicy={
   allowedEvents:["page.viewed","rum.*"],
   allowedProperties:{"page.viewed":["route"],"rum.*":["value","rating","metricId"]},
@@ -54,13 +54,13 @@ export function AdminWorkspace(){
     }catch(e){setError(String((e as Error).message));}
     finally{setBusy(false);}
   }
-  async function action(id:string,act:"rotate"|"disable"|"enable"){
+  async function action(id:string,act:"rotate"|"retire-old"|"disable"|"enable"){
     if(!window.confirm(`Confirm ${act} for source ${id}?`))return;
     setBusy(true);setError("");setSecret(null);
     try{
       const result=await api<{id:string;token?:string}>(
         "/api/admin/sources/"+encodeURIComponent(id)+"/"+act,
-        "POST",{confirm:"APPLY_"+act.toUpperCase()}
+        "POST",{confirm:act==="retire-old"?"APPLY_RETIRE_OLD":"APPLY_"+act.toUpperCase()}
       );
       if(result.token){setSecret({id,token:result.token});setCopied(false);}
       await refresh();
@@ -124,6 +124,7 @@ export function AdminWorkspace(){
         <td>{source.id}</td><td>{source.enabled?"Enabled":"Disabled"}</td>
         <td>{source.policy.allowedEvents.join(", ")}</td><td className="admin-actions">
           <button disabled={busy} className="tiny-button" onClick={()=>void action(source.id,"rotate")}>Rotate key</button>{" "}
+          {source.rotationPending&&<button disabled={busy} className="tiny-button" onClick={()=>void action(source.id,"retire-old")}>Retire old key</button>}{" "}
           <button disabled={busy} className="tiny-button" onClick={()=>void action(source.id,source.enabled?"disable":"enable")}>
             {source.enabled?"Disable":"Enable"}</button>
         </td></tr>)}</tbody></table></div>:<div className="empty">No dynamic sources created yet.</div>}

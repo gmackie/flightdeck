@@ -121,7 +121,20 @@ if(!d1Id){
    if(approval!=="CREATE_D1")throw new Error("D1 creation cancelled");
    runWrangler(["d1","create",defaultD1]);
  }
- d1Id=await ask("D1 database UUID");
+ try{
+   const output=runWrangler(["d1","list","--json"],{output:true});
+   const payload=JSON.parse(output);
+   const databases=Array.isArray(payload)?payload:
+     Array.isArray(payload?.result)?payload.result:[];
+   const match=databases.filter(d=>d?.name===defaultD1);
+   if(match.length===1 && uuid.test(match[0].uuid??match[0].id??"")){
+     d1Id=match[0].uuid??match[0].id;
+     console.log("Detected D1 UUID for "+defaultD1+": "+d1Id);
+   }
+ }catch(err){
+   console.warn("Could not auto-discover D1 UUID: "+String((err).message??err).slice(0,160));
+ }
+ if(!d1Id)d1Id=await ask("D1 database UUID");
 }
 requireString(d1Id,"D1 database UUID",uuid);
 save();
