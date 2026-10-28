@@ -39,3 +39,5 @@ The browser wizard requires scoped Cloudflare and R2 Catalog tokens to run unatt
 The code has mock-provider and localhost security tests in CI; a real fresh-account end-to-end deployment is a separate release gate. Before production, validate Basin schema, Access JWT, source registry, query console, DO replay, metrics, backups and privacy lifecycle.
 
 On first-ever Cloudflare Workers use, the wizard checks GET /accounts/{account}/workers/subdomain and creates a unique account-level workers.dev subdomain only when missing. It never modifies an existing account subdomain. This requires Workers Scripts Write permission.
+
+The installer performs a server-side, read-only capability check for D1/R2/Basin/Queues and workers.dev before provisioning. Required service permissions must be present on the scoped account token; entitlement and billing readiness still require operator verification.

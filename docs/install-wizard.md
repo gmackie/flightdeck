@@ -29,6 +29,8 @@ pnpm install:cloudflare
 
 The wizard preserves the account's existing workers.dev subdomain, or creates a new account-level subdomain if none exists. This setting affects the entire Cloudflare account and will never be renamed by an upgrade. Workers.dev is suitable for staging; for business-critical production use, configure a custom domain and its Access policy after installation.
 
+Before any mutations the wizard runs read-only D1/R2/Basin (and optional Queues) capability probes. A missing permission fails early with an actionable error. These probes do not prove Workers Paid subscription, available billing balance or quotas; those must be reviewed independently.
+
 The wizard creates namespaced resources such as \`flightdeck-default-core\`, \`flightdeck-default-console\`, \`flightdeck-default-meta\` and a Basin Catalog/Iceberg event dataset. It uses \`workers.dev\` as its initial console hostname, so **an existing custom domain or zone is not required**.
 
 For a fully unattended install with API credentials:
