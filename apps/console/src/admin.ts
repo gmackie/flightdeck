@@ -160,9 +160,9 @@ export async function handleAdmin(req:Request,env:AdminEnv,principal:Principal):
         // Zero-downtime rotation: temporarily accept both hashes until old one is retired.
         const secret=token(),digest=await shaToken(secret);
         const result=await db.prepare(
-          "UPDATE source_credentials SET previous_sha256=token_sha256,token_sha256=?,updated_at=datetime('now') WHERE project_id=? AND source_id=? AND enabled=1"
+          "UPDATE source_credentials SET previous_sha256=token_sha256,token_sha256=?,updated_at=datetime('now') WHERE project_id=? AND source_id=? AND enabled=1 AND previous_sha256 IS NULL"
         ).bind(digest,project,sourceId).run();
-        if(Number(result.meta?.changes??0)!==1)return json({error:"source_not_found"},404);
+        if(Number(result.meta?.changes??0)!==1)return json({error:"source_not_found_or_rotation_pending"},409);
         await audit(db,project,principal,"source.rotated",sourceId);
         return json({id:sourceId,token:secret,oneTimeSecret:true,previousTokenStillAccepted:true});
       }
