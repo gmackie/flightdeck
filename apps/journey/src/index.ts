@@ -5,7 +5,7 @@ import {transition,validateJourney,type JourneyDefinition} from "@flightdeck/jou
 type InputEvent={
  event_id:string;event_name:string;project_id:string;occurred_at:string;received_at:string;objects_json:string;
 };
-type DBJourney={id:string;project_id:string;object_type:string;version:number;initial_state:string;transitions_json:string};
+type DBJourney={id:string;project_id:string;object_type:string;version:number;initial_state:string;transitions_json:string;terminal_states_json:string;max_duration_days:number};
 interface Env {JOURNEYS:DurableObjectNamespace<JourneyInstance>;META:D1Database;}
 const recordId=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 function decodeObjects(record:InputEvent):Array<{type:string;id:string}> {
