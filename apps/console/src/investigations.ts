@@ -131,7 +131,7 @@ export async function handleInvestigations(
           evidence_json:string;interpretation_json:string;created_at:string
         }>();
       if(!row)return json({error:"not_found"},404);
-      const actions=await db.prepare("SELECT id,action_type,summary,acceptance_json,status,approval_rationale FROM proposed_actions WHERE investigation_id=? AND project_id=? LIMIT 30")
+      const actions=await db.prepare("SELECT id,action_type,summary,acceptance_json,status,approval_rationale,handoff_status,handoff_issue_url FROM proposed_actions WHERE investigation_id=? AND project_id=? LIMIT 30")
         .bind(investigationId,env.PROJECT_ID).all();
       return json({id:row.id,title:row.title,question:row.question,status:row.status,modelId:row.model_id,
         evidence:JSON.parse(row.evidence_json),proposal:JSON.parse(row.interpretation_json),

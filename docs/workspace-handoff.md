@@ -14,6 +14,7 @@ Review and merge PRs in order only after validation.
 7. PR #7 — observational experiment outcomes with statistical safeguards.
 8. PR #8 — optional Access-authenticated read-only MCP for coding agents.
 9. PR #9 — bounded observational process twin / what-if explorer.
+10. PR #10 — admin-approved, one-time GitHub issue handoff for engineering agents.
 
 All PRs remain draft until reviewed; **do not squash a child PR onto main before its parent branch**.
 
