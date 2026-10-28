@@ -1,5 +1,5 @@
 import {describe,expect,it,vi} from "vitest";
-import {resolveSources} from "./index";
+import {resolveSources} from "./sources";
 import {sha256} from "./ingest";
 const secret="x".repeat(40);
 function database(rows:unknown[]):D1Database{

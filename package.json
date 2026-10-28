@@ -20,7 +20,8 @@
     "test:integration": "vitest run tests/integration",
     "test:deployment": "node --test scripts/workspace-deploy.test.mjs",
     "wizard": "node scripts/wizard.mjs",
-    "test:wizard": "node --test scripts/wizard.test.mjs"
+    "test:wizard": "node --test scripts/wizard.test.mjs",
+    "access:provision": "node scripts/access-provision.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

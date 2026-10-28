@@ -28,6 +28,9 @@ jobs:
           node --check scripts/source.mjs
           node --check scripts/source-governance.mjs
           node --check scripts/workspace-deploy.mjs
+          node --check scripts/access-provision.mjs
+          node --check scripts/wizard.mjs
+          node scripts/access-provision.mjs --account-id 0123456789abcdef0123456789abcdef --host analytics.example.com --email admin@example.com --dry-run
           node --check scripts/backup.mjs
           node --check scripts/restore.mjs
           node --check scripts/doctor-remote.mjs

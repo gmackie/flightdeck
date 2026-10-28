@@ -20,6 +20,8 @@ const {values}=parseArgs({args,options:{
   "bucket":{type:"string"},"stream-id":{type:"string"},
   "host":{type:"string"},"access-domain":{type:"string"},
   "access-aud":{type:"string"},"admin-email":{type:"string"},
+  "auto-access":{type:"boolean",default:false},
+  "bootstrap-zero-trust":{type:"boolean",default:false},
   "help":{type:"boolean",default:false}
 }});
 if(values.help){
@@ -139,9 +141,35 @@ if(!streamId){
 requireString(streamId,"Basin stream ID",/^[A-Za-z0-9_-]{4,128}$/);
 save();
 if(!host)host=await ask("Console custom hostname (must be on a Cloudflare-managed zone)");
+if(!adminEmail)adminEmail=await ask("Admin email for the Access application");
+if(!accessDomain||!accessAud){
+  const wantsProvision=values["auto-access"]||(rl&&
+    (await ask("Provision Cloudflare Access with cf CLI? (yes/no)","no")).toLowerCase()==="yes");
+  if(wantsProvision){
+    if(!/^[-a-z0-9]+\.[a-z]{2,}$/.test(host)||!adminEmail)
+      throw new Error("Host and admin email required for Access provisioning");
+    const approval=values.yes?"PROVISION_ACCESS":
+      await ask("Type PROVISION_ACCESS to configure a Cloudflare Access policy and application");
+    if(approval!=="PROVISION_ACCESS")throw new Error("Access provisioning cancelled");
+    const command=["scripts/access-provision.mjs",
+      "--account-id",chosenAccount,"--host",host,"--email",adminEmail,"--apply",
+      ...(values["bootstrap-zero-trust"]?["--bootstrap-zero-trust"]:[])
+    ];
+    const proc=spawnSync(process.execPath,command,{
+      encoding:"utf8",env:{...process.env,CLOUDFLARE_ACCOUNT_ID:chosenAccount}
+    });
+    if(proc.error)throw proc.error;
+    if(proc.status!==0)throw new Error("Access provisioning failed: "+(proc.stderr??"").slice(0,500));
+    const match=(proc.stdout??"").match(/^FLIGHTDECK_ACCESS_RESULT=(\{.*\})$/m);
+    if(!match)throw new Error("Access provisioning did not return application configuration");
+    const provisioned=JSON.parse(match[1]);
+    accessDomain=provisioned.accessDomain;
+    accessAud=provisioned.accessAud;
+    console.log("Access policy and application configured for "+host);
+  }
+}
 if(!accessDomain)accessDomain=await ask("Access team domain (e.g. company.cloudflareaccess.com)");
 if(!accessAud)accessAud=await ask("Existing Access application's AUD tag");
-if(!adminEmail)adminEmail=await ask("Admin email allowed by that Access application");
 requireString(host,"Console hostname",domain);
 requireString(accessDomain,"Access team domain",accessDomainPat);
 requireString(accessAud,"Access AUD",audPat);

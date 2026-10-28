@@ -29,6 +29,7 @@ Flightdeck gives existing Workers and Durable Objects a typed, private **service
 pnpm install
 pnpm wizard -- --dry-run
 pnpm wizard
+# Optional: provision Access from the local cf CLI (see docs/admin-mcp.md)
 ```
 
 The wizard uses your local Wrangler session to guide D1, Basin, Cloudflare Access and private Worker deployment. After setup, open `/#admin` in the separately hosted Flightdeck console to create source credentials, inspect configuration checks and manage sources. Admin MCP is optional and requires a separate Access policy.

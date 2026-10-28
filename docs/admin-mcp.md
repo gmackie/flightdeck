@@ -26,3 +26,25 @@ Run `pnpm wizard` from a checked-out Flightdeck repository. It uses the operator
 **Cloudflare Access must exist first** (created in Cloudflare Zero Trust or by a separately reviewed account-scoped automation). The installer cannot create an Access application without an authenticated Cloudflare account and sufficient scopes. Basin Pipelines setup uses Cloudflare's official interactive Wrangler wizard; this is a verified supported route rather than a fabricated API.
 
 The wizard is resumable via a gitignored non-secret `.flightdeck/wizard.json` manifest. It does not provide a fully browser-hosted OAuth installer yet; that needs an independent OAuth client, PKCE, scoped access tokens and secure workflow state.
+
+## Optional Access provisioning
+
+`pnpm access:provision` uses the separate `cf` CLI (requires `cf auth login`) to create or reuse a named Cloudflare Access allow policy and self-hosted application. It does **not** create public bypass rules or a wildcard allow policy.
+
+```bash
+pnpm access:provision -- \
+  --account-id CLOUDFLARE_ACCOUNT_ID \
+  --host analytics.example.com \
+  --email admin@example.com \
+  --dry-run
+
+pnpm access:provision -- \
+  --account-id CLOUDFLARE_ACCOUNT_ID \
+  --host analytics.example.com \
+  --email admin@example.com \
+  --apply
+```
+
+If the account has no Zero Trust organization, `--bootstrap-zero-trust` explicitly authorizes creating one and adding a one-time PIN identity provider when no provider exists. On an existing organization with no IdP, it refuses to silently change identity configuration.
+
+The main `pnpm wizard` can offer this path interactively when an Access team domain/AUD is missing, or use `--auto-access` when parameters are otherwise provided. All operations run locally with account-scoped Cloudflare permissions.
