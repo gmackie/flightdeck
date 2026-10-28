@@ -1,0 +1,7 @@
+{
+  "name": "flightdeck-core",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "r2_buckets": [{ "binding": "EVENTS", "bucket_name": "flightdeck-events" }],
+  "observability": { "enabled": true }
+}
