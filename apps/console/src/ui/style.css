@@ -40,3 +40,6 @@
 .inline-actions{display:flex;gap:7px}
 @media(max-width:850px){.graph-layout{grid-template-columns:1fr}}
 @media(max-width:480px){.graph-nodes{grid-template-columns:1fr}}
+
+.experiment-warning{margin:17px 0;padding:17px;border-radius:9px;background:#31281a;border:1px solid #6a5231;color:#efce9c}
+.experiment-warning b{font-size:12px}.experiment-warning p{font-size:11px;color:#d9bb96;line-height:1.6;margin:7px 0}

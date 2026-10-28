@@ -5,6 +5,7 @@ import { handleControl, type ControlEnv, type Principal } from "./control";
 import { handleJourneyControl } from "./journey-control";
 import { handleGraph } from "./graph";
 import { handleInvestigations } from "./investigations";
+import { handleExperimentAnalysis } from "./experiment-api";
 import {suggestJourneys,type AIProvider} from "./ai";
 
 interface Env extends ControlEnv {
@@ -66,6 +67,8 @@ export default {
     if(!principal)return json({error:"unauthorized"},401);
     const url=new URL(request.url);
     if(url.pathname.startsWith("/api/")){
+      const experiment=await handleExperimentAnalysis(request,env,principal.sub);
+      if(experiment)return experiment;
       const graph=await handleGraph(request,env);
       if(graph)return graph;
       const investigation=await handleInvestigations(request,env,principal);

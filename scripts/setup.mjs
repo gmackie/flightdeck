@@ -86,7 +86,7 @@ if(!sources[sourceId]){
     allowedEvents:["page.viewed","project.opened","project.created","feature.exposed","identity.identified","rum.*"],
     allowedProperties:{
       "page.viewed":["route"],"project.opened":["template"],"project.created":["template"],
-      "feature.exposed":["flagKey","variant"],"identity.identified":[],
+      "feature.exposed":["flagKey","variant","experimentId"],"identity.identified":[],
       "rum.*":["value","rating","metricId"]
     },
   };

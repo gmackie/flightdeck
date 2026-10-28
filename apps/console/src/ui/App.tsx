@@ -362,16 +362,77 @@ function Experience({days,refresh}:{days:number;refresh:number}){
   </Panel>
  </div>;
 }
+type ExperimentResult={
+ control:{variant:string;exposed:number;converted:number};
+ treatment:{variant:string;exposed:number;converted:number};
+ controlRate:number;treatmentRate:number;absoluteDifference:number;relativeLift:number|null;
+ confidenceInterval95:[number,number];pValueTwoSided:number;sampleRatioPValue:number;
+ status:string;randomizedAssignmentProven:false;causalClaim:false;caveats:string[];
+};
 function Experiments({days,refresh}:{days:number;refresh:number}){
  const q=useData("/api/experiments",days,refresh);
- return <div className="stack"><Panel title="Flag exposures" sub="Observed exposures only; rollout management remains in Cloudflare Flagship">
-  <Message loading={q.loading} error={q.error} empty={!q.data.length}/>
-  {!!q.data.length&&<div className="table-scroll"><table><thead><tr><th>Flag</th><th>Variant</th><th>Exposure events</th></tr></thead>
-   <tbody>{q.data.map((r,i)=><tr key={i}><td>{text(r.flag_key)}</td><td><span className="pill">{text(r.variant)}</span></td><td>{count(r.exposures)}</td></tr>)}</tbody></table></div>}
-  <div className="link-row"><a href="https://dash.cloudflare.com/" target="_blank" rel="noopener noreferrer">Open Cloudflare dashboard ↗</a></div>
-  </Panel><Panel title="Experiment interpretation" sub="Avoid conflating rollout cohorts and randomized assignments">
-   <p className="muted">Exposure counts alone do not measure experimental lift. Randomized assignment provenance, goal attribution and statistical guardrails are required before presenting causal conclusions.</p>
-  </Panel></div>;
+ const [flagKey,setFlagKey]=useState("checkout.v2");
+ const [goalEvent,setGoalEvent]=useState("purchase.completed");
+ const [controlVariant,setControlVariant]=useState("control");
+ const [treatmentVariant,setTreatmentVariant]=useState("variant_b");
+ const [result,setResult]=useState<ExperimentResult|null>(null);
+ const [error,setError]=useState("");
+ const [loading,setLoading]=useState(false);
+ async function analyze(){
+  setLoading(true);setError("");setResult(null);
+  try{
+   const response=await fetch("/api/experiment-analyze",{
+    method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({flagKey,goalEvent,controlVariant,treatmentVariant,days:Math.min(days,31)})
+   });
+   const body=await response.json() as {analysis?:ExperimentResult;error?:string};
+   if(!response.ok||!body.analysis)throw new Error(body.error??"Experiment query failed");
+   setResult(body.analysis);
+  }catch(e){setError(String((e as Error).message));}
+  finally{setLoading(false);}
+ }
+ const pct=(v:number)=>(v*100).toFixed(2)+"%";
+ return <div className="stack">
+  <Panel title="Flagship exposure history" sub="Observed exposures only; Flagship still manages targeting and rollouts">
+   <Message loading={q.loading} error={q.error} empty={!q.data.length}/>
+   {!!q.data.length&&<div className="table-scroll"><table><thead><tr>
+    <th>Flag</th><th>Variant</th><th>Exposure events</th></tr></thead><tbody>
+    {q.data.map((r,i)=><tr key={i}><td>{text(r.flag_key)}</td>
+     <td><span className="pill">{text(r.variant)}</span></td><td>{count(r.exposures)}</td></tr>)}
+    </tbody></table></div>}
+   <div className="link-row"><a href="https://dash.cloudflare.com/" target="_blank" rel="noopener noreferrer">Manage flags in Cloudflare ↗</a></div>
+  </Panel>
+  <Panel title="Outcome comparison" sub="Compare first observed exposures with a later backend-confirmed goal event">
+   <div className="insight-form">
+    <label>Flag key<input value={flagKey} onChange={e=>setFlagKey(e.target.value)}/></label>
+    <label>Goal event<input value={goalEvent} onChange={e=>setGoalEvent(e.target.value)}/></label>
+    <label>Control variant<input value={controlVariant} onChange={e=>setControlVariant(e.target.value)}/></label>
+    <label>Treatment variant<input value={treatmentVariant} onChange={e=>setTreatmentVariant(e.target.value)}/></label>
+   </div>
+   <button className="primary" onClick={()=>void analyze()} disabled={loading}>
+    {loading?"Analyzing…":"Compare observed variants"}</button>
+   {error&&<p className="error-state">{error}</p>}
+  </Panel>
+  {result&&<Panel title="Observed variant outcomes" sub="Approximate confidence and sample-ratio diagnostics; NOT causal proof">
+   <div className="metric-grid">
+    <Metric label={"Control · "+result.control.variant} value={pct(result.controlRate)}
+      desc={count(result.control.converted)+"/"+count(result.control.exposed)+" actors"}/>
+    <Metric label={"Treatment · "+result.treatment.variant} value={pct(result.treatmentRate)}
+      desc={count(result.treatment.converted)+"/"+count(result.treatment.exposed)+" actors"}/>
+    <Metric label="Absolute conversion change" value={(result.absoluteDifference>=0?"+":"")+pct(result.absoluteDifference)}
+      desc={"95% interval "+pct(result.confidenceInterval95[0])+" to "+pct(result.confidenceInterval95[1])}/>
+    <Metric label="Relative lift" value={result.relativeLift===null?"N/A":(result.relativeLift>=0?"+":"")+pct(result.relativeLift)}
+      desc={"Diagnostic p "+result.pValueTwoSided.toFixed(4)}/>
+   </div>
+   <div className="experiment-warning"><b>Interpretation: {result.status.replaceAll("_"," ")}</b>
+    <p>Assignment randomization was not independently verified. A statistically different observed conversion rate is not evidence that the flag caused the change.</p>
+    <p>50/50 sample ratio diagnostic p-value: {result.sampleRatioPValue.toFixed(4)}. Expected allocation must be verified against Flagship.</p>
+   </div>
+   <details><summary>Statistical assumptions and caveats</summary>
+    {result.caveats.map((c,i)=><p key={i} className="note">{c}</p>)}
+   </details>
+  </Panel>}
+ </div>;
 }
 type InsightItem = {
  id:string;name:string;query:{kind:string;days:number;steps?:string[];eventName?:string};updated_at:string;

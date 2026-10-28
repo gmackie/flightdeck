@@ -71,8 +71,10 @@ export class Flightdeck {
   identify(actorId: string, properties:Record<string,unknown>={}): Promise<CaptureReceipt> {
     return this.track("identity.identified",properties,{actorId});
   }
-  expose(flagKey:string,variant:string,options:TrackOptions={}): Promise<CaptureReceipt> {
-    return this.track("feature.exposed",{flagKey,variant}, {...options,kind:"exposure"});
+  expose(flagKey:string,variant:string,options:TrackOptions & {experimentId?:string}={}): Promise<CaptureReceipt> {
+    return this.track("feature.exposed",
+      {flagKey,variant,...(options.experimentId?{experimentId:options.experimentId}:{})},
+      {...options,kind:"exposure"});
   }
   /** Explicit best effort; do not use as a substitute for a transactional business outbox. */
   trackLater(
