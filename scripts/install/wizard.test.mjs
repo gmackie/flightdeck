@@ -23,6 +23,7 @@ class FakeAPI {
   if(path.endsWith("/queues")&&method==="GET")return [];
   if(path.includes("/r2/buckets/"))throw new InstallerError("provider_request_failed","(404)");
   if(path.endsWith("/r2/buckets"))return {name:"flightdeck-test-events"};
+  if(path.includes("/r2-catalog/"))return {status:"active"};
   if(path.endsWith("/streams")){
    if(method==="GET")return this.streams;
    this.streams.push({id:streamId,name:body.name});return this.streams.at(-1);
@@ -30,6 +31,8 @@ class FakeAPI {
   if(path.endsWith("/sinks")){
    if(method==="GET")return this.sinks;
    assert.equal(body.config.token,"catalog-secret-not-for-manifest");
+   assert.equal(body.type,"r2_data_catalog");
+   assert.deepEqual(body.format,{type:"parquet",compression:"zstd"});
    this.sinks.push({id:sinkId,name:body.name});return this.sinks.at(-1);
   }
   if(path.endsWith("/pipelines")){
@@ -94,6 +97,8 @@ test("full install is resumable and keeps credentials out of configs",async()=>{
   assert.equal(core.pipelines[0].stream,streamId);
   const persisted=JSON.parse(readFileSync(".flightdeck/install.json","utf8"));
   assert.equal(persisted.steps.verified.status,"complete");
+  assert.deepEqual(shell.calls[0],["pnpm","build"]);
+  assert.equal(result.functionalReadiness,"pending");
   assert.equal(persisted.resources.d1Id,d1Id);
   const serialized=JSON.stringify([consoleConfig,core,persisted]);
   assert.equal(serialized.includes("catalog-secret-not-for-manifest"),false);
@@ -102,7 +107,26 @@ test("full install is resumable and keeps credentials out of configs",async()=>{
     input,manifest:new Manifest(".flightdeck/install.json"),shell,api,logger:()=>{},
     fetcher:async()=>new Response("Denied",{status:401})
   });
-  assert.equal(shell.calls.length,callsBefore);
+  const rerun=shell.calls.slice(callsBefore);
+  assert.deepEqual(rerun[0],["pnpm","build"]);
+  assert.equal(rerun.some(c=>c[0]==="wrangler"&&c[1]==="deploy"),false);
+  // Changing deployable input must invalidate deployments and migrations.
+  writeFileSync("basin/events.schema.json",JSON.stringify({fields:[
+    {name:"event_id",type:"string",required:true},
+    {name:"event_name",type:"string",required:true}
+  ]}));
+  const upgradeStart=shell.calls.length;
+  await applyWizard({input,manifest:new Manifest(".flightdeck/install.json"),shell,api,logger:()=>{},
+    fetcher:async()=>new Response("Denied",{status:401})});
+  const upgrade=shell.calls.slice(upgradeStart);
+  assert.ok(upgrade.some(c=>c[0]==="wrangler"&&c[1]==="deploy"));
+  assert.ok(upgrade.some(c=>c[0]==="wrangler"&&c[1]==="d1"&&c[2]==="export"));
+  assert.ok(upgrade.some(c=>c[0]==="wrangler"&&c[1]==="d1"&&c[2]==="migrations"));
+  // Readiness must be checked again, even when no deploy is needed.
+  for(const status of [404,503])await assert.rejects(
+    applyWizard({input,manifest:new Manifest(".flightdeck/install.json"),shell,api,logger:()=>{},
+      fetcher:async()=>new Response("Unavailable",{status})}),
+    {code:"console_access_unexpected"});
  }finally{process.chdir(previous);rmSync(dir,{recursive:true,force:true});}
 });
 test("the installation plan has no public analytics collector",()=>{
@@ -110,4 +134,16 @@ test("the installation plan has no public analytics collector",()=>{
   adminEmails:"owner@example.com",mode:"intelligence"});
  assert.equal(plan.steps.some(x=>/public collector/i.test(x)),false);
  assert.equal(plan.steps.some(x=>/Zero Trust Access/i.test(x)),true);
+});
+test("missing unattended Catalog credential fails before resource creation",async()=>{
+ const dir=mkdtempSync(join(tmpdir(),"fd-no-catalog-")),previous=process.cwd();
+ try{
+  process.chdir(dir);
+  const shell=new FakeShell();shell.env={};
+  const api=new FakeAPI();
+  await assert.rejects(applyWizard({input:{accountId:account,slug:"test",adminEmails:"owner@example.com",mode:"standard"},
+   manifest:new Manifest(),shell,api,logger:()=>{}}),/FLIGHTDECK_CATALOG_TOKEN before resources/);
+  assert.deepEqual(api.streams,[]);
+  assert.equal(shell.calls.some(c=>c.includes("create")||c.includes("deploy")),false);
+ }finally{process.chdir(previous);rmSync(dir,{recursive:true,force:true});}
 });

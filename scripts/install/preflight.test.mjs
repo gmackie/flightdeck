@@ -22,7 +22,7 @@ test("preflight performs read-only checks for all intelligence services",async()
  const api=fakeApi();
  const result=await preflightAccount({api,accountId:account,mode:"intelligence"});
  assert.deepEqual(result.checks.map(x=>x.service),["d1","r2","basin","queues"]);
- assert.equal(api.calls.length,5);
+ assert.equal(api.calls.length,6);
  assert.ok(api.calls.every(x=>x.includes("/accounts/"+account)));
  assert.equal(result.accountId,account);
 });
@@ -43,6 +43,11 @@ test("does not treat forbidden Worker-subdomain metadata as a new account",async
  const api=fakeApi({failed:"/workers/subdomain"});
  await assert.rejects(preflightAccount({api,accountId:account}),
    /Workers account settings not readable/);
+});
+test("rejects missing Access organization permissions before provisioning",async()=>{
+ const api=fakeApi({failed:"/access/organizations"});
+ await assert.rejects(preflightAccount({api,accountId:account}),
+   /Access organization settings not readable/);
 });
 test("standard mode does not require Queues entitlement",async()=>{
  const api=fakeApi({failed:"/queues",subdomain:"already-set"});

@@ -11,6 +11,10 @@
     "./handler": {
       "types": "./dist/handler.d.ts",
       "default": "./dist/handler.js"
+    },
+    "./demo": {
+      "types": "./dist/demo.d.ts",
+      "default": "./dist/demo.js"
     }
   },
   "scripts": {

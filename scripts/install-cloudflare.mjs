@@ -54,7 +54,7 @@ const ask=async(label,fallback="")=>{
  const value=(await rl.question("  "+label+(fallback?" ["+fallback+"]":"")+": ")).trim();
  return value||fallback;
 };
-const shell=new Shell();
+const shell=new Shell({secretValues:[process.env.CLOUDFLARE_API_TOKEN,process.env.FLIGHTDECK_CATALOG_TOKEN].filter(Boolean)});
 shell.log=message=>console.log(message);
 let api=new CloudflareApi({accountId:values["account-id"]??""});
 async function main(){
@@ -66,6 +66,19 @@ async function main(){
    throw new InstallerError("unsupported_node","Node.js 22+ is required");
  if(!values["dry-run"]&&!shell.exec("pnpm",["--version"],{allowFailure:true}).ok)
    throw new InstallerError("pnpm_unavailable","Install pnpm 10+ before using this wizard");
+ // Prefer the existing Wrangler OAuth session over requiring another account token.
+ if(!values["dry-run"]&&!api.enabled){
+   const auth=shell.wrangler(["auth","token","--json"],{allowFailure:true});
+   if(auth.ok){
+     try{
+       const credential=JSON.parse(auth.stdout);
+       if(typeof credential.token==="string"&&credential.token.length>=20){
+         api=new CloudflareApi({accountId:values["account-id"]??"",token:credential.token});
+         shell.secretValues.push(credential.token);
+       }
+     }catch{/* Legacy Wrangler falls back to native CLI authentication. */}
+   }
+ }
  if(!values["dry-run"]&&!api.enabled){
    const cf=shell.cf(["auth","whoami"],{allowFailure:true});
    if(!cf.ok){
@@ -145,7 +158,7 @@ async function main(){
    prompt:interactive?ask:null,
    logger:msg=>console.log(msg),
  });
- console.log("\n✓ Flightdeck installation verified");
+ console.log("\n✓ Flightdeck deployed; anonymous access denial verified");
  console.log("  Console: "+result.consoleUrl);
  if(result.mcpUrl)console.log("  MCP: "+result.mcpUrl);
  console.log("  Default application source: "+result.sourceId);
@@ -155,7 +168,7 @@ async function main(){
    "flightdeck-"+slug+'-core"}]}');
  console.log("  Add the source ID and token to each consuming Worker as secrets.");
  console.log("\nNext: register additional Workers/DOs from Flightdeck Admin, then");
- console.log("verify a test event reaches Basin SQL using docs/installation.md.");
+ console.log("complete authenticated health and event → Basin SQL verification using docs/demo.md.");
 }
 main().catch(error=>{
  console.error("\n✗ "+(error?.message??String(error)));

@@ -21,6 +21,8 @@ jobs:
         run: pnpm test:deployment
       - name: Universal installer simulation tests
         run: pnpm test:installer
+      - name: Demo verifier regression tests
+        run: node --test scripts/verify-demo.test.mjs
       - name: Local web wizard security tests
         run: pnpm test:install-web
       - run: pnpm test:govern

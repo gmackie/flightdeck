@@ -46,10 +46,18 @@ export async function ensureR2Bucket({api,shell,names,manifest}){
   }
   return {bucketName:names.bucket};
 }
-export function ensureCatalog({shell,names}){
+export async function ensureCatalog({api,shell,names}){
+  if(api?.enabled){
+    const path=api.account("/r2-catalog/"+names.bucket);
+    let catalog;
+    try{catalog=await api.call(path);}catch(e){if(!is404(e))throw e;}
+    if(catalog?.status!=="active")await api.call(path+"/enable",{method:"POST"});
+    return {catalogBucket:names.bucket};
+  }
   const probe=shell.wrangler(["basin","catalog","get",names.bucket],{allowFailure:true});
-  if(!probe.ok){
-    if(!/not.?found|404|not enabled|does not exist/i.test(probe.stderr+" "+probe.stdout))
+  const missing=/not.?found|404|not enabled|does not exist/i.test(probe.stderr+" "+probe.stdout);
+  if(!probe.ok||missing){
+    if(!missing)
       throw new InstallerError("catalog_probe_failed","Could not inspect the selected Basin Catalog.");
     shell.wrangler(["basin","catalog","enable",names.bucket]);
   }
@@ -120,9 +128,10 @@ export async function ensureBasin({api,shell,names,manifest,prompt,logger=consol
     if(!sinkId){
       if(priorSink)throw new InstallerError("unowned_basin_sink","Named Basin sink exists without install record.");
       const sink=await api.call(base+"/sinks",{method:"POST",body:{
-        name:names.sink,type:"basin_catalog",
+        name:names.sink,type:"r2_data_catalog",
+        format:{type:"parquet",compression:"zstd"},
         config:{
-          token:catalogToken,account_id:api.accountId,bucket:names.bucket,
+          token:catalogToken,bucket:names.bucket,
           namespace:"default",table_name:names.table,
           rolling_policy:{interval_seconds:60,file_size_bytes:100_000_000},
         },

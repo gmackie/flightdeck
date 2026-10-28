@@ -26,7 +26,8 @@ Flightdeck gives existing Workers and Durable Objects a typed, private **service
 ## Install into your Cloudflare account
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
+pnpm build
 pnpm install:web
 # Or use the CLI wizard:
 pnpm install:cloudflare

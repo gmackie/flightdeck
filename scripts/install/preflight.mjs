@@ -53,6 +53,12 @@ export async function preflightAccount({api,shell,accountId,mode="standard"}){
       if(e?.code!=="provider_request_failed"||!/\(404\)/.test(e.message))
         throw new PreflightError("workers","Workers account settings not readable");
     }
+    // A missing organization can be created later; forbidden metadata cannot.
+    try{await probeApi(accountId,"/access/organizations",api);}
+    catch(e){
+      if(e?.code!=="provider_request_failed"||!/\(404\)/.test(e.message))
+        throw new PreflightError("access","Access organization settings not readable");
+    }
   }
   if(mode==="intelligence"){
     try{
