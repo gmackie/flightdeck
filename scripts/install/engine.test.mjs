@@ -33,6 +33,8 @@ test("all console assets run the JWT-verifying Worker first",()=>{
  assertLocked(locked);
  assert.equal(locked.console.assets.run_worker_first,true);
  assert.equal(locked.core.workers_dev,false);
+ assert.deepEqual(locked.core.durable_objects.bindings,[{name:"LIVE_SESSIONS",class_name:"LiveSessions"}]);
+ assert.deepEqual(locked.core.migrations,[{tag:"live-sessions-v1",new_sqlite_classes:["LiveSessions"]}]);
  assert.equal(locked.journey.workers_dev,false);
  const access={teamDomain:"team.cloudflareaccess.com",aud:"abcdef123456789012345"};
  const ready=buildConfigs({...base,access});

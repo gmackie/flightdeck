@@ -6,5 +6,7 @@
   "workers_dev": false,
   "vars": { "SINK_MODE": "r2" },
   "r2_buckets": [{ "binding": "EVENTS", "bucket_name": "flightdeck-events" }],
+  "durable_objects":{"bindings":[{"name":"LIVE_SESSIONS","class_name":"LiveSessions"}]},
+  "migrations":[{"tag":"live-sessions-v1","new_sqlite_classes":["LiveSessions"]}],
   "observability": { "enabled": true }
 }

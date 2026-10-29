@@ -1,11 +1,13 @@
+import {LiveSessions} from "./LiveSessions";
 import {Admin} from "./Admin";
 import {simulateJourney,type SimulationResult,type ObservedTransition} from "@flightdeck/simulator";
 import {useEffect,useMemo,useState,type ReactNode} from "react";
 
 type Row = Record<string,unknown>;
-type Section = "overview"|"events"|"insights"|"dashboards"|"funnels"|"retention"|"journeys"|"experience"|"experiments"|"knowledge"|"investigations"|"sources"|"admin";
+type Section = "sessions"|"overview"|"events"|"insights"|"dashboards"|"funnels"|"retention"|"journeys"|"experience"|"experiments"|"knowledge"|"investigations"|"sources"|"admin";
 const sections:{id:Section;title:string;icon:string;group:string}[]=[
  {id:"overview",title:"Overview",icon:"▤",group:"Explore"},
+ {id:"sessions",title:"Live Sessions",icon:"◉",group:"Explore"},
  {id:"events",title:"Event Explorer",icon:"≡",group:"Explore"},
  {id:"insights",title:"Saved Insights",icon:"▣",group:"Explore"},
  {id:"dashboards",title:"Dashboards",icon:"⊞",group:"Explore"},
@@ -884,6 +886,7 @@ export function App(){
  },[]);
  let content:ReactNode;
  switch(selected){
+ case "sessions":content=<LiveSessions refresh={refresh}/>;break;
  case "overview":content=<Overview days={days} refresh={refresh}/>;break;
  case "events":content=<Events days={days} refresh={refresh}/>;break;
  case "insights":content=<SavedInsights/>;break;

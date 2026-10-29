@@ -8,6 +8,7 @@ import { handleInvestigations } from "./investigations";
 import { handleExperimentAnalysis } from "./experiment-api";
 import { handleAgentHandoff } from "./handoff";
 import {handleAdmin,isFlightdeckAdmin} from "./admin";
+import {handleLiveSessions} from "./live";
 import {consoleHealth} from "./health";
 import {suggestJourneys,type AIProvider} from "./ai";
 
@@ -23,7 +24,7 @@ interface Env extends ControlEnv {
   AI_INVESTIGATION_DAILY_LIMIT?: string;
   GITHUB_REPOSITORY?: string;
   GITHUB_ISSUES_TOKEN?: string;
-  CORE?:{status():Promise<unknown>};
+  CORE?:{status():Promise<unknown>;liveSessions?(projectId:string):Promise<{enabled:boolean;[key:string]:unknown}>};
 }
 const jwksCache=new Map<string,ReturnType<typeof createRemoteJWKSet>>();
 function json(body:unknown,status=200):Response {
@@ -72,6 +73,7 @@ export default {
     const principal=await authorize(request,env);
     if(!principal)return json({error:"unauthorized"},401);
     const url=new URL(request.url);
+    if(url.pathname==="/api/live-sessions")return handleLiveSessions(request,env);
     if(url.pathname==="/api/health"){
       if(request.method!=="GET")return json({error:"method_not_allowed"},405);
       return consoleHealth(env);

@@ -19,6 +19,8 @@ export function buildConfigs({accountId,names,d1Id,streamId,adminEmails,access,
     ...base,name:names.core,main:"src/index.ts",workers_dev:false,
     vars:{SINK_MODE:"basin",SOURCE_REGISTRY_MODE:"d1"},
     pipelines:[{binding:"STREAM",stream:streamId}],
+    durable_objects:{bindings:[{name:"LIVE_SESSIONS",class_name:"LiveSessions"}]},
+    migrations:[{tag:"live-sessions-v1",new_sqlite_classes:["LiveSessions"]}],
     d1_databases:[d1],
     ...(enableJourneys?{
       queues:{producers:[{binding:"JOURNEY_QUEUE",queue:names.queue}]}

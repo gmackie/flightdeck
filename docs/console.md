@@ -40,3 +40,5 @@ The `@flightdeck/query` package compiles a fixed, bounded DSL. It does not accep
 ## Limitations
 
 The exact Basin SQL API response structure must be integration-tested against your live account. The React UI accepts common rows/data shapes but cannot guarantee correct rendering until validated. For very large volumes, the retention and transition queries should be replaced with staged materializations and cost caps before general availability.
+
+Live session activity is available through the bounded private feed described in [Live sessions](live-sessions.md); historical Basin queries remain separate.
