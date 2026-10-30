@@ -1,0 +1,19 @@
+{
+  "name": "@flightdeckhq/demo-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bundle:browser": "esbuild ../../packages/browser/src/index.ts --bundle --minify --format=esm --outfile=public/fd.js",
+    "dev": "pnpm bundle:browser && wrangler dev",
+    "traffic": "node scripts/demo-traffic.mjs",
+    "typecheck": "wrangler types && tsc -p ."
+  },
+  "dependencies": {
+    "@flightdeckhq/worker": "workspace:*"
+  },
+  "devDependencies": {
+    "@flightdeckhq/browser": "workspace:*",
+    "esbuild": "^0.28.2",
+    "wrangler": "^4.156.0"
+  }
+}

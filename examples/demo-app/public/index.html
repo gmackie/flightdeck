@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Flightdeck demo</title>
+  </head>
+  <body>
+    <h1>Demo</h1>
+    <a href="/pricing" data-flightdeck="nav.pricing">Pricing</a>
+    <button type="button" data-flightdeck="pricing.cta" data-flightdeck-plan="pro">Start trial</button>
+    <section data-flightdeck="hero" data-flightdeck-view style="height: 60vh">Hero</section>
+    <script type="module">
+      import { init } from "/fd.js";
+
+      init();
+    </script>
+  </body>
+</html>

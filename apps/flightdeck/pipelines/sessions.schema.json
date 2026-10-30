@@ -1,0 +1,81 @@
+{
+  "fields": [
+    {
+      "name": "session_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "app_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "anonymous_id",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "user_id",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "started_at",
+      "type": "timestamp",
+      "unit": "millisecond",
+      "required": true
+    },
+    {
+      "name": "ended_at",
+      "type": "timestamp",
+      "unit": "millisecond",
+      "required": true
+    },
+    {
+      "name": "duration_ms",
+      "type": "int64",
+      "required": true
+    },
+    {
+      "name": "entry",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "exit",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "steps",
+      "type": "list",
+      "items": {
+        "name": "step",
+        "type": "string",
+        "required": true
+      },
+      "required": true
+    },
+    {
+      "name": "step_count",
+      "type": "int32",
+      "required": true
+    },
+    {
+      "name": "event_count",
+      "type": "int32",
+      "required": true
+    },
+    {
+      "name": "country",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "device",
+      "type": "string",
+      "required": true
+    }
+  ]
+}

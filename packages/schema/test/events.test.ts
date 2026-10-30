@@ -73,6 +73,16 @@ describe("ClientEvent", () => {
     expect(ok({ ...event, props })).toBe(false);
   });
 
+  it("accepts an optional client eventId with the id rule", () => {
+    expect(v.parse(ClientEvent, { ...event, eventId: "01JBX9ZP8Q6M2K4T7V3W5Y1A0C" }).eventId).toBe(
+      "01JBX9ZP8Q6M2K4T7V3W5Y1A0C",
+    );
+    expect(ok({ ...event, eventId: null })).toBe(true);
+    expect(ok({ ...event, eventId: "short" })).toBe(false);
+    expect(ok({ ...event, eventId: "e".repeat(65) })).toBe(false);
+    expect(ok({ ...event, eventId: "bad id!!" })).toBe(false);
+  });
+
   it("rejects malformed ids and unknown kinds", () => {
     expect(ok({ ...event, sessionId: "bad id!" })).toBe(false);
     expect(ok({ ...event, kind: "scroll" })).toBe(false);

@@ -16,6 +16,9 @@ const Props = v.pipe(
   v.check((p) => Object.keys(p).length <= MAX_PROPS, `at most ${MAX_PROPS} props`),
 );
 
+/** A validated props object; `StoredEvent.props` carries it as-is. */
+export type Props = v.InferOutput<typeof Props>;
+
 export const EventKind = v.picklist(["page", "click", "submit", "view", "track", "identify"]);
 export type EventKind = v.InferOutput<typeof EventKind>;
 
@@ -23,6 +26,8 @@ export type EventKind = v.InferOutput<typeof EventKind>;
 export const ClientEvent = v.pipe(
   v.object({
     kind: EventKind,
+    /** Client-minted id used as `event_id`, so retried batches dedupe downstream. */
+    eventId: v.nullish(Id),
     name: v.pipe(v.string(), truncate(256), v.minLength(1)),
     ts: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(8_640_000_000_000_000)),
     sessionId: v.nullish(Id),
@@ -67,7 +72,7 @@ export type StoredEvent = {
   user_id: string | null;
   path: string | null;
   referrer: string | null;
-  props: string | null;
+  props: Props | null;
   country: string | null;
   device: string;
   browser: string;
@@ -75,7 +80,11 @@ export type StoredEvent = {
   source: EventSource;
 };
 
-/** One row of the Iceberg `sessions` table, written when a session closes. */
+/**
+ * One row of the Iceberg `sessions` table, written when a session closes.
+ * A failed close is retried, so a record can be written more than once;
+ * downstream dedupes on `(session_id, started_at)`.
+ */
 export type SessionRecord = {
   session_id: string;
   app_id: string;
@@ -86,7 +95,7 @@ export type SessionRecord = {
   duration_ms: number;
   entry: string | null;
   exit: string | null;
-  steps: string;
+  steps: string[];
   step_count: number;
   event_count: number;
   country: string | null;

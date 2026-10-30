@@ -1,0 +1,17 @@
+{
+  "name": "@flightdeckhq/browser",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "size": "node scripts/size.mjs"
+  },
+  "devDependencies": {
+    "@flightdeckhq/schema": "workspace:*",
+    "esbuild": "^0.28.2",
+    "happy-dom": "^21.0.4"
+  }
+}

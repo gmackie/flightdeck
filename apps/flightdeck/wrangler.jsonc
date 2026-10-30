@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "flightdeck",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-30",
+  "durable_objects": {
+    "bindings": [
+      { "name": "SESSION", "class_name": "SessionDO" },
+      { "name": "APP", "class_name": "AppDO" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionDO", "AppDO"] }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "flightdeck",
+      "database_id": "<d1 id>",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "pipelines": [
+    { "binding": "EVENTS", "stream": "<fd_events stream id>" },
+    { "binding": "SESSIONS", "stream": "<fd_sessions stream id>" }
+  ],
+  "vars": { "ACCESS_TEAM_DOMAIN": "", "FLIGHTDECK_DEV": "0" }
+}
