@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flightdeck v1 design</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--background, #fff); color: var(--foreground, #202124); font: 14px/1.55 var(--font-sans, system-ui, sans-serif); }
+  main { width: 100%; min-width: 0; }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.02rem; margin: 1.75rem 0 .5rem; }
+  h3 { font-size: .9rem; margin: 0 0 .25rem; }
+  p { max-width: 78ch; margin: .5rem 0; }
+  a { color: var(--accent-surface-foreground, #2458ac); }
+  .meta, .muted { color: var(--muted-foreground, #606773); }
+  code, pre { font-family: var(--font-mono, Menlo, Consolas, monospace); font-size: .8rem; background: var(--code-background, #f1f3f5); color: var(--code-foreground, #202124); }
+  code { padding: .05rem .3rem; border-radius: 4px; }
+  pre { padding: .7rem .85rem; border-radius: var(--radius, .625rem); overflow-x: auto; margin: .5rem 0; line-height: 1.5; }
+  pre code { padding: 0; background: none; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { text-align: left; vertical-align: top; padding: .45rem .5rem; border-bottom: 1px solid var(--border, #d8dce2); }
+  th { font-weight: 600; color: var(--muted-foreground, #606773); font-size: .75rem; text-transform: uppercase; letter-spacing: .03em; }
+  .badge, .chip { display: inline-block; border-radius: 999px; padding: .1rem .5rem; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+  .badge { background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #2458ac); }
+  .chip.todo { background: var(--muted, #f1f3f5); color: var(--muted-foreground, #606773); }
+  .chip.risk { background: var(--warning-surface, #fff4d6); color: var(--warning-foreground, #7a5200); }
+  .chip.high { background: var(--destructive-surface, #fde7e7); color: var(--destructive, #b3261e); }
+  .chip.low { background: color-mix(in srgb, var(--success, #1e8e3e) 16%, transparent); color: var(--success, #1e8e3e); }
+  .callout { border-left: 3px solid var(--accent, #2458ac); background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #1a2b4d); border-radius: 0 var(--radius, .625rem) var(--radius, .625rem) 0; padding: .65rem .85rem; margin: .75rem 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: .65rem; }
+  .card { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); color: var(--card-foreground, #202124); padding: .75rem; min-width: 0; }
+  .card p { margin: .3rem 0 0; font-size: .84rem; }
+  .card .k { font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-foreground, #606773); }
+  .decisions .card { border-top: 3px solid var(--accent, #2458ac); }
+  .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: .65rem; }
+  .tier { border-radius: var(--radius, .625rem); padding: .75rem; border: 1px solid var(--border, #d8dce2); background: var(--card, #f7f8fa); }
+  .tier .bar { height: 4px; border-radius: 2px; margin-bottom: .55rem; transform-origin: left; }
+  .tier ul { margin: .35rem 0 0; padding-left: 1.05rem; font-size: .82rem; }
+  .scope { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: .65rem; }
+  .scope ul { list-style: none; padding: 0; margin: .35rem 0 0; font-size: .85rem; }
+  .scope li { padding: .2rem 0 .2rem 1.4rem; position: relative; }
+  .scope .yes li::before { content: "✓"; position: absolute; left: 0; color: var(--success, #1e8e3e); font-weight: 700; }
+  .scope .no li::before { content: "✕"; position: absolute; left: 0; color: var(--muted-foreground, #606773); font-weight: 700; }
+  .timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+  .timeline::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--border, #d8dce2); }
+  .timeline li { position: relative; padding: 0 0 1rem 1.75rem; }
+  .timeline li::before { content: ""; position: absolute; left: 0; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--background, #fff); border: 2px solid var(--border, #d8dce2); }
+  .timeline li.next::before { background: var(--accent, #2458ac); border-color: var(--accent, #2458ac); }
+  .timeline .head { display: flex; gap: .5rem; align-items: baseline; flex-wrap: wrap; }
+  .timeline p { margin: .2rem 0; }
+  details { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); padding: .55rem .75rem; margin: .6rem 0; }
+  summary { cursor: pointer; font-weight: 600; font-size: .86rem; }
+  .diagram { margin: .5rem 0; padding: .75rem; border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); overflow-x: auto; }
+  .diagram svg { display: block; margin: 0 auto; }
+  #sankey { width: 100%; height: 280px; }
+  .riskgrid { display: grid; grid-template-columns: 74px repeat(3, 1fr); gap: 4px; font-size: .75rem; }
+  .riskgrid .cell { min-height: 58px; border-radius: 6px; padding: .35rem; background: var(--muted, #f1f3f5); display: flex; flex-wrap: wrap; gap: 4px; align-content: flex-start; }
+  .riskgrid .cell.h { background: color-mix(in srgb, var(--destructive, #b3261e) 14%, transparent); }
+  .riskgrid .cell.m { background: color-mix(in srgb, var(--warning, #c58a00) 16%, transparent); }
+  .riskgrid .lab { color: var(--muted-foreground, #606773); display: flex; align-items: center; font-weight: 600; }
+  .riskgrid .collab { text-align: center; color: var(--muted-foreground, #606773); font-weight: 600; }
+  .rk { background: var(--card, #fff); border: 1px solid var(--border, #d8dce2); border-radius: 999px; padding: .05rem .45rem; font-weight: 600; }
+  .snips { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: .65rem; }
+  .snips .card pre { margin: .4rem 0 0; }
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { animation: rise .45s cubic-bezier(.2,.7,.3,1) both; animation-delay: calc(var(--i, 0) * 60ms); }
+    .tier .bar { animation: grow .6s ease-out both; animation-delay: calc(250ms + var(--i, 0) * 120ms); }
+    .timeline li.next::before { animation: pulse 1.8s ease-in-out infinite; }
+    .diagram .flowchart-link { stroke-dasharray: 6 4; animation: dash 1.4s linear infinite; }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+    @keyframes grow { from { transform: scaleX(0); } }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent, #2458ac) 25%, transparent); } }
+    @keyframes dash { to { stroke-dashoffset: -20; } }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 class="reveal">Flightdeck v1: self-hosted product analytics on Cloudflare <span class="badge">Design draft</span></h1>
+  <p class="meta reveal" style="--i:1">2026-10-30 · gmackie/flightdeck · brainstorm output, for review before implementation planning</p>
+
+  <div class="callout reveal" style="--i:2"><strong>Proposal:</strong> Ship one Worker into the user's account. It has an RPC <code>Ingest</code> entrypoint that apps call through service bindings, Durable Objects as the hot layer (a <code>SessionDO</code> builds each journey, an <code>AppDO</code> keeps live counters and transitions), <strong>Basin Pipelines → Iceberg on R2</strong> as the raw store of record, and a Kumo + ECharts + React Flow dashboard behind Cloudflare Access. A <code>create-flightdeck</code> CLI provisions everything.</div>
+
+  <h2 class="reveal" style="--i:3">Decisions so far</h2>
+  <div class="grid decisions">
+    <div class="card reveal" style="--i:4"><div class="k">Storage</div><p>Basin Pipelines → Basin Catalog (Iceberg on R2) for raw events and sessions. Durable Objects hold the live state.</p></div>
+    <div class="card reveal" style="--i:5"><div class="k">Hot layer</div><p>One <code>SessionDO</code> per visitor session builds the journey. <code>AppDO</code> shards per app and hour keep live counters and step→step transitions.</p></div>
+    <div class="card reveal" style="--i:6"><div class="k">UI</div><p><code>@cloudflare/kumo</code> (Base UI + Tailwind v4). ECharts in SVG mode, themed from Kumo tokens. React Flow for journey and funnel builders.</p></div>
+    <div class="card reveal" style="--i:7"><div class="k">Auth</div><p>Cloudflare Access in front of the dashboard; the Worker verifies the <code>Cf-Access-Jwt-Assertion</code>. Ingest has no public HTTP route at all.</p></div>
+    <div class="card reveal" style="--i:8"><div class="k">v1 scope</div><p>Live view + trends, Sankey journeys, funnels, identity + retention.</p></div>
+  </div>
+
+  <h2>Architecture</h2>
+  <p>App Workers never talk to storage. They call the <code>FLIGHTDECK</code> binding, and service binding <code>props</code> tell Flightdeck which app is calling. Browser events reach the app's own Worker first, so collection stays first-party and ad blockers don't strip it.</p>
+  <figure class="diagram" id="arch" aria-label="Architecture diagram: browser and app Workers send events to the Flightdeck Ingest entrypoint, which fans out to Basin Pipelines and Durable Objects; dashboard reads from AppDOs, D1 rollups and Basin SQL">
+    <p class="muted">Loading diagram…</p>
+  </figure>
+  <details class="mermaid-source"><summary>Diagram source</summary><pre id="arch-src">flowchart LR
+  subgraph Customer[&quot;App Workers / DOs (same CF account)&quot;]
+    B[&quot;Browser&lt;br/&gt;@flightdeckhq/browser&lt;br/&gt;data-flightdeck auto-capture&quot;]
+    W[&quot;App Worker or DO&lt;br/&gt;withFlightdeck &#8594; POST /_fd/e&quot;]
+    B --&gt;|sendBeacon, first-party| W
+  end
+  W --&gt;|&quot;service binding RPC&lt;br/&gt;ingest / track / identify&quot;| I
+  subgraph FD[&quot;Flightdeck Worker&quot;]
+    I[&quot;Ingest entrypoint&lt;br/&gt;validate, enrich, dedupe&quot;]
+    S[&quot;SessionDO&lt;br/&gt;ordered journey&quot;]
+    A[&quot;AppDO app:hour&lt;br/&gt;counters, transitions, live WS&quot;]
+    C[&quot;Cron rollups&quot;]
+    D[(&quot;D1&lt;br/&gt;apps, funnels, rollups&quot;)]
+    UI[&quot;Dashboard + API&lt;br/&gt;Kumo / ECharts / React Flow&quot;]
+  end
+  I --&gt; S
+  S --&gt;|transitions| A
+  I --&gt;|events stream| P[&quot;Basin Pipelines&quot;]
+  S --&gt;|session path on close| P
+  P --&gt; L[(&quot;Iceberg on R2&lt;br/&gt;events, sessions&quot;)]
+  C --&gt;|Basin SQL| L
+  C --&gt; D
+  UI --&gt; A
+  UI --&gt; D
+  UI --&gt;|explore| L
+  X[&quot;Cloudflare Access&quot;] --&gt; UI</pre></details>
+
+  <h2>Three data tiers</h2>
+  <div class="tiers">
+    <div class="tier reveal" style="--i:0"><div class="bar" style="background:var(--chart-1,#2458ac);--i:0"></div><h3>Hot: Durable Objects</h3><p class="muted" style="font-size:.8rem;margin:0">Seconds to about 2 hours</p><ul><li>Live event stream over hibernating WebSockets</li><li>Per-hour counters, HLL unique sessions, transition matrix</li><li>Open sessions, closed by an alarm after 30 minutes idle</li></ul></div>
+    <div class="tier reveal" style="--i:1"><div class="bar" style="background:var(--chart-2,#1e8e3e);--i:1"></div><h3>Warm: D1</h3><p class="muted" style="font-size:.8rem;margin:0">Dashboard history, millisecond reads</p><ul><li>Control plane: apps, funnels, saved views</li><li>Hourly and daily rollups: trends, transitions, funnels, retention cohorts</li><li>Kept small on purpose, well under the D1 size limit</li></ul></div>
+    <div class="tier reveal" style="--i:2"><div class="bar" style="background:var(--chart-3,#c58a00);--i:2"></div><h3>Cold: Iceberg on R2</h3><p class="muted" style="font-size:.8rem;margin:0">Store of record, open format</p><ul><li><code>events</code> and <code>sessions</code> tables, partitioned by <code>app_id, day(ts)</code></li><li>Basin SQL for rollups, backfills, and the Explore page</li><li>Readable by DuckDB, Spark, and Snowflake, so users can leave with their data</li></ul></div>
+  </div>
+
+  <h2>Developer experience</h2>
+  <div class="snips">
+    <div class="card"><div class="k">1 · Bind the app (wrangler.jsonc)</div><pre><code>"services": [{
+  "binding": "FLIGHTDECK",
+  "service": "flightdeck",
+  "entrypoint": "Ingest",
+  "props": { "appId": "app_7f3c" }
+}]</code></pre></div>
+    <div class="card"><div class="k">2 · Server events + browser endpoint</div><pre><code>import { withFlightdeck } from "@flightdeckhq/worker";
+
+export default withFlightdeck({
+  async fetch(req, env, ctx) {
+    ctx.waitUntil(env.FLIGHTDECK.track({
+      name: "invoice.paid", userId, props: { plan }
+    }));
+    // ...app logic
+  },
+}); // mounts POST /_fd/e and forwards it over RPC</code></pre></div>
+    <div class="card"><div class="k">3 · Frontend auto-capture</div><pre><code>&lt;script type="module"&gt;
+  import { init } from "@flightdeckhq/browser";
+  init(); // page views + data-flightdeck
+&lt;/script&gt;
+
+&lt;button data-flightdeck="pricing.cta"&gt;Start trial&lt;/button&gt;
+&lt;form data-flightdeck="signup.form"&gt;…&lt;/form&gt;
+&lt;section data-flightdeck="hero" data-flightdeck-view&gt;</code></pre></div>
+    <div class="card"><div class="k">Inside a Durable Object</div><pre><code>import { handleFlightdeck } from "@flightdeckhq/worker";
+
+async fetch(req) {
+  const fd = await handleFlightdeck(req, this.env);
+  if (fd) return fd; // handled /_fd/e
+  // ...DO logic
+}</code></pre></div>
+  </div>
+  <p class="muted">The browser script is under 3 KB. A single delegated listener catches clicks, submits, and opt-in visibility (via IntersectionObserver) for any <code>[data-flightdeck]</code> element. It batches events and flushes them with <code>sendBeacon</code> when the page is hidden. Extra properties go in <code>data-flightdeck-*</code> attributes. Session IDs live in <code>sessionStorage</code>; a privacy option turns off the persistent anonymous ID.</p>
+
+  <h2>Event flow</h2>
+  <ol class="timeline">
+    <li class="reveal" style="--i:0"><div class="head"><h3>Capture</h3></div><p class="muted">The browser batches events, or server code calls <code>track()</code>. <code>withFlightdeck</code> adds request context such as <code>request.cf</code> country, parsed user agent, and referrer. It never forwards the raw IP.</p></li>
+    <li class="reveal" style="--i:1"><div class="head"><h3>Ingest (RPC)</h3></div><p class="muted">Reads <code>ctx.props.appId</code> and rejects unknown apps. Validates batches against a shared schema (size caps, at most 50 events, property limits), stamps <code>event_id</code> and <code>received_at</code>, and normalizes routes (<code>/users/123 → /users/:id</code>).</p></li>
+    <li class="reveal" style="--i:2"><div class="head"><h3>Fan out</h3></div><p class="muted">Sends raw events to the <code>events</code> Pipelines stream, which delivers exactly once to Iceberg, and in parallel appends them to <code>SessionDO(app:session)</code>.</p></li>
+    <li class="reveal" style="--i:3"><div class="head"><h3>Journey assembly</h3></div><p class="muted">The SessionDO orders steps and collapses repeats. It sends each new <code>prev → next</code> transition to <code>AppDO(app:hour)</code> right away, so the live Sankey updates. <code>identify()</code> attaches <code>user_id</code> to the rest of the session.</p></li>
+    <li class="reveal" style="--i:4"><div class="head"><h3>Session close</h3></div><p class="muted">After 30 minutes idle, an alarm writes one compact path record (steps, entry, exit, duration, user) to the <code>sessions</code> stream, then the DO clears its storage.</p></li>
+    <li class="reveal" style="--i:5"><div class="head"><h3>Rollup</h3></div><p class="muted">A cron job runs Basin SQL over closed hours to compute trends, transitions, funnel conversion, and weekly retention cohorts keyed by <code>coalesce(user_id, anonymous_id)</code>, and upserts the results into D1.</p></li>
+  </ol>
+
+  <h2>Journey view direction</h2>
+  <p class="muted">Illustrative only: invented data, rendered with ECharts in SVG mode using theme tokens. This shows the intended look, not real numbers. Real journeys keep the top N steps at each depth and group the rest as "other" so the chart stays readable.</p>
+  <div class="diagram"><div id="sankey" role="img" aria-label="Illustrative Sankey: landing page flows to pricing, docs, and drop-off; pricing flows to signup; signup flows to activated."></div></div>
+
+  <h2>Onboarding and deployment</h2>
+  <div class="grid">
+    <div class="card"><div class="k">Install</div><p><code>npx create-flightdeck</code> uses wrangler auth or an API token. It creates the R2 bucket, enables Basin Catalog, creates the <code>events</code> and <code>sessions</code> streams, sinks, and pipeline SQL, creates D1 and runs migrations, deploys the Worker, and creates the Access application. It's idempotent, and <code>flightdeck doctor</code> re-checks everything.</p></div>
+    <div class="card"><div class="k">Add an app</div><p>Dashboard → <em>New app</em> creates an <code>appId</code> and shows the wrangler snippet and install commands, plus a "waiting for first event" check that lights up over the live WebSocket.</p></div>
+    <div class="card"><div class="k">Requirements</div><p>Workers Paid plan, because Basin Pipelines requires it. Zero Trust free tier for Access (up to 50 users). No external services.</p></div>
+    <div class="card"><div class="k">Later</div><p>A Deploy to Cloudflare button, if it can provision Pipelines (to be checked), and a Terraform module built on the <code>cloudflare_pipeline_*</code> resources.</p></div>
+  </div>
+
+  <h2>Repository layout</h2>
+  <pre><code>apps/flightdeck/          Worker: Ingest entrypoint, SessionDO, AppDO, Hono API, cron, SPA assets
+  src/ui/                 React + Vite + TanStack Router/Query, Kumo, ECharts, React Flow
+packages/schema/          event + session schemas (Valibot), Iceberg column definitions, shared types
+packages/worker/          @flightdeckhq/worker: withFlightdeck, handleFlightdeck, typed binding
+packages/browser/         @flightdeckhq/browser: auto-capture, batching, beacon
+packages/create-flightdeck/  provisioning CLI + doctor
+examples/demo-app/        Worker + DO app wired to a local Flightdeck, used for e2e tests</code></pre>
+
+  <h2>Scope</h2>
+  <div class="scope">
+    <div class="card yes"><h3>v1 goals</h3><ul><li>RPC ingest through service bindings, with typed SDK</li><li><code>data-flightdeck</code> auto-capture through a first-party endpoint on Workers and DOs</li><li>Live stream + trends, Sankey journeys, funnels (React Flow builder), identity + retention</li><li>One-command install in the user's own account, behind Access</li><li>Raw data in open Iceberg tables the user owns</li></ul></div>
+    <div class="card no"><h3>Non-goals for v1</h3><ul><li>Public HTTP ingest for apps that aren't on Workers</li><li>Session replay and heatmaps</li><li>Multi-tenant SaaS hosting</li><li>Feature flags and experiments</li><li>Its own login system (Access only)</li></ul></div>
+  </div>
+
+  <h2>Delivery phases</h2>
+  <ol class="timeline">
+    <li class="next"><div class="head"><h3>0 · Foundation</h3><span class="chip todo">Next</span></div><p class="muted">pnpm monorepo, Biome, Vitest with <code>@cloudflare/vitest-pool-workers</code>, CI, schema package.</p></li>
+    <li><div class="head"><h3>1 · Ingest core</h3></div><p class="muted">Ingest entrypoint, Pipelines streams, SessionDO, AppDO, <code>@flightdeckhq/worker</code>, <code>@flightdeckhq/browser</code>, demo app. Done when the demo app's events land in Iceberg and AppDO counters match.</p></li>
+    <li><div class="head"><h3>2 · Install CLI</h3></div><p class="muted"><code>create-flightdeck</code> + <code>doctor</code> + Access setup. Done when a clean Cloudflare account goes from nothing to receiving events with one command.</p></li>
+    <li><div class="head"><h3>3 · Dashboard shell, live + trends</h3></div><p class="muted">Kumo app shell, Access JWT middleware, app onboarding wizard, live WebSocket stream, trend charts, D1 rollup cron.</p></li>
+    <li><div class="head"><h3>4 · Journeys + funnels</h3></div><p class="muted">ECharts Sankey with start/end anchors and drop-off; React Flow funnel builder; funnel conversion from session paths.</p></li>
+    <li><div class="head"><h3>5 · Identity + retention</h3></div><p class="muted"><code>identify()</code> merge semantics, cohort grid, Explore page on Basin SQL.</p></li>
+    <li><div class="head"><h3>6 · Release</h3></div><p class="muted">Docs, npm publish, test the Deploy button, Terraform module.</p></li>
+  </ol>
+
+  <h2>Risks</h2>
+  <div class="riskgrid" role="table" aria-label="Risk grid: likelihood rows by impact columns">
+    <div></div><div class="collab">Low impact</div><div class="collab">Medium impact</div><div class="collab">High impact</div>
+    <div class="lab">Likely</div><div class="cell"></div><div class="cell m"><span class="rk">R3 Sankey clutter</span></div><div class="cell h"><span class="rk">R1 AppDO hot shard</span></div>
+    <div class="lab">Possible</div><div class="cell"></div><div class="cell m"><span class="rk">R4 Basin SQL latency</span><span class="rk">R5 DO cost</span></div><div class="cell h"><span class="rk">R2 install friction</span></div>
+    <div class="lab">Unlikely</div><div class="cell"></div><div class="cell"><span class="rk">R6 props spoofing</span></div><div class="cell"></div>
+  </div>
+  <details><summary>Mitigations</summary><div class="table-scroll"><table>
+    <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+    <tbody>
+      <tr><td>R1 · One AppDO per app and hour becomes a write hotspot for high-traffic apps</td><td>SessionDOs combine writes into batches; AppDO keys become <code>app:hour:shard(n)</code> with fan-in reads; n is set per app.</td></tr>
+      <tr><td>R2 · Pipelines needs Workers Paid plus an R2 catalog token, and Access needs Zero Trust onboarding</td><td>The CLI checks the plan up front, walks the user through creating the token, and saves progress so a rerun resumes where it stopped; <code>doctor</code> explains each failure.</td></tr>
+      <tr><td>R3 · Path cardinality makes the Sankey unreadable</td><td>Route normalization, top N per depth with an "other" group, a depth limit, and anchoring on a start or end step.</td></tr>
+      <tr><td>R4 · Basin SQL is too slow for interactive dashboards</td><td>The dashboard reads from DOs and D1 rollups; Basin SQL serves only rollups and Explore, with async query status.</td></tr>
+      <tr><td>R5 · One DO per session raises request costs</td><td>Browser batching (one RPC per flush), SessionDO alarms instead of polling, storage cleared on close.</td></tr>
+      <tr><td>R6 · Any Worker in the account could claim another app's <code>appId</code> in props</td><td>Acceptable, since service bindings only work within one account. An optional per-app key in props, checked against a hash in D1, closes the gap.</td></tr>
+    </tbody></table></div></details>
+
+  <h2>Resolved decisions</h2>
+  <div class="grid">
+    <div class="card"><div class="k">npm scope</div><p>Packages publish under <code>@flightdeckhq</code> (<code>/worker</code>, <code>/browser</code>, <code>/schema</code>); the CLI stays unscoped as <code>create-flightdeck</code>.</p></div>
+    <div class="card"><div class="k">Session timeout</div><p>30 minutes idle.</p></div>
+    <div class="card"><div class="k">Anonymous ID</div><p>On by default: a persistent <code>localStorage</code> ID, which a privacy option can turn off.</p></div>
+    <div class="card"><div class="k">Access identity</div><p>When a request carries <code>Cf-Access-Jwt-Assertion</code>, <code>withFlightdeck</code> forwards it over RPC. Ingest verifies it against the team JWKS and sets <code>user_id</code> to the Access <code>sub</code>, the same as calling <code>identify()</code>.</p></div>
+  </div>
+</main>
+
+<script type="module">
+  import * as echarts from "https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.esm.min.mjs";
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs";
+  const src = document.getElementById("arch-src").textContent;
+  const tok = (n, f) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || f;
+  let seq = 0;
+  async function drawArch() {
+    mermaid.initialize({ startOnLoad: false, theme: "base", securityLevel: "strict",
+      themeVariables: {
+        fontFamily: tok("--font-sans", "system-ui"), fontSize: "13px",
+        primaryColor: tok("--background", "#fff"), primaryTextColor: tok("--foreground", "#222"),
+        primaryBorderColor: tok("--accent", "#2458ac"), lineColor: tok("--muted-foreground", "#666"),
+        clusterBkg: tok("--muted", "#f1f3f5"), clusterBorder: tok("--border", "#ddd"),
+        titleColor: tok("--foreground", "#222"), edgeLabelBackground: tok("--card", "#fff"),
+      }, flowchart: { curve: "basis", padding: 10 } });
+    const { svg } = await mermaid.render("arch-svg-" + (seq++), src);
+    document.getElementById("arch").innerHTML = svg;
+  }
+
+  let chart;
+  function drawSankey() {
+    const el = document.getElementById("sankey");
+    if (chart) chart.dispose();
+    chart = echarts.init(el, null, { renderer: "svg" });
+    const c = [1,2,3,4,5,6].map(i => tok("--chart-" + i, ["#2458ac","#1e8e3e","#c58a00","#9333ea","#d9480f","#0891b2"][i-1]));
+    const drop = tok("--muted-foreground", "#888");
+    const nodes = [
+      ["/ (landing)", c[0]], ["/pricing", c[1]], ["/docs", c[2]], ["pricing.cta", c[3]],
+      ["signup.form", c[4]], ["activated", c[5]], ["drop-off", drop],
+    ].map(([name, color]) => ({ name, itemStyle: { color, borderWidth: 0 } }));
+    const links = [
+      ["/ (landing)", "/pricing", 420], ["/ (landing)", "/docs", 260], ["/ (landing)", "drop-off", 320],
+      ["/pricing", "pricing.cta", 240], ["/pricing", "drop-off", 180], ["/docs", "pricing.cta", 70], ["/docs", "drop-off", 190],
+      ["pricing.cta", "signup.form", 250], ["pricing.cta", "drop-off", 60], ["signup.form", "activated", 170], ["signup.form", "drop-off", 80],
+    ].map(([source, target, value]) => ({ source, target, value }));
+    chart.setOption({
+      animationDuration: 700,
+      tooltip: { trigger: "item", backgroundColor: tok("--popover", "#fff"), borderColor: tok("--border", "#ddd"),
+        textStyle: { color: tok("--popover-foreground", "#222"), fontSize: 12 } },
+      series: [{ type: "sankey", left: 4, right: 70, top: 8, bottom: 8, nodeWidth: 10, nodeGap: 12, layoutIterations: 64,
+        emphasis: { focus: "adjacency" }, data: nodes, links,
+        label: { color: tok("--foreground", "#222"), fontSize: 11, fontFamily: tok("--font-sans", "system-ui") },
+        lineStyle: { color: "gradient", opacity: .32, curveness: .5 } }],
+    });
+  }
+
+  async function drawAll() { try { drawSankey(); } catch (e) { console.error(e); } try { await drawArch(); } catch (e) { console.error(e); } }
+  drawAll();
+  let t;
+  const theme = document.getElementById("t3-theme");
+  if (theme) new MutationObserver(() => { clearTimeout(t); t = setTimeout(drawAll, 120); })
+    .observe(theme, { childList: true, characterData: true, subtree: true });
+  new ResizeObserver(() => chart && chart.resize()).observe(document.getElementById("sankey"));
+</script>
+</body>
+</html>
