@@ -1,0 +1,1885 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flightdeck Phase 0-1 implementation plan</title>
+<style>  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--background, #fff); color: var(--foreground, #202124); font: 14px/1.55 var(--font-sans, system-ui, sans-serif); }
+  main { width: 100%; min-width: 0; }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.02rem; margin: 1.75rem 0 .5rem; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+  p { max-width: 80ch; margin: .45rem 0; }
+  a { color: var(--accent-surface-foreground, #2458ac); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta, .muted { color: var(--muted-foreground, #606773); }
+  code, pre { font-family: var(--font-mono, Menlo, Consolas, monospace); font-size: .78rem; background: var(--code-background, #f1f3f5); color: var(--code-foreground, #202124); }
+  code { padding: .05rem .3rem; border-radius: 4px; }
+  pre { padding: .65rem .8rem; border-radius: var(--radius, .625rem); overflow-x: auto; margin: .35rem 0 .6rem; line-height: 1.5; max-height: 520px; }
+  pre code { padding: 0; background: none; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th, td { text-align: left; vertical-align: top; padding: .45rem .5rem; border-bottom: 1px solid var(--border, #d8dce2); }
+  th { font-weight: 600; color: var(--muted-foreground, #606773); font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; }
+  td code { font-size: .72rem; }
+  .badge, .chip { display: inline-block; border-radius: 999px; padding: .1rem .5rem; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+  .badge { background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #2458ac); }
+  .chip.todo { background: var(--muted, #f1f3f5); color: var(--muted-foreground, #606773); }
+  .callout { border-left: 3px solid var(--accent, #2458ac); background: var(--accent-surface, #eaf0ff); color: var(--accent-surface-foreground, #1a2b4d); border-radius: 0 var(--radius, .625rem) var(--radius, .625rem) 0; padding: .65rem .85rem; margin: .75rem 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: .65rem; }
+  .card { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); color: var(--card-foreground, #202124); padding: .75rem; min-width: 0; }
+  .card p { margin: .3rem 0 0; font-size: .84rem; }
+  .k { font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-foreground, #606773); margin-top: .4rem; }
+  .diagram { margin: .5rem 0; padding: .75rem; border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); }
+  .diagram svg { display: block; width: 100%; height: auto; }
+  .edges path { fill: none; stroke: var(--muted-foreground, #888); stroke-width: 1.4; marker-end: url(#ah); }
+  .ahead { fill: var(--muted-foreground, #888); }
+  .n rect { fill: var(--background, #fff); stroke: var(--accent, #2458ac); stroke-width: 1.4; }
+  .n.p0 rect { stroke: var(--chart-2, #1e8e3e); }
+  .n.end rect { fill: var(--accent, #2458ac); }
+  .n.end text { fill: var(--primary-foreground, #fff); }
+  .n text { font: 600 10px var(--font-mono, monospace); fill: var(--foreground, #222); text-anchor: middle; }
+  .legend { font: 11px var(--font-sans, system-ui); fill: var(--muted-foreground, #666); }
+  details.task { border: 1px solid var(--border, #d8dce2); border-radius: var(--radius, .625rem); background: var(--card, #f7f8fa); padding: .5rem .75rem; margin: .45rem 0; }
+  details.task > summary { cursor: pointer; font-weight: 600; font-size: .88rem; }
+  .tid { display: inline-block; min-width: 2.6rem; font-family: var(--font-mono, monospace); color: var(--accent-surface-foreground, #2458ac); }
+  .taskbody { padding-top: .4rem; }
+  .files { margin: .2rem 0 .4rem; padding-left: 1.1rem; font-size: .8rem; columns: 2 260px; }
+  .steps { padding-left: 1.2rem; margin: .5rem 0 0; }
+  .steps > li { margin-bottom: .6rem; }
+  .steps > li > p { margin: .2rem 0; }
+  .codelabel { font: 600 .7rem var(--font-mono, monospace); color: var(--muted-foreground, #606773); margin-top: .45rem; }
+  .run { display: grid; grid-template-columns: auto 1fr; gap: .2rem .6rem; align-items: baseline; font-size: .8rem; background: var(--muted, #f1f3f5); border-radius: 8px; padding: .45rem .6rem; margin: .35rem 0; }
+  .run .k { margin: 0; }
+  .run code { background: none; padding: 0; overflow-wrap: anywhere; }
+  .checks { padding-left: 0; list-style: none; }
+  .checks li { padding: .2rem 0 .2rem 1.4rem; position: relative; }
+  .checks li::before { content: "✓"; position: absolute; left: 0; color: var(--success, #1e8e3e); font-weight: 700; }
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal { animation: rise .45s cubic-bezier(.2,.7,.3,1) both; animation-delay: calc(var(--i, 0) * 60ms); }
+    .edges path { stroke-dasharray: 400; stroke-dashoffset: 400; animation: draw .9s ease-out .2s forwards; }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 class="reveal">Flightdeck Phase 0–1 implementation plan <span class="badge">Ready</span></h1>
+  <p class="meta reveal" style="--i:1">2026-10-30 · gmackie/flightdeck · FLIG-4 (plan) → FLIG-5 (Phase 0), FLIG-6 (Phase 1) · design: <code>docs/plans/2026-10-30-flightdeck-design.html</code></p>
+
+  <div class="callout reveal" style="--i:2"><strong>For the implementing agent:</strong> work through the tasks in order with the superpowers:executing-plans (or subagent-driven-development) skill. Every task is test-first: write the test, watch it fail, implement, watch it pass, commit. Work in a Worktrunk worktree, never in <code>~/dev/flightdeck</code>.</div>
+
+  <div class="grid reveal" style="--i:3">
+    <div class="card"><div class="k">Goal</div><p>Events from a Worker, a Durable Object, and a browser page using <code>data-flightdeck</code> reach Flightdeck over service binding RPC, show up in live per-hour Durable Object counters, and land in Iceberg tables on R2.</p></div>
+    <div class="card"><div class="k">Architecture</div><p>One <code>flightdeck</code> Worker: an <code>Ingest</code> WorkerEntrypoint fans out to Basin Pipelines, a <code>SessionDO</code> per session, and <code>AppDO</code> shards per app-hour. D1 holds the app registry. SDKs live in <code>packages/</code>.</p></div>
+    <div class="card"><div class="k">Stack</div><p>pnpm 12, Node 24, TypeScript 7, Biome 2.6, Vitest 5 + <code>@cloudflare/vitest-plugin</code>, happy-dom, Valibot, jose, ulid, wrangler 4.156.</p></div>
+  </div>
+
+  <h2>Build order</h2>
+  <figure class="diagram">
+    <svg viewBox="0 0 700 285" role="img" aria-label="Task dependency graph: 0.1 then 0.2 then 0.3 then 0.4; 0.4 unlocks 1.1, 1.8 and 1.9; 1.1 unlocks 1.2, 1.3, 1.4 and 1.5; 1.5 unlocks 1.6; 1.2 to 1.6 unlock 1.7; 1.7, 1.8 and 1.9 unlock 1.10 and 1.11, then 1.12.">
+      <defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="ahead"/></marker></defs>
+      <g class="edges">
+        <path d="M58,40 H92"/><path d="M148,40 H182"/><path d="M238,40 H272"/>
+        <path d="M328,40 C350,40 350,40 372,40"/><path d="M328,40 C350,40 350,150 372,150"/><path d="M328,40 C350,40 350,210 372,210"/>
+        <path d="M428,40 C445,40 445,20 460,20"/><path d="M428,40 C445,40 445,60 460,60"/><path d="M428,40 C445,40 445,100 460,100"/>
+        <path d="M516,20 C540,20 540,60 562,70"/><path d="M516,60 H562"/><path d="M516,100 C540,100 540,80 562,80"/>
+        <path d="M594,84 V152"/>
+        <path d="M428,150 C480,150 520,170 562,170"/><path d="M428,210 C480,210 520,180 562,178"/>
+        <path d="M618,178 H640"/>
+      </g>
+      <g class="nodes">
+        <g class="n p0"><rect x="10" y="26" width="48" height="28" rx="6"/><text x="34" y="44">0.1</text></g>
+        <g class="n p0"><rect x="100" y="26" width="48" height="28" rx="6"/><text x="124" y="44">0.2</text></g>
+        <g class="n p0"><rect x="190" y="26" width="48" height="28" rx="6"/><text x="214" y="44">0.3</text></g>
+        <g class="n p0"><rect x="280" y="26" width="48" height="28" rx="6"/><text x="304" y="44">0.4</text></g>
+        <g class="n"><rect x="380" y="26" width="48" height="28" rx="6"/><text x="404" y="44">1.1</text></g>
+        <g class="n"><rect x="468" y="6" width="48" height="28" rx="6"/><text x="492" y="24">1.2·1.3</text></g>
+        <g class="n"><rect x="468" y="46" width="48" height="28" rx="6"/><text x="492" y="64">1.4</text></g>
+        <g class="n"><rect x="468" y="86" width="48" height="28" rx="6"/><text x="492" y="104">1.5→1.6</text></g>
+        <g class="n"><rect x="570" y="56" width="48" height="28" rx="6"/><text x="594" y="74">1.7</text></g>
+        <g class="n"><rect x="380" y="136" width="48" height="28" rx="6"/><text x="404" y="154">1.8</text></g>
+        <g class="n"><rect x="380" y="196" width="48" height="28" rx="6"/><text x="404" y="214">1.9</text></g>
+        <g class="n"><rect x="570" y="160" width="48" height="28" rx="6"/><text x="594" y="178">1.10·11</text></g>
+        <g class="n end"><rect x="648" y="164" width="44" height="28" rx="6"/><text x="670" y="182">1.12</text></g>
+      </g>
+      <text x="10" y="256" class="legend">Phase 0 is sequential. After 0.4, three lanes can run in parallel:</text>
+      <text x="10" y="273" class="legend">the Worker (1.1–1.7), the worker SDK (1.8), and the browser SDK (1.9).</text>
+    </svg>
+  </figure>
+
+  <h2>Phase 0 · Foundation <span class="chip todo">FLIG-5</span></h2>
+  <p class="muted">Monorepo, tooling, CI, and the shared schema package every other package depends on.</p>
+  <div class="table-scroll"><table><thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead><tbody><tr><td><a href="#t0.1"><strong>0.1</strong> Workspace and tooling</a></td><td><code>Create: package.json</code><br><code>Create: pnpm-workspace.yaml</code><br><code>Create: tsconfig.base.json</code><br><code>Create: biome.json</code><br><span class="muted">+3 more</span></td><td>pnpm install &amp;&amp; pnpm lint pass on an empty workspace</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t0.2"><strong>0.2</strong> Test harness and CI</a></td><td><code>Create: vitest.config.ts</code><br><code>Create: .github/workflows/ci.yml</code></td><td>pnpm test exits 0 (no projects yet is allowed: passWithNoTests); CI green on the PR</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t0.3"><strong>0.3</strong> @flightdeckhq/schema: event contracts</a></td><td><code>Create: packages/schema/package.json</code><br><code>Create: packages/schema/tsconfig.json</code><br><code>Create: packages/schema/vitest.config.ts</code><br><code>Create: packages/schema/src/events.ts</code><br><span class="muted">+2 more</span></td><td>pnpm vitest run --project schema: events tests pass</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t0.4"><strong>0.4</strong> @flightdeckhq/schema: route, user agent, steps, hour key</a></td><td><code>Create: packages/schema/src/route.ts</code><br><code>Create: packages/schema/src/user-agent.ts</code><br><code>Create: packages/schema/src/steps.ts</code><br><code>Create: packages/schema/src/time.ts</code><br><span class="muted">+2 more</span></td><td>pnpm vitest run --project schema: all helper tests pass; pnpm typecheck passes</td><td><span class="chip todo">Todo</span></td></tr></tbody></table></div>
+
+  <h2>Phase 1 · Ingest core <span class="chip todo">FLIG-6</span></h2>
+  <p class="muted">Done when the demo app's Worker, Durable Object, and browser events land in Iceberg, and the AppDO counters for that hour match Basin SQL.</p>
+  <div class="table-scroll"><table><thead><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr></thead><tbody><tr><td><a href="#t1.1"><strong>1.1</strong> Flightdeck Worker scaffold</a></td><td><code>Create: apps/flightdeck/package.json</code><br><code>Create: apps/flightdeck/tsconfig.json</code><br><code>Create: apps/flightdeck/wrangler.jsonc</code><br><code>Create: apps/flightdeck/migrations/0001_apps.sql</code><br><span class="muted">+9 more</span></td><td>GET /healthz returns {ok:true} in workerd; wrangler types generates Env with DB, SESSION, APP, EVENTS, SESSIONS</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t1.2"><strong>1.2</strong> App registry</a></td><td><code>Create: apps/flightdeck/src/apps.ts</code><br><code>Test: apps/flightdeck/test/apps.test.ts</code></td><td>Registry tests pass: lookups, unknown apps, positive and negative cache TTLs</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t1.3"><strong>1.3</strong> Cloudflare Access identity</a></td><td><code>Create: apps/flightdeck/src/access.ts</code><br><code>Test: apps/flightdeck/test/access.test.ts</code></td><td>Valid tokens resolve to sub; wrong issuer, wrong audience, and expired tokens resolve to null</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t1.4"><strong>1.4</strong> Ingest service (pure logic)</a></td><td><code>Create: apps/flightdeck/src/ingest/service.ts</code><br><code>Test: apps/flightdeck/test/ingest-service.test.ts</code></td><td>Validation, enrichment, clock clamping, Access identity, bot filtering, and fan-out grouping are covered by tests with fake deps</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t1.5"><strong>1.5</strong> AppDO: hourly counters and transitions</a></td><td><code>Create: apps/flightdeck/src/do/shards.ts</code><br><code>Modify: apps/flightdeck/src/do/app.ts</code><br><code>Test: apps/flightdeck/test/app-do.test.ts</code></td><td>Counters, unique sessions, and transition counts accumulate and come back sorted from snapshot()</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t1.6"><strong>1.6</strong> SessionDO: journey assembly and close</a></td><td><code>Create: apps/flightdeck/src/sinks.ts</code><br><code>Modify: apps/flightdeck/src/do/session.ts</code><br><code>Test: apps/flightdeck/test/session-do.test.ts</code></td><td>Steps collapse repeats; transitions land on the right hour shard; the alarm writes one SessionRecord, adds the $exit transition, and clears storage</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t1.7"><strong>1.7</strong> Ingest RPC entrypoint and dev routes</a></td><td><code>Modify: apps/flightdeck/src/ingest/entrypoint.ts</code><br><code>Create: apps/flightdeck/src/dev.ts</code><br><code>Modify: apps/flightdeck/src/index.ts</code><br><code>Test: apps/flightdeck/test/ingest-entrypoint.test.ts</code></td><td>ingest(), track(), and identify() work over a props-bound binding; unknown apps and missing props are rejected; /__dev routes only answer when FLIGHTDECK_DEV=1</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t1.8"><strong>1.8</strong> @flightdeckhq/worker SDK</a></td><td><code>Create: packages/worker/package.json</code><br><code>Create: packages/worker/tsconfig.json</code><br><code>Create: packages/worker/vitest.config.ts</code><br><code>Create: packages/worker/src/index.ts</code><br><span class="muted">+1 more</span></td><td>handleFlightdeck routes, rejects (405/403/413/400), forwards context and the Access JWT, maps errors; withFlightdeck passes other requests through</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t1.9"><strong>1.9</strong> @flightdeckhq/browser auto-capture</a></td><td><code>Create: packages/browser/package.json</code><br><code>Create: packages/browser/tsconfig.json</code><br><code>Create: packages/browser/vitest.config.ts</code><br><code>Create: packages/browser/src/ids.ts</code><br><span class="muted">+5 more</span></td><td>happy-dom tests cover ids, click/submit/view capture, batching and beacon fallback, SPA page views; pnpm size reports &lt; 3 KB gzip</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t1.10"><strong>1.10</strong> Pipelines stream schemas and dev provisioning</a></td><td><code>Create: apps/flightdeck/pipelines/events.schema.json</code><br><code>Create: apps/flightdeck/pipelines/sessions.schema.json</code><br><code>Create: scripts/provision-dev.sh</code><br><code>Modify: apps/flightdeck/wrangler.jsonc (IDs)</code></td><td>Script creates bucket, catalog, two streams, two Iceberg sinks, two pipelines, and D1 in a dev account; wrangler.jsonc holds the real IDs</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t1.11"><strong>1.11</strong> Demo app and local smoke test</a></td><td><code>Create: examples/demo-app/package.json</code><br><code>Create: examples/demo-app/wrangler.jsonc</code><br><code>Create: examples/demo-app/src/index.ts</code><br><code>Create: examples/demo-app/src/counter.ts</code><br><span class="muted">+2 more</span></td><td>smoke.sh: both Workers run locally; page, click, Worker-side track, and DO-side events reach the AppDO snapshot</td><td><span class="chip todo">Todo</span></td></tr><tr><td><a href="#t1.12"><strong>1.12</strong> Deploy to the dev account and verify Iceberg</a></td><td><code>Modify: docs/plans (record results in the FLIG-6 issue)</code></td><td>Demo traffic appears as rows in the Iceberg events and sessions tables, and the counts match the AppDO snapshot for the same hour</td><td><span class="chip todo">Todo</span></td></tr></tbody></table></div>
+
+  <h2>Task details</h2><p class="muted">Each task lists its files, the done condition, and numbered steps with complete code, commands, and expected output.</p><details class="task" id="t0.1"><summary><span class="tid">0.1</span> Workspace and tooling</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: package.json</code></li><li><code>Create: pnpm-workspace.yaml</code></li><li><code>Create: tsconfig.base.json</code></li><li><code>Create: biome.json</code></li><li><code>Create: .gitignore</code></li><li><code>Create: .nvmrc</code></li><li><code>Modify: README.md</code></li></ul><div class="k">Done when</div><p>pnpm install &amp;&amp; pnpm lint pass on an empty workspace</p><ol class="steps"><li><p>Create the root manifest. Exact versions were current on 2026-10-30; pnpm writes the lockfile.</p><div class="codelabel">package.json</div><pre><code class="lang-json">{
+  "name": "flightdeck",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.14.0",
+  "engines": { "node": "&gt;=24" },
+  "scripts": {
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "build": "pnpm -r build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}</code></pre></li><li><p>Workspace, compiler, and lint config.</p><div class="codelabel">pnpm-workspace.yaml</div><pre><code class="lang-yaml">packages:
+  - "apps/*"
+  - "packages/*"
+  - "examples/*"</code></pre><div class="codelabel">tsconfig.base.json</div><pre><code class="lang-json">{
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2024"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  }
+}</code></pre><div class="codelabel">biome.json</div><pre><code class="lang-json">{
+  "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["**", "!**/worker-configuration.d.ts", "!docs/**"] },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "javascript": { "formatter": { "quoteStyle": "double" } },
+  "linter": { "rules": { "recommended": true } }
+}</code></pre><div class="codelabel">.gitignore</div><pre><code class="lang-text">node_modules/
+dist/
+.wrangler/
+worker-configuration.d.ts
+.dev.vars*
+examples/demo-app/public/fd.js</code></pre><div class="codelabel">.nvmrc</div><pre><code class="lang-text">24</code></pre></li><li><p>Replace the README status line with a short layout section that points to docs/plans/.</p></li><li><p>Verify.</p><div class="run"><span class="k">Run</span><code>pnpm install &amp;&amp; pnpm lint</code><span class="k">Expect</span><span>lockfile created; biome reports no errors</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-5: pnpm workspace, TypeScript and Biome"</code></pre></li></ol></div></details><details class="task" id="t0.2"><summary><span class="tid">0.2</span> Test harness and CI</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: vitest.config.ts</code></li><li><code>Create: .github/workflows/ci.yml</code></li></ul><div class="k">Done when</div><p>pnpm test exits 0 (no projects yet is allowed: passWithNoTests); CI green on the PR</p><ol class="steps"><li><p>Root Vitest config: every package and app supplies its own vitest.config.ts and becomes a project. Worker code tests run in workerd through <code>@cloudflare/vitest-plugin</code> (the renamed <code>vitest-pool-workers</code>); browser code runs in happy-dom.</p><div class="codelabel">vitest.config.ts</div><pre><code class="lang-ts">import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    projects: ["packages/*", "apps/*"],
+    passWithNoTests: true,
+  },
+});</code></pre></li><li><p>CI on GitHub Actions (origin is github.com/gmackie/flightdeck).</p><div class="codelabel">.github/workflows/ci.yml</div><pre><code class="lang-yaml">name: ci
+on:
+  push: { branches: [main] }
+  pull_request: {}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter @flightdeckhq/browser --if-present size</code></pre></li><li><p>Verify and commit.</p><div class="run"><span class="k">Run</span><code>pnpm test</code><span class="k">Expect</span><span>exit 0, &quot;No test files found&quot; accepted</span></div><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-5: vitest projects and CI"</code></pre></li></ol></div></details><details class="task" id="t0.3"><summary><span class="tid">0.3</span> @flightdeckhq/schema: event contracts</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: packages/schema/package.json</code></li><li><code>Create: packages/schema/tsconfig.json</code></li><li><code>Create: packages/schema/vitest.config.ts</code></li><li><code>Create: packages/schema/src/events.ts</code></li><li><code>Create: packages/schema/src/index.ts</code></li><li><code>Test: packages/schema/test/events.test.ts</code></li></ul><div class="k">Done when</div><p>pnpm vitest run --project schema: events tests pass</p><ol class="steps"><li><p>Package files. Source is exported directly inside the workspace; publish builds come in Phase 6.</p><div class="codelabel">packages/schema/package.json</div><pre><code class="lang-json">{
+  "name": "@flightdeckhq/schema",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc -p ." },
+  "dependencies": { "valibot": "^1.5.0" }
+}</code></pre><div class="codelabel">packages/schema/tsconfig.json</div><pre><code class="lang-json">{ "extends": "../../tsconfig.base.json", "include": ["src", "test"] }</code></pre><div class="codelabel">packages/schema/vitest.config.ts</div><pre><code class="lang-ts">import { defineConfig } from "vitest/config";
+
+export default defineConfig({ test: { name: "schema", environment: "node" } });</code></pre></li><li><p>Write the failing test.</p><div class="codelabel">packages/schema/test/events.test.ts</div><pre><code class="lang-ts">import * as v from "valibot";
+import { describe, expect, it } from "vitest";
+import { IngestBatch, MAX_BATCH } from "../src/events";
+
+const event = { kind: "click", name: "pricing.cta", ts: 1_793_000_000_000, sessionId: "s".repeat(32) };
+
+describe("IngestBatch", () =&gt; {
+  it("accepts a well-formed batch", () =&gt; {
+    expect(v.safeParse(IngestBatch, { events: [event] }).success).toBe(true);
+  });
+
+  it("rejects empty and oversized batches", () =&gt; {
+    expect(v.safeParse(IngestBatch, { events: [] }).success).toBe(false);
+    expect(v.safeParse(IngestBatch, { events: Array(MAX_BATCH + 1).fill(event) }).success).toBe(false);
+  });
+
+  it("rejects more than 32 props", () =&gt; {
+    const props = Object.fromEntries(Array.from({ length: 33 }, (_, i) =&gt; [`k${i}`, i]));
+    expect(v.safeParse(IngestBatch, { events: [{ ...event, props }] }).success).toBe(false);
+  });
+
+  it("rejects malformed ids and unknown kinds", () =&gt; {
+    expect(v.safeParse(IngestBatch, { events: [{ ...event, sessionId: "bad id!" }] }).success).toBe(false);
+    expect(v.safeParse(IngestBatch, { events: [{ ...event, kind: "scroll" }] }).success).toBe(false);
+  });
+});</code></pre><div class="run"><span class="k">Run</span><code>pnpm vitest run --project schema</code><span class="k">Expect</span><span>FAIL: cannot resolve ../src/events</span></div></li><li><p>Implement the contracts. <code>StoredEvent</code> and <code>SessionRecord</code> are type aliases, not interfaces, so they satisfy the Pipelines binding's <code>Record&lt;string, unknown&gt;</code> constraint. Column names are snake_case to match the stream schemas in task 1.10.</p><div class="codelabel">packages/schema/src/events.ts</div><pre><code class="lang-ts">import * as v from "valibot";
+
+export const MAX_BATCH = 50;
+export const MAX_PROPS = 32;
+
+const Id = v.pipe(v.string(), v.minLength(8), v.maxLength(64), v.regex(/^[A-Za-z0-9_-]+$/));
+const PropValue = v.union([v.pipe(v.string(), v.maxLength(512)), v.number(), v.boolean(), v.null()]);
+const Props = v.pipe(
+  v.record(v.pipe(v.string(), v.maxLength(64)), PropValue),
+  v.check((p) =&gt; Object.keys(p).length &lt;= MAX_PROPS, `at most ${MAX_PROPS} props`),
+);
+
+export const EventKind = v.picklist(["page", "click", "submit", "view", "track", "identify"]);
+export type EventKind = v.InferOutput&lt;typeof EventKind&gt;;
+
+export const ClientEvent = v.object({
+  kind: EventKind,
+  name: v.pipe(v.string(), v.minLength(1), v.maxLength(128)),
+  ts: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  sessionId: v.optional(Id),
+  anonymousId: v.optional(Id),
+  userId: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(128))),
+  path: v.optional(v.pipe(v.string(), v.maxLength(2048))),
+  referrer: v.optional(v.pipe(v.string(), v.maxLength(2048))),
+  props: v.optional(Props),
+});
+export type ClientEvent = v.InferOutput&lt;typeof ClientEvent&gt;;
+
+export const RequestContext = v.object({
+  country: v.optional(v.pipe(v.string(), v.maxLength(2))),
+  userAgent: v.optional(v.pipe(v.string(), v.maxLength(512))),
+});
+export type RequestContext = v.InferOutput&lt;typeof RequestContext&gt;;
+
+export const IngestBatch = v.object({
+  events: v.pipe(v.array(ClientEvent), v.minLength(1), v.maxLength(MAX_BATCH)),
+  context: v.optional(RequestContext),
+  accessJwt: v.optional(v.pipe(v.string(), v.maxLength(8192))),
+});
+export type IngestBatch = v.InferOutput&lt;typeof IngestBatch&gt;;
+
+export type EventSource = "browser" | "server";
+
+/** One row of the Iceberg `events` table. */
+export type StoredEvent = {
+  event_id: string;
+  app_id: string;
+  kind: EventKind;
+  name: string;
+  ts: number;
+  received_at: number;
+  session_id: string | null;
+  anonymous_id: string | null;
+  user_id: string | null;
+  path: string | null;
+  referrer: string | null;
+  props: string | null;
+  country: string | null;
+  device: string;
+  browser: string;
+  os: string;
+  source: EventSource;
+};
+
+/** One row of the Iceberg `sessions` table, written when a session closes. */
+export type SessionRecord = {
+  session_id: string;
+  app_id: string;
+  anonymous_id: string | null;
+  user_id: string | null;
+  started_at: number;
+  ended_at: number;
+  duration_ms: number;
+  entry: string | null;
+  exit: string | null;
+  steps: string;
+  step_count: number;
+  event_count: number;
+  country: string | null;
+  device: string;
+};
+
+export type IngestResult = { accepted: number };
+
+/** What `env.FLIGHTDECK` exposes to app Workers over the service binding. */
+export interface IngestRpc {
+  ingest(batch: unknown): Promise&lt;IngestResult&gt;;
+  track(event: unknown): Promise&lt;IngestResult&gt;;
+  identify(input: unknown): Promise&lt;IngestResult&gt;;
+}</code></pre><div class="codelabel">packages/schema/src/index.ts</div><pre><code class="lang-ts">export * from "./events";</code></pre><div class="run"><span class="k">Run</span><code>pnpm vitest run --project schema</code><span class="k">Expect</span><span>4 passed</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-5: event and session contracts"</code></pre></li></ol></div></details><details class="task" id="t0.4"><summary><span class="tid">0.4</span> @flightdeckhq/schema: route, user agent, steps, hour key</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: packages/schema/src/route.ts</code></li><li><code>Create: packages/schema/src/user-agent.ts</code></li><li><code>Create: packages/schema/src/steps.ts</code></li><li><code>Create: packages/schema/src/time.ts</code></li><li><code>Modify: packages/schema/src/index.ts</code></li><li><code>Test: packages/schema/test/helpers.test.ts</code></li></ul><div class="k">Done when</div><p>pnpm vitest run --project schema: all helper tests pass; pnpm typecheck passes</p><ol class="steps"><li><p>Write the failing tests.</p><div class="codelabel">packages/schema/test/helpers.test.ts</div><pre><code class="lang-ts">import { describe, expect, it } from "vitest";
+import { hourKey, normalizeRoute, parseUserAgent, stepName } from "../src";
+
+describe("normalizeRoute", () =&gt; {
+  it.each([
+    ["/users/123", "/users/:id"],
+    ["/orders/0b6f8d0e-6c1e-4a59-9a43-6f1f0f6c2b11/items", "/orders/:id/items"],
+    ["/r/01JBQ8Z6X3K2M4N5P6Q7R8S9T0", "/r/:id"],
+    ["/blob/9f86d081884c7d65", "/blob/:id"],
+    ["/pricing?plan=pro#faq", "/pricing"],
+    ["/docs/", "/docs"],
+    ["", "/"],
+    ["/", "/"],
+  ])("%s -&gt; %s", (input, out) =&gt; expect(normalizeRoute(input)).toBe(out));
+});
+
+describe("parseUserAgent", () =&gt; {
+  it("detects desktop Chrome on macOS", () =&gt; {
+    const ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+    expect(parseUserAgent(ua)).toEqual({ device: "desktop", browser: "Chrome", os: "macOS" });
+  });
+  it("detects iPhone Safari, iPad, bots, and missing UAs", () =&gt; {
+    expect(parseUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1"))
+      .toEqual({ device: "mobile", browser: "Safari", os: "iOS" });
+    expect(parseUserAgent("Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) Safari/604.1").device).toBe("tablet");
+    expect(parseUserAgent("Mozilla/5.0 (compatible; Googlebot/2.1)").device).toBe("bot");
+    expect(parseUserAgent(undefined)).toEqual({ device: "unknown", browser: "Other", os: "Other" });
+  });
+});
+
+describe("stepName", () =&gt; {
+  it("uses the path for pages, the name otherwise, and skips identify", () =&gt; {
+    expect(stepName({ kind: "page", name: "page", path: "/pricing" })).toBe("/pricing");
+    expect(stepName({ kind: "click", name: "pricing.cta", path: "/pricing" })).toBe("pricing.cta");
+    expect(stepName({ kind: "identify", name: "identify", path: "/" })).toBeNull();
+  });
+});
+
+it("hourKey truncates to the UTC hour", () =&gt; {
+  expect(hourKey(Date.UTC(2026, 9, 30, 14, 59, 59))).toBe("2026-10-30T14");
+});</code></pre><div class="run"><span class="k">Run</span><code>pnpm vitest run --project schema</code><span class="k">Expect</span><span>FAIL: hourKey / normalizeRoute not exported</span></div></li><li><p>Implement.</p><div class="codelabel">packages/schema/src/route.ts</div><pre><code class="lang-ts">const ID_SEGMENT = [
+  /^\d+$/,
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  /^[0-9A-HJKMNP-TV-Z]{26}$/,
+  /^[0-9a-f]{16,}$/i,
+];
+
+/** Collapses ids in a path so `/users/123` and `/users/456` become one journey step. */
+export function normalizeRoute(path: string): string {
+  const pathname = path.split(/[?#]/, 1)[0] || "/";
+  const out = pathname
+    .split("/")
+    .map((seg) =&gt; (seg &amp;&amp; ID_SEGMENT.some((re) =&gt; re.test(seg)) ? ":id" : seg))
+    .join("/");
+  return out.length &gt; 1 &amp;&amp; out.endsWith("/") ? out.slice(0, -1) : out || "/";
+}</code></pre><div class="codelabel">packages/schema/src/user-agent.ts</div><pre><code class="lang-ts">export type UserAgentInfo = {
+  device: "mobile" | "tablet" | "desktop" | "bot" | "unknown";
+  browser: string;
+  os: string;
+};
+
+/** Coarse device, browser, and OS families. Deliberately small; no full UA database. */
+export function parseUserAgent(ua: string | undefined): UserAgentInfo {
+  if (!ua) return { device: "unknown", browser: "Other", os: "Other" };
+  const bot = /bot|crawl|spider|slurp|headless|lighthouse/i.test(ua);
+  const tablet = /iPad|Tablet/i.test(ua) || (/Android/.test(ua) &amp;&amp; !/Mobile/.test(ua));
+  const mobile = !tablet &amp;&amp; /Mobi|iPhone|iPod|Android/.test(ua);
+  const browser = /Edg\//.test(ua)
+    ? "Edge"
+    : /OPR\/|Opera/.test(ua)
+      ? "Opera"
+      : /Firefox\/|FxiOS/.test(ua)
+        ? "Firefox"
+        : /Chrome\/|CriOS/.test(ua)
+          ? "Chrome"
+          : /Safari\//.test(ua)
+            ? "Safari"
+            : "Other";
+  const os = /iPhone|iPad|iPod/.test(ua)
+    ? "iOS"
+    : /Android/.test(ua)
+      ? "Android"
+      : /CrOS/.test(ua)
+        ? "ChromeOS"
+        : /Mac OS X|Macintosh/.test(ua)
+          ? "macOS"
+          : /Windows/.test(ua)
+            ? "Windows"
+            : /Linux/.test(ua)
+              ? "Linux"
+              : "Other";
+  return { device: bot ? "bot" : tablet ? "tablet" : mobile ? "mobile" : "desktop", browser, os };
+}</code></pre><div class="codelabel">packages/schema/src/steps.ts</div><pre><code class="lang-ts">import type { StoredEvent } from "./events";
+
+export const START = "$start";
+export const EXIT = "$exit";
+
+export type Transition = { source: string; target: string; count: number };
+
+/** The journey step an event contributes, or null when it is not a step. */
+export function stepName(e: Pick&lt;StoredEvent, "kind" | "name" | "path"&gt;): string | null {
+  if (e.kind === "identify") return null;
+  if (e.kind === "page") return e.path ?? e.name;
+  return e.name;
+}</code></pre><div class="codelabel">packages/schema/src/time.ts</div><pre><code class="lang-ts">/** UTC hour bucket used to shard AppDOs, e.g. `2026-10-30T14`. */
+export function hourKey(ts: number): string {
+  return new Date(ts).toISOString().slice(0, 13);
+}</code></pre><div class="codelabel">packages/schema/src/index.ts</div><pre><code class="lang-ts">export * from "./events";
+export * from "./route";
+export * from "./steps";
+export * from "./time";
+export * from "./user-agent";</code></pre><div class="run"><span class="k">Run</span><code>pnpm vitest run --project schema &amp;&amp; pnpm typecheck</code><span class="k">Expect</span><span>all schema tests pass; tsc clean</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-5: route normalization, UA families, journey steps"</code></pre></li></ol></div></details><details class="task" id="t1.1"><summary><span class="tid">1.1</span> Flightdeck Worker scaffold</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: apps/flightdeck/package.json</code></li><li><code>Create: apps/flightdeck/tsconfig.json</code></li><li><code>Create: apps/flightdeck/wrangler.jsonc</code></li><li><code>Create: apps/flightdeck/migrations/0001_apps.sql</code></li><li><code>Create: apps/flightdeck/vitest.config.ts</code></li><li><code>Create: apps/flightdeck/test/setup.ts</code></li><li><code>Create: apps/flightdeck/test/env.d.ts</code></li><li><code>Create: apps/flightdeck/test/fixtures.ts</code></li><li><code>Create: apps/flightdeck/src/index.ts</code></li><li><code>Create: apps/flightdeck/src/do/app.ts (stub)</code></li><li><code>Create: apps/flightdeck/src/do/session.ts (stub)</code></li><li><code>Create: apps/flightdeck/src/ingest/entrypoint.ts (stub)</code></li><li><code>Test: apps/flightdeck/test/health.test.ts</code></li></ul><div class="k">Done when</div><p>GET /healthz returns {ok:true} in workerd; wrangler types generates Env with DB, SESSION, APP, EVENTS, SESSIONS</p><ol class="steps"><li><p>Package and Wrangler config. The <code>&lt;...&gt;</code> IDs are filled in by task 1.10; local dev and tests do not need them.</p><div class="codelabel">apps/flightdeck/package.json</div><pre><code class="lang-json">{
+  "name": "@flightdeckhq/app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "wrangler types &amp;&amp; tsc -p ."
+  },
+  "dependencies": {
+    "@flightdeckhq/schema": "workspace:*",
+    "jose": "^6.2.14",
+    "ulid": "^3.0.2",
+    "valibot": "^1.5.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.11",
+    "wrangler": "^4.156.0"
+  }
+}</code></pre><div class="codelabel">apps/flightdeck/tsconfig.json</div><pre><code class="lang-json">{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": ["@cloudflare/vitest-plugin/types"] },
+  "include": ["src", "test", "worker-configuration.d.ts"]
+}</code></pre><div class="codelabel">apps/flightdeck/wrangler.jsonc</div><pre><code class="lang-jsonc">{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "flightdeck",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-30",
+  "durable_objects": {
+    "bindings": [
+      { "name": "SESSION", "class_name": "SessionDO" },
+      { "name": "APP", "class_name": "AppDO" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionDO", "AppDO"] }],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "flightdeck", "database_id": "&lt;d1 id&gt;", "migrations_dir": "migrations" }
+  ],
+  "pipelines": [
+    { "binding": "EVENTS", "stream": "&lt;fd_events stream id&gt;" },
+    { "binding": "SESSIONS", "stream": "&lt;fd_sessions stream id&gt;" }
+  ],
+  "vars": { "ACCESS_TEAM_DOMAIN": "", "FLIGHTDECK_DEV": "0" }
+}</code></pre><div class="codelabel">apps/flightdeck/migrations/0001_apps.sql</div><pre><code class="lang-sql">CREATE TABLE apps (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  access_aud TEXT,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+);</code></pre></li><li><p>Vitest in workerd with D1 migrations applied before each file. If <code>readD1Migrations</code> moved during the package rename, import it from <code>@cloudflare/vitest-plugin/config</code>. If the plugin rejects the <code>pipelines</code> binding locally, point <code>configPath</code> at a <code>wrangler.test.jsonc</code> without it: tests stub every Pipelines write through <code>sinks</code> (task 1.7).</p><div class="codelabel">apps/flightdeck/vitest.config.ts</div><pre><code class="lang-ts">import path from "node:path";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
+import { defineConfig } from "vitest/config";
+
+export default defineConfig(async () =&gt; {
+  const migrations = await readD1Migrations(path.join(import.meta.dirname, "migrations"));
+  return {
+    plugins: [
+      cloudflareTest({
+        wrangler: { configPath: "./wrangler.jsonc" },
+        miniflare: { bindings: { TEST_MIGRATIONS: migrations, FLIGHTDECK_DEV: "1" } },
+      }),
+    ],
+    test: { name: "flightdeck", setupFiles: ["./test/setup.ts"] },
+  };
+});</code></pre><div class="codelabel">apps/flightdeck/test/setup.ts</div><pre><code class="lang-ts">import { applyD1Migrations } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+
+await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);</code></pre><div class="codelabel">apps/flightdeck/test/env.d.ts</div><pre><code class="lang-ts">declare namespace Cloudflare {
+  interface Env {
+    TEST_MIGRATIONS: D1Migration[];
+  }
+}</code></pre><div class="codelabel">apps/flightdeck/test/fixtures.ts</div><pre><code class="lang-ts">import type { StoredEvent } from "@flightdeckhq/schema";
+
+export const T0 = Date.UTC(2026, 9, 30, 14, 0);
+export const CHROME =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+export const sid = (c: string) =&gt; c.repeat(32);
+
+export function row(over: Partial&lt;StoredEvent&gt; = {}): StoredEvent {
+  return {
+    event_id: crypto.randomUUID(),
+    app_id: "app_test",
+    kind: "page",
+    name: "page",
+    ts: T0,
+    received_at: T0,
+    session_id: sid("a"),
+    anonymous_id: sid("z"),
+    user_id: null,
+    path: "/",
+    referrer: null,
+    props: null,
+    country: "US",
+    device: "desktop",
+    browser: "Chrome",
+    os: "macOS",
+    source: "browser",
+    ...over,
+  };
+}</code></pre></li><li><p>Failing health test, then the entry module with stub classes (filled in by tasks 1.5–1.7).</p><div class="codelabel">apps/flightdeck/test/health.test.ts</div><pre><code class="lang-ts">import { exports } from "cloudflare:workers";
+import { expect, it } from "vitest";
+
+it("serves /healthz", async () =&gt; {
+  const res = await exports.default.fetch("http://flightdeck.test/healthz");
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ ok: true });
+});</code></pre><div class="codelabel">apps/flightdeck/src/index.ts</div><pre><code class="lang-ts">export { AppDO } from "./do/app";
+export { SessionDO } from "./do/session";
+export { Ingest } from "./ingest/entrypoint";
+
+export default {
+  async fetch(request): Promise&lt;Response&gt; {
+    const url = new URL(request.url);
+    if (url.pathname === "/healthz") return Response.json({ ok: true });
+    return new Response("Not found", { status: 404 });
+  },
+} satisfies ExportedHandler&lt;Env&gt;;</code></pre><div class="codelabel">apps/flightdeck/src/do/app.ts</div><pre><code class="lang-ts">import { DurableObject } from "cloudflare:workers";
+
+export class AppDO extends DurableObject&lt;Env&gt; {}</code></pre><div class="codelabel">apps/flightdeck/src/do/session.ts</div><pre><code class="lang-ts">import { DurableObject } from "cloudflare:workers";
+
+export class SessionDO extends DurableObject&lt;Env&gt; {}</code></pre><div class="codelabel">apps/flightdeck/src/ingest/entrypoint.ts</div><pre><code class="lang-ts">import { WorkerEntrypoint } from "cloudflare:workers";
+
+export class Ingest extends WorkerEntrypoint&lt;Env, { appId: string }&gt; {}</code></pre><div class="run"><span class="k">Run</span><code>pnpm install &amp;&amp; pnpm --filter @flightdeckhq/app typecheck &amp;&amp; pnpm vitest run --project flightdeck</code><span class="k">Expect</span><span>health test passes; Env has DB, SESSION, APP, EVENTS, SESSIONS</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-6: Flightdeck Worker scaffold"</code></pre></li></ol></div></details><details class="task" id="t1.2"><summary><span class="tid">1.2</span> App registry</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: apps/flightdeck/src/apps.ts</code></li><li><code>Test: apps/flightdeck/test/apps.test.ts</code></li></ul><div class="k">Done when</div><p>Registry tests pass: lookups, unknown apps, positive and negative cache TTLs</p><ol class="steps"><li><p>Failing test.</p><div class="codelabel">apps/flightdeck/test/apps.test.ts</div><pre><code class="lang-ts">import { env } from "cloudflare:workers";
+import { beforeEach, expect, it } from "vitest";
+import { clearAppCache, getApp } from "../src/apps";
+
+beforeEach(() =&gt; clearAppCache());
+
+it("returns registered apps and null for unknown ids", async () =&gt; {
+  await env.DB.prepare("INSERT INTO apps (id, name) VALUES ('app_reg', 'Reg')").run();
+  expect(await getApp(env.DB, "app_reg")).toEqual({ id: "app_reg", name: "Reg", access_aud: null });
+  expect(await getApp(env.DB, "app_nope")).toBeNull();
+});
+
+it("caches hits for 60s and misses for 5s", async () =&gt; {
+  await env.DB.prepare("INSERT INTO apps (id, name) VALUES ('app_c', 'C')").run();
+  await getApp(env.DB, "app_c", 0);
+  await env.DB.prepare("DELETE FROM apps WHERE id = 'app_c'").run();
+  expect(await getApp(env.DB, "app_c", 59_000)).not.toBeNull();
+  expect(await getApp(env.DB, "app_c", 61_000)).toBeNull();
+  await env.DB.prepare("INSERT INTO apps (id, name) VALUES ('app_c', 'C')").run();
+  expect(await getApp(env.DB, "app_c", 65_000)).toBeNull();
+  expect(await getApp(env.DB, "app_c", 67_000)).not.toBeNull();
+});</code></pre></li><li><p>Implement. Misses are cached briefly so a newly created app starts receiving events within seconds.</p><div class="codelabel">apps/flightdeck/src/apps.ts</div><pre><code class="lang-ts">export type AppRecord = { id: string; name: string; access_aud: string | null };
+
+const HIT_TTL_MS = 60_000;
+const MISS_TTL_MS = 5_000;
+const cache = new Map&lt;string, { app: AppRecord | null; expires: number }&gt;();
+
+export async function getApp(db: D1Database, id: string, now = Date.now()): Promise&lt;AppRecord | null&gt; {
+  const hit = cache.get(id);
+  if (hit &amp;&amp; hit.expires &gt; now) return hit.app;
+  const app = await db
+    .prepare("SELECT id, name, access_aud FROM apps WHERE id = ?")
+    .bind(id)
+    .first&lt;AppRecord&gt;();
+  cache.set(id, { app, expires: now + (app ? HIT_TTL_MS : MISS_TTL_MS) });
+  return app;
+}
+
+export function clearAppCache(): void {
+  cache.clear();
+}</code></pre><div class="run"><span class="k">Run</span><code>pnpm vitest run --project flightdeck apps</code><span class="k">Expect</span><span>2 passed</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-6: app registry with cached lookups"</code></pre></li></ol></div></details><details class="task" id="t1.3"><summary><span class="tid">1.3</span> Cloudflare Access identity</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: apps/flightdeck/src/access.ts</code></li><li><code>Test: apps/flightdeck/test/access.test.ts</code></li></ul><div class="k">Done when</div><p>Valid tokens resolve to sub; wrong issuer, wrong audience, and expired tokens resolve to null</p><ol class="steps"><li><p>Failing test with a locally generated key set (no network).</p><div class="codelabel">apps/flightdeck/test/access.test.ts</div><pre><code class="lang-ts">import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from "jose";
+import { beforeAll, expect, it } from "vitest";
+import { verifyAccessUser } from "../src/access";
+
+const TEAM = "https://acme.cloudflareaccess.com";
+let keys: ReturnType&lt;typeof createLocalJWKSet&gt;;
+let privateKey: CryptoKey;
+
+beforeAll(async () =&gt; {
+  const pair = await generateKeyPair("RS256");
+  privateKey = pair.privateKey;
+  keys = createLocalJWKSet({ keys: [{ ...(await exportJWK(pair.publicKey)), kid: "k1", alg: "RS256" }] });
+});
+
+const sign = (claims: { iss?: string; aud?: string; exp?: string | number }) =&gt;
+  new SignJWT({})
+    .setProtectedHeader({ alg: "RS256", kid: "k1" })
+    .setSubject("user-uuid-1")
+    .setIssuer(claims.iss ?? TEAM)
+    .setAudience(claims.aud ?? "aud-app")
+    .setExpirationTime(claims.exp ?? "5m")
+    .sign(privateKey);
+
+it("returns sub for a valid token", async () =&gt; {
+  expect(await verifyAccessUser(await sign({}), { teamDomain: TEAM, keys })).toBe("user-uuid-1");
+  expect(await verifyAccessUser(await sign({}), { teamDomain: TEAM, audience: "aud-app", keys })).toBe("user-uuid-1");
+});
+
+it("rejects wrong issuer, wrong audience, and expired tokens", async () =&gt; {
+  expect(await verifyAccessUser(await sign({ iss: "https://evil.cloudflareaccess.com" }), { teamDomain: TEAM, keys })).toBeNull();
+  expect(await verifyAccessUser(await sign({ aud: "other" }), { teamDomain: TEAM, audience: "aud-app", keys })).toBeNull();
+  expect(await verifyAccessUser(await sign({ exp: Math.floor(Date.now() / 1000) - 60 }), { teamDomain: TEAM, keys })).toBeNull();
+});</code></pre></li><li><p>Implement. The audience is checked when the app has <code>access_aud</code> set; otherwise any token from the account's Access team identifies the user.</p><div class="codelabel">apps/flightdeck/src/access.ts</div><pre><code class="lang-ts">import { type JWTVerifyGetKey, createRemoteJWKSet, jwtVerify } from "jose";
+
+const remoteKeys = new Map&lt;string, JWTVerifyGetKey&gt;();
+
+function teamKeys(teamDomain: string): JWTVerifyGetKey {
+  let keys = remoteKeys.get(teamDomain);
+  if (!keys) {
+    keys = createRemoteJWKSet(new URL(`${teamDomain}/cdn-cgi/access/certs`));
+    remoteKeys.set(teamDomain, keys);
+  }
+  return keys;
+}
+
+/** The Access user id (`sub`) when the token is valid for this team and audience, else null. */
+export async function verifyAccessUser(
+  token: string,
+  opts: { teamDomain: string; audience?: string | null; keys?: JWTVerifyGetKey },
+): Promise&lt;string | null&gt; {
+  try {
+    const { payload } = await jwtVerify(token, opts.keys ?? teamKeys(opts.teamDomain), {
+      issuer: opts.teamDomain,
+      ...(opts.audience ? { audience: opts.audience } : {}),
+    });
+    return typeof payload.sub === "string" &amp;&amp; payload.sub ? payload.sub : null;
+  } catch {
+    return null;
+  }
+}</code></pre><div class="run"><span class="k">Run</span><code>pnpm vitest run --project flightdeck access</code><span class="k">Expect</span><span>2 passed</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-6: identify users from Cloudflare Access JWTs"</code></pre></li></ol></div></details><details class="task" id="t1.4"><summary><span class="tid">1.4</span> Ingest service (pure logic)</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: apps/flightdeck/src/ingest/service.ts</code></li><li><code>Test: apps/flightdeck/test/ingest-service.test.ts</code></li></ul><div class="k">Done when</div><p>Validation, enrichment, clock clamping, Access identity, bot filtering, and fan-out grouping are covered by tests with fake deps</p><ol class="steps"><li><p>Failing test. All side effects arrive through <code>IngestDeps</code>, so this runs without bindings.</p><div class="codelabel">apps/flightdeck/test/ingest-service.test.ts</div><pre><code class="lang-ts">import type { StoredEvent } from "@flightdeckhq/schema";
+import { describe, expect, it } from "vitest";
+import { type IngestDeps, IngestError, ingestBatch } from "../src/ingest/service";
+import { CHROME, sid } from "./fixtures";
+
+const NOW = Date.UTC(2026, 9, 30, 14, 5);
+
+function fakeDeps(overrides: Partial&lt;IngestDeps&gt; = {}) {
+  const calls = {
+    events: [] as StoredEvent[][],
+    sessions: [] as [string, string, StoredEvent[]][],
+    counts: [] as [string, string, StoredEvent[]][],
+  };
+  let n = 0;
+  const deps: IngestDeps = {
+    now: () =&gt; NOW,
+    newId: () =&gt; `id${++n}`,
+    resolveUser: async () =&gt; null,
+    sendEvents: async (rows) =&gt; void calls.events.push(rows),
+    appendToSession: async (a, s, rows) =&gt; void calls.sessions.push([a, s, rows]),
+    recordCounts: async (a, h, rows) =&gt; void calls.counts.push([a, h, rows]),
+    ...overrides,
+  };
+  return { deps, calls };
+}
+
+const page = (over = {}) =&gt; ({ kind: "page", name: "/users/42", path: "/users/42", ts: NOW, sessionId: sid("a"), ...over });
+
+describe("ingestBatch", () =&gt; {
+  it("rejects invalid batches", async () =&gt; {
+    await expect(ingestBatch("app_1", { events: [] }, "browser", fakeDeps().deps)).rejects.toBeInstanceOf(IngestError);
+  });
+
+  it("stamps, normalizes, and enriches rows", async () =&gt; {
+    const { deps, calls } = fakeDeps();
+    const res = await ingestBatch(
+      "app_1",
+      { events: [page({ referrer: "https://news.example.com/item?id=9" })], context: { country: "GB", userAgent: CHROME } },
+      "browser",
+      deps,
+    );
+    expect(res).toEqual({ accepted: 1 });
+    expect(calls.events[0]![0]).toEqual({
+      event_id: "id1", app_id: "app_1", kind: "page", name: "/users/42", ts: NOW, received_at: NOW,
+      session_id: sid("a"), anonymous_id: null, user_id: null, path: "/users/:id",
+      referrer: "news.example.com", props: null, country: "GB",
+      device: "desktop", browser: "Chrome", os: "macOS", source: "browser",
+    });
+  });
+
+  it("replaces client timestamps outside [-24h, +5m] with the receive time", async () =&gt; {
+    const { deps, calls } = fakeDeps();
+    await ingestBatch("app_1", { events: [page({ ts: NOW + 10 * 60_000 }), page({ ts: NOW - 60_000 })] }, "browser", deps);
+    expect(calls.events[0]!.map((r) =&gt; r.ts)).toEqual([NOW, NOW - 60_000]);
+  });
+
+  it("uses the Access user unless the event names a user", async () =&gt; {
+    const { deps, calls } = fakeDeps({ resolveUser: async () =&gt; "access-sub" });
+    await ingestBatch("app_1", { events: [page(), page({ userId: "explicit" })], accessJwt: "jwt" }, "browser", deps);
+    expect(calls.events[0]!.map((r) =&gt; r.user_id)).toEqual(["access-sub", "explicit"]);
+  });
+
+  it("drops bot traffic", async () =&gt; {
+    const { deps, calls } = fakeDeps();
+    const res = await ingestBatch("app_1", { events: [page()], context: { userAgent: "Googlebot/2.1" } }, "browser", deps);
+    expect(res).toEqual({ accepted: 0 });
+    expect(calls.events).toEqual([]);
+  });
+
+  it("fans out once to Pipelines, per session to SessionDOs, per hour to AppDOs", async () =&gt; {
+    const { deps, calls } = fakeDeps();
+    const lastHour = NOW - 10 * 60_000;
+    await ingestBatch(
+      "app_1",
+      { events: [page(), page({ sessionId: sid("b") }), page({ sessionId: undefined }), page({ ts: lastHour })] },
+      "browser",
+      deps,
+    );
+    expect(calls.events).toHaveLength(1);
+    expect(calls.sessions.map(([, s, rows]) =&gt; [s, rows.length])).toEqual([[sid("a"), 2], [sid("b"), 1]]);
+    expect(calls.counts.map(([, h, rows]) =&gt; [h, rows.length])).toEqual([["2026-10-30T14", 3], ["2026-10-30T13", 1]]);
+  });
+});</code></pre></li><li><p>Implement.</p><div class="codelabel">apps/flightdeck/src/ingest/service.ts</div><pre><code class="lang-ts">import {
+  type ClientEvent,
+  type EventSource,
+  IngestBatch,
+  type IngestResult,
+  type StoredEvent,
+  type UserAgentInfo,
+  hourKey,
+  normalizeRoute,
+  parseUserAgent,
+} from "@flightdeckhq/schema";
+import * as v from "valibot";
+
+const MAX_FUTURE_MS = 5 * 60_000;
+const MAX_PAST_MS = 24 * 60 * 60_000;
+
+export interface IngestDeps {
+  now(): number;
+  newId(): string;
+  resolveUser(accessJwt: string): Promise&lt;string | null&gt;;
+  sendEvents(rows: StoredEvent[]): Promise&lt;void&gt;;
+  appendToSession(appId: string, sessionId: string, rows: StoredEvent[]): Promise&lt;void&gt;;
+  recordCounts(appId: string, hour: string, rows: StoredEvent[]): Promise&lt;void&gt;;
+}
+
+export class IngestError extends Error {
+  constructor(message: string, readonly issues?: unknown) {
+    super(message);
+  }
+}
+
+export async function ingestBatch(appId: string, input: unknown, source: EventSource, deps: IngestDeps): Promise&lt;IngestResult&gt; {
+  const parsed = v.safeParse(IngestBatch, input);
+  if (!parsed.success) throw new IngestError("invalid batch", v.flatten(parsed.issues));
+  const { events, context, accessJwt } = parsed.output;
+
+  const ua = parseUserAgent(context?.userAgent);
+  if (ua.device === "bot") return { accepted: 0 };
+  const receivedAt = deps.now();
+  const accessUser = accessJwt ? await deps.resolveUser(accessJwt) : null;
+  const rows = events.map((e) =&gt;
+    toRow(appId, e, { id: deps.newId(), receivedAt, ua, accessUser, source, country: context?.country ?? null }),
+  );
+
+  const work = [deps.sendEvents(rows)];
+  for (const [sessionId, group] of groupBy(rows, (r) =&gt; r.session_id)) {
+    work.push(deps.appendToSession(appId, sessionId, group));
+  }
+  for (const [hour, group] of groupBy(rows, (r) =&gt; hourKey(r.ts))) {
+    work.push(deps.recordCounts(appId, hour, group));
+  }
+  await Promise.all(work);
+  return { accepted: rows.length };
+}
+
+type RowContext = {
+  id: string;
+  receivedAt: number;
+  ua: UserAgentInfo;
+  accessUser: string | null;
+  source: EventSource;
+  country: string | null;
+};
+
+function toRow(appId: string, e: ClientEvent, c: RowContext): StoredEvent {
+  const skewed = e.ts &gt; c.receivedAt + MAX_FUTURE_MS || e.ts &lt; c.receivedAt - MAX_PAST_MS;
+  return {
+    event_id: c.id,
+    app_id: appId,
+    kind: e.kind,
+    name: e.name,
+    ts: skewed ? c.receivedAt : e.ts,
+    received_at: c.receivedAt,
+    session_id: e.sessionId ?? null,
+    anonymous_id: e.anonymousId ?? null,
+    user_id: e.userId ?? c.accessUser,
+    path: e.path ? normalizeRoute(e.path) : null,
+    referrer: e.referrer ? referrerHost(e.referrer) : null,
+    props: e.props ? JSON.stringify(e.props) : null,
+    country: c.country,
+    device: c.ua.device,
+    browser: c.ua.browser,
+    os: c.ua.os,
+    source: c.source,
+  };
+}
+
+/** Keep only the referring host; full referrer URLs often carry personal data. */
+function referrerHost(referrer: string): string | null {
+  try {
+    return new URL(referrer).host || null;
+  } catch {
+    return null;
+  }
+}
+
+function groupBy&lt;T&gt;(items: T[], key: (item: T) =&gt; string | null): Map&lt;string, T[]&gt; {
+  const groups = new Map&lt;string, T[]&gt;();
+  for (const item of items) {
+    const k = key(item);
+    if (k === null) continue;
+    const group = groups.get(k);
+    if (group) group.push(item);
+    else groups.set(k, [item]);
+  }
+  return groups;
+}</code></pre><div class="run"><span class="k">Run</span><code>pnpm vitest run --project flightdeck ingest-service</code><span class="k">Expect</span><span>6 passed</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-6: ingest validation, enrichment and fan-out"</code></pre></li></ol></div></details><details class="task" id="t1.5"><summary><span class="tid">1.5</span> AppDO: hourly counters and transitions</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: apps/flightdeck/src/do/shards.ts</code></li><li><code>Modify: apps/flightdeck/src/do/app.ts</code></li><li><code>Test: apps/flightdeck/test/app-do.test.ts</code></li></ul><div class="k">Done when</div><p>Counters, unique sessions, and transition counts accumulate and come back sorted from snapshot()</p><ol class="steps"><li><p>Failing test.</p><div class="codelabel">apps/flightdeck/test/app-do.test.ts</div><pre><code class="lang-ts">import { env } from "cloudflare:workers";
+import { expect, it } from "vitest";
+import { appShard } from "../src/do/shards";
+import { row, sid } from "./fixtures";
+
+it("counts events by kind and name, and unique sessions", async () =&gt; {
+  const shard = appShard(env, "app_count", "2026-10-30T14");
+  await shard.recordEvents([row({ path: "/" }), row({ path: "/" }), row({ kind: "click", name: "cta", session_id: sid("b") })]);
+  expect(await shard.snapshot()).toEqual({
+    counters: [
+      { kind: "click", name: "cta", count: 1 },
+      { kind: "page", name: "/", count: 2 },
+    ],
+    transitions: [],
+    sessions: 2,
+  });
+});
+
+it("accumulates transitions", async () =&gt; {
+  const shard = appShard(env, "app_tr", "2026-10-30T14");
+  await shard.recordTransitions([{ source: "$start", target: "/", count: 1 }]);
+  await shard.recordTransitions([{ source: "$start", target: "/", count: 2 }, { source: "/", target: "cta", count: 1 }]);
+  expect((await shard.snapshot()).transitions).toEqual([
+    { source: "$start", target: "/", count: 3 },
+    { source: "/", target: "cta", count: 1 },
+  ]);
+});</code></pre></li><li><p>Implement. Exact unique-session sets are fine per app-hour at v1 traffic; risk R1 in the design covers the sharding path.</p><div class="codelabel">apps/flightdeck/src/do/shards.ts</div><pre><code class="lang-ts">export const appShard = (env: Env, appId: string, hour: string) =&gt; env.APP.get(env.APP.idFromName(`${appId}:${hour}`));
+
+export const sessionStub = (env: Env, appId: string, sessionId: string) =&gt;
+  env.SESSION.get(env.SESSION.idFromName(`${appId}:${sessionId}`));</code></pre><div class="codelabel">apps/flightdeck/src/do/app.ts</div><pre><code class="lang-ts">import type { StoredEvent, Transition } from "@flightdeckhq/schema";
+import { DurableObject } from "cloudflare:workers";
+
+export type AppSnapshot = {
+  counters: { kind: string; name: string; count: number }[];
+  transitions: Transition[];
+  sessions: number;
+};
+
+/** Live counters for one app and one UTC hour. */
+export class AppDO extends DurableObject&lt;Env&gt; {
+  private readonly sql: SqlStorage;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS counters (kind TEXT NOT NULL, name TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (kind, name));
+      CREATE TABLE IF NOT EXISTS transitions (source TEXT NOT NULL, target TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (source, target));
+      CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY);
+    `);
+  }
+
+  recordEvents(rows: StoredEvent[]): void {
+    for (const r of rows) {
+      this.sql.exec(
+        "INSERT INTO counters (kind, name, count) VALUES (?, ?, 1) ON CONFLICT (kind, name) DO UPDATE SET count = count + 1",
+        r.kind,
+        r.kind === "page" ? (r.path ?? r.name) : r.name,
+      );
+      if (r.session_id) this.sql.exec("INSERT OR IGNORE INTO sessions (session_id) VALUES (?)", r.session_id);
+    }
+  }
+
+  recordTransitions(transitions: Transition[]): void {
+    for (const t of transitions) {
+      this.sql.exec(
+        "INSERT INTO transitions (source, target, count) VALUES (?, ?, ?) ON CONFLICT (source, target) DO UPDATE SET count = count + excluded.count",
+        t.source,
+        t.target,
+        t.count,
+      );
+    }
+  }
+
+  snapshot(): AppSnapshot {
+    return {
+      counters: this.sql.exec&lt;{ kind: string; name: string; count: number }&gt;("SELECT kind, name, count FROM counters ORDER BY kind, name").toArray(),
+      transitions: this.sql.exec&lt;Transition&gt;("SELECT source, target, count FROM transitions ORDER BY source, target").toArray(),
+      sessions: this.sql.exec&lt;{ n: number }&gt;("SELECT count(*) AS n FROM sessions").one().n,
+    };
+  }
+}</code></pre><div class="run"><span class="k">Run</span><code>pnpm vitest run --project flightdeck app-do</code><span class="k">Expect</span><span>2 passed</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-6: AppDO hourly counters and transitions"</code></pre></li></ol></div></details><details class="task" id="t1.6"><summary><span class="tid">1.6</span> SessionDO: journey assembly and close</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: apps/flightdeck/src/sinks.ts</code></li><li><code>Modify: apps/flightdeck/src/do/session.ts</code></li><li><code>Test: apps/flightdeck/test/session-do.test.ts</code></li></ul><div class="k">Done when</div><p>Steps collapse repeats; transitions land on the right hour shard; the alarm writes one SessionRecord, adds the $exit transition, and clears storage</p><ol class="steps"><li><p>Failing test. <code>sinks</code> is stubbed with <code>vi.spyOn</code>: Durable Objects run in the test isolate, so they share the module instance.</p><div class="codelabel">apps/flightdeck/test/session-do.test.ts</div><pre><code class="lang-ts">import { runDurableObjectAlarm } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { afterEach, expect, it, vi } from "vitest";
+import { appShard, sessionStub } from "../src/do/shards";
+import { sinks } from "../src/sinks";
+import { T0, row, sid } from "./fixtures";
+
+afterEach(() =&gt; vi.restoreAllMocks());
+
+it("builds the journey and records transitions on the hour shard", async () =&gt; {
+  const s = sid("a");
+  await sessionStub(env, "app_j", s).append("app_j", s, [
+    row({ app_id: "app_j", path: "/", ts: T0 }),
+    row({ app_id: "app_j", path: "/", ts: T0 + 1_000 }),
+    row({ app_id: "app_j", kind: "click", name: "pricing.cta", ts: T0 + 2_000 }),
+  ]);
+  expect((await appShard(env, "app_j", "2026-10-30T14").snapshot()).transitions).toEqual([
+    { source: "$start", target: "/", count: 1 },
+    { source: "/", target: "pricing.cta", count: 1 },
+  ]);
+});
+
+it("closes on alarm: writes the record, adds the exit transition, clears state", async () =&gt; {
+  const sessions = vi.spyOn(sinks, "sessions").mockResolvedValue(undefined);
+  const s = sid("b");
+  const stub = sessionStub(env, "app_k", s);
+  await stub.append("app_k", s, [
+    row({ app_id: "app_k", session_id: s, path: "/", ts: T0 }),
+    row({ app_id: "app_k", session_id: s, kind: "identify", name: "identify", user_id: "user_1", ts: T0 + 500 }),
+    row({ app_id: "app_k", session_id: s, path: "/pricing", ts: T0 + 60_000 }),
+  ]);
+
+  expect(await runDurableObjectAlarm(stub)).toBe(true);
+  expect(sessions).toHaveBeenCalledOnce();
+  expect(sessions.mock.calls[0]![1]).toEqual([
+    expect.objectContaining({
+      session_id: s, user_id: "user_1", entry: "/", exit: "/pricing",
+      steps: JSON.stringify(["/", "/pricing"]), step_count: 2, event_count: 3, duration_ms: 60_000,
+    }),
+  ]);
+  expect((await appShard(env, "app_k", "2026-10-30T14").snapshot()).transitions)
+    .toContainEqual({ source: "/pricing", target: "$exit", count: 1 });
+  expect(await runDurableObjectAlarm(stub)).toBe(false);
+});</code></pre></li><li><p>Implement the sinks indirection and the SessionDO. Delivery is at least once: if the alarm throws after the Pipelines write, it retries and can resend the record. Phase 3 rollups dedupe on <code>session_id</code>.</p><div class="codelabel">apps/flightdeck/src/sinks.ts</div><pre><code class="lang-ts">import type { SessionRecord, StoredEvent } from "@flightdeckhq/schema";
+
+/** Pipelines writes go through this object so tests can stub them with `vi.spyOn(sinks, ...)`. */
+export const sinks = {
+  events: (env: Env, rows: StoredEvent[]): Promise&lt;void&gt; =&gt; env.EVENTS.send(rows),
+  sessions: (env: Env, rows: SessionRecord[]): Promise&lt;void&gt; =&gt; env.SESSIONS.send(rows),
+};</code></pre><div class="codelabel">apps/flightdeck/src/do/session.ts</div><pre><code class="lang-ts">import { EXIT, START, type SessionRecord, type StoredEvent, type Transition, hourKey, stepName } from "@flightdeckhq/schema";
+import { DurableObject } from "cloudflare:workers";
+import { sinks } from "../sinks";
+import { appShard } from "./shards";
+
+const IDLE_MS = 30 * 60_000;
+const MAX_STEPS = 200;
+
+type SessionState = {
+  appId: string;
+  sessionId: string;
+  anonymousId: string | null;
+  userId: string | null;
+  startedAt: number;
+  lastTs: number;
+  steps: string[];
+  eventCount: number;
+  country: string | null;
+  device: string;
+};
+
+/** One visitor session: orders its steps, streams transitions, and writes a path record when idle. */
+export class SessionDO extends DurableObject&lt;Env&gt; {
+  async append(appId: string, sessionId: string, rows: StoredEvent[]): Promise&lt;void&gt; {
+    const sorted = [...rows].sort((a, b) =&gt; a.ts - b.ts);
+    const first = sorted[0];
+    if (!first) return;
+    const state = (await this.ctx.storage.get&lt;SessionState&gt;("state")) ?? {
+      appId,
+      sessionId,
+      anonymousId: null,
+      userId: null,
+      startedAt: first.ts,
+      lastTs: first.ts,
+      steps: [],
+      eventCount: 0,
+      country: first.country,
+      device: first.device,
+    };
+
+    const byHour = new Map&lt;string, Map&lt;string, Transition&gt;&gt;();
+    for (const r of sorted) {
+      state.eventCount++;
+      state.lastTs = Math.max(state.lastTs, r.ts);
+      state.userId = r.user_id ?? state.userId;
+      state.anonymousId ??= r.anonymous_id;
+      const step = stepName(r);
+      const prev = state.steps.at(-1);
+      if (!step || step === prev || state.steps.length &gt;= MAX_STEPS) continue;
+      addTransition(byHour, hourKey(r.ts), prev ?? START, step);
+      state.steps.push(step);
+    }
+
+    await this.ctx.storage.put("state", state);
+    await this.ctx.storage.setAlarm(Date.now() + IDLE_MS);
+    await Promise.all(
+      [...byHour].map(([hour, ts]) =&gt; appShard(this.env, appId, hour).recordTransitions([...ts.values()])),
+    );
+  }
+
+  async alarm(): Promise&lt;void&gt; {
+    const state = await this.ctx.storage.get&lt;SessionState&gt;("state");
+    if (!state) return;
+    await sinks.sessions(this.env, [toRecord(state)]);
+    const exit = state.steps.at(-1);
+    if (exit) {
+      await appShard(this.env, state.appId, hourKey(state.lastTs)).recordTransitions([{ source: exit, target: EXIT, count: 1 }]);
+    }
+    await this.ctx.storage.deleteAll();
+  }
+}
+
+function addTransition(byHour: Map&lt;string, Map&lt;string, Transition&gt;&gt;, hour: string, source: string, target: string) {
+  let hourMap = byHour.get(hour);
+  if (!hourMap) byHour.set(hour, (hourMap = new Map()));
+  const key = `${source}\u0000${target}`;
+  const t = hourMap.get(key);
+  if (t) t.count++;
+  else hourMap.set(key, { source, target, count: 1 });
+}
+
+function toRecord(s: SessionState): SessionRecord {
+  return {
+    session_id: s.sessionId,
+    app_id: s.appId,
+    anonymous_id: s.anonymousId,
+    user_id: s.userId,
+    started_at: s.startedAt,
+    ended_at: s.lastTs,
+    duration_ms: s.lastTs - s.startedAt,
+    entry: s.steps[0] ?? null,
+    exit: s.steps.at(-1) ?? null,
+    steps: JSON.stringify(s.steps),
+    step_count: s.steps.length,
+    event_count: s.eventCount,
+    country: s.country,
+    device: s.device,
+  };
+}</code></pre><div class="run"><span class="k">Run</span><code>pnpm vitest run --project flightdeck session-do</code><span class="k">Expect</span><span>2 passed</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-6: SessionDO journey assembly and idle close"</code></pre></li></ol></div></details><details class="task" id="t1.7"><summary><span class="tid">1.7</span> Ingest RPC entrypoint and dev routes</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Modify: apps/flightdeck/src/ingest/entrypoint.ts</code></li><li><code>Create: apps/flightdeck/src/dev.ts</code></li><li><code>Modify: apps/flightdeck/src/index.ts</code></li><li><code>Test: apps/flightdeck/test/ingest-entrypoint.test.ts</code></li></ul><div class="k">Done when</div><p>ingest(), track(), and identify() work over a props-bound binding; unknown apps and missing props are rejected; /__dev routes only answer when FLIGHTDECK_DEV=1</p><ol class="steps"><li><p>Failing test. <code>exports.Ingest({ props })</code> is the loopback binding with <code>ctx.props</code> set. If the test runtime's <code>exports</code> doesn't accept props, add a self-referencing service binding with <code>props</code> to a <code>wrangler.test.jsonc</code>.</p><div class="codelabel">apps/flightdeck/test/ingest-entrypoint.test.ts</div><pre><code class="lang-ts">import { hourKey } from "@flightdeckhq/schema";
+import { env, exports } from "cloudflare:workers";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
+import { appShard } from "../src/do/shards";
+import { sinks } from "../src/sinks";
+import { CHROME, sid } from "./fixtures";
+
+beforeAll(async () =&gt; {
+  await env.DB.prepare("INSERT INTO apps (id, name) VALUES ('app_e2e', 'E2E')").run();
+});
+afterEach(() =&gt; vi.restoreAllMocks());
+
+it("rejects unknown apps and missing props", async () =&gt; {
+  await expect(exports.Ingest({ props: { appId: "app_missing" } }).ingest({ events: [] })).rejects.toThrow(/unknown app/);
+  await expect(exports.Ingest({ props: {} }).ingest({ events: [] })).rejects.toThrow(/props.appId/);
+});
+
+it("ingests a browser batch into Pipelines and the hour shard", async () =&gt; {
+  const events = vi.spyOn(sinks, "events").mockResolvedValue(undefined);
+  const ts = Date.now();
+  const res = await exports.Ingest({ props: { appId: "app_e2e" } }).ingest({
+    events: [{ kind: "page", name: "/users/42", path: "/users/42", ts, sessionId: sid("e") }],
+    context: { userAgent: CHROME, country: "GB" },
+  });
+  expect(res).toEqual({ accepted: 1 });
+  expect(events.mock.calls[0]![1][0]).toMatchObject({ app_id: "app_e2e", path: "/users/:id", country: "GB", source: "browser" });
+  const snap = await appShard(env, "app_e2e", hourKey(ts)).snapshot();
+  expect(snap.counters).toContainEqual({ kind: "page", name: "/users/:id", count: 1 });
+  expect(snap.sessions).toBe(1);
+});
+
+it("track() and identify() record server events", async () =&gt; {
+  const events = vi.spyOn(sinks, "events").mockResolvedValue(undefined);
+  const ingest = exports.Ingest({ props: { appId: "app_e2e" } });
+  await ingest.track({ name: "invoice.paid", userId: "u_1", props: { plan: "pro" } });
+  await ingest.identify({ userId: "u_1", anonymousId: sid("y") });
+  expect(events.mock.calls.map(([, rows]) =&gt; [rows[0]!.kind, rows[0]!.name, rows[0]!.source])).toEqual([
+    ["track", "invoice.paid", "server"],
+    ["identify", "identify", "server"],
+  ]);
+});
+
+it("serves dev routes only in dev mode", async () =&gt; {
+  const res = await exports.default.fetch(`http://flightdeck.test/__dev/apps/app_e2e/hours/${hourKey(Date.now())}`);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toHaveProperty("counters");
+});</code></pre></li><li><p>Implement the entrypoint, wiring env bindings into <code>IngestDeps</code>.</p><div class="codelabel">apps/flightdeck/src/ingest/entrypoint.ts</div><pre><code class="lang-ts">import type { IngestResult, IngestRpc, StoredEvent } from "@flightdeckhq/schema";
+import { WorkerEntrypoint } from "cloudflare:workers";
+import { ulid } from "ulid";
+import { verifyAccessUser } from "../access";
+import { type AppRecord, getApp } from "../apps";
+import { appShard, sessionStub } from "../do/shards";
+import { sinks } from "../sinks";
+import { type IngestDeps, IngestError, ingestBatch } from "./service";
+
+export type IngestProps = { appId?: string };
+
+/** Service binding target for app Workers: `env.FLIGHTDECK.ingest(...)`, `.track(...)`, `.identify(...)`. */
+export class Ingest extends WorkerEntrypoint&lt;Env, IngestProps&gt; implements IngestRpc {
+  ingest(batch: unknown): Promise&lt;IngestResult&gt; {
+    return this.run(batch, "browser");
+  }
+
+  track(event: unknown): Promise&lt;IngestResult&gt; {
+    return this.run({ events: [{ ts: Date.now(), ...asObject(event), kind: "track" }] }, "server");
+  }
+
+  identify(input: unknown): Promise&lt;IngestResult&gt; {
+    return this.run({ events: [{ ts: Date.now(), ...asObject(input), kind: "identify", name: "identify" }] }, "server");
+  }
+
+  private async run(input: unknown, source: "browser" | "server"): Promise&lt;IngestResult&gt; {
+    const appId = this.ctx.props?.appId;
+    if (!appId) throw new IngestError("service binding is missing props.appId");
+    const app = await getApp(this.env.DB, appId);
+    if (!app) throw new IngestError(`unknown app ${appId}`);
+    return ingestBatch(appId, input, source, deps(this.env, app));
+  }
+}
+
+function asObject(value: unknown): object {
+  return typeof value === "object" &amp;&amp; value !== null ? value : {};
+}
+
+function deps(env: Env, app: AppRecord): IngestDeps {
+  return {
+    now: Date.now,
+    newId: () =&gt; ulid(),
+    resolveUser: async (jwt) =&gt;
+      env.ACCESS_TEAM_DOMAIN ? verifyAccessUser(jwt, { teamDomain: env.ACCESS_TEAM_DOMAIN, audience: app.access_aud }) : null,
+    sendEvents: (rows: StoredEvent[]) =&gt; sinks.events(env, rows),
+    appendToSession: (appId, sessionId, rows) =&gt; sessionStub(env, appId, sessionId).append(appId, sessionId, rows),
+    recordCounts: (appId, hour, rows) =&gt; appShard(env, appId, hour).recordEvents(rows),
+  };
+}</code></pre><div class="codelabel">apps/flightdeck/src/dev.ts</div><pre><code class="lang-ts">import { appShard } from "./do/shards";
+
+/** Local-only inspection routes; the Phase 3 dashboard API replaces them. */
+export async function devRoutes(request: Request, env: Env): Promise&lt;Response&gt; {
+  const url = new URL(request.url);
+  const snapshot = url.pathname.match(/^\/__dev\/apps\/([\w-]+)\/hours\/(\d{4}-\d{2}-\d{2}T\d{2})$/);
+  if (request.method === "GET" &amp;&amp; snapshot) {
+    return Response.json(await appShard(env, snapshot[1]!, snapshot[2]!).snapshot());
+  }
+  if (request.method === "POST" &amp;&amp; url.pathname === "/__dev/apps") {
+    const { id, name } = await request.json&lt;{ id: string; name: string }&gt;();
+    await env.DB.prepare("INSERT OR IGNORE INTO apps (id, name) VALUES (?, ?)").bind(id, name).run();
+    return new Response(null, { status: 201 });
+  }
+  return new Response("Not found", { status: 404 });
+}</code></pre><div class="codelabel">apps/flightdeck/src/index.ts</div><pre><code class="lang-ts">import { devRoutes } from "./dev";
+
+export { AppDO } from "./do/app";
+export { SessionDO } from "./do/session";
+export { Ingest } from "./ingest/entrypoint";
+
+export default {
+  async fetch(request, env): Promise&lt;Response&gt; {
+    const url = new URL(request.url);
+    if (url.pathname === "/healthz") return Response.json({ ok: true });
+    if (env.FLIGHTDECK_DEV === "1" &amp;&amp; url.pathname.startsWith("/__dev/")) return devRoutes(request, env);
+    return new Response("Not found", { status: 404 });
+  },
+} satisfies ExportedHandler&lt;Env&gt;;</code></pre><div class="run"><span class="k">Run</span><code>pnpm vitest run --project flightdeck &amp;&amp; pnpm --filter @flightdeckhq/app typecheck</code><span class="k">Expect</span><span>all flightdeck tests pass; tsc clean</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-6: Ingest RPC entrypoint and dev routes"</code></pre></li></ol></div></details><details class="task" id="t1.8"><summary><span class="tid">1.8</span> @flightdeckhq/worker SDK</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: packages/worker/package.json</code></li><li><code>Create: packages/worker/tsconfig.json</code></li><li><code>Create: packages/worker/vitest.config.ts</code></li><li><code>Create: packages/worker/src/index.ts</code></li><li><code>Test: packages/worker/test/handle.test.ts</code></li></ul><div class="k">Done when</div><p>handleFlightdeck routes, rejects (405/403/413/400), forwards context and the Access JWT, maps errors; withFlightdeck passes other requests through</p><ol class="steps"><li><p>Package files. Tests run in Node: Request and Response are built in, and the binding is a fake.</p><div class="codelabel">packages/worker/package.json</div><pre><code class="lang-json">{
+  "name": "@flightdeckhq/worker",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc -p ." },
+  "dependencies": { "@flightdeckhq/schema": "workspace:*" },
+  "devDependencies": { "@cloudflare/workers-types": "^5.20261030.1" }
+}</code></pre><div class="codelabel">packages/worker/tsconfig.json</div><pre><code class="lang-json">{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "types": ["@cloudflare/workers-types"] },
+  "include": ["src", "test"]
+}</code></pre><div class="codelabel">packages/worker/vitest.config.ts</div><pre><code class="lang-ts">import { defineConfig } from "vitest/config";
+
+export default defineConfig({ test: { name: "worker", environment: "node" } });</code></pre></li><li><p>Failing test.</p><div class="codelabel">packages/worker/test/handle.test.ts</div><pre><code class="lang-ts">import { describe, expect, it, vi } from "vitest";
+import { handleFlightdeck, withFlightdeck } from "../src";
+
+const ORIGIN = "https://app.example.com";
+const fakeEnv = (ingest = vi.fn(async () =&gt; ({ accepted: 1 }))) =&gt; ({ FLIGHTDECK: { ingest }, ingest });
+const post = (body: string, headers: Record&lt;string, string&gt; = {}) =&gt;
+  new Request(`${ORIGIN}/_fd/e`, { method: "POST", body, headers: { Origin: ORIGIN, ...headers } });
+
+describe("handleFlightdeck", () =&gt; {
+  it("ignores other paths and rejects non-POST", async () =&gt; {
+    const env = fakeEnv();
+    expect(await handleFlightdeck(new Request(`${ORIGIN}/other`), env)).toBeNull();
+    expect((await handleFlightdeck(new Request(`${ORIGIN}/_fd/e`), env))?.status).toBe(405);
+  });
+
+  it("rejects cross-origin, oversized, and malformed bodies", async () =&gt; {
+    const env = fakeEnv();
+    expect((await handleFlightdeck(post("{}", { Origin: "https://evil.test" }), env))?.status).toBe(403);
+    expect((await handleFlightdeck(post("x".repeat(70_000)), env))?.status).toBe(413);
+    expect((await handleFlightdeck(post("not json"), env))?.status).toBe(400);
+  });
+
+  it("allows configured origins", async () =&gt; {
+    const env = fakeEnv();
+    const res = await handleFlightdeck(post('{"events":[]}', { Origin: "https://www.example.com" }), env, {
+      allowedOrigins: ["https://www.example.com"],
+    });
+    expect(res?.status).toBe(204);
+  });
+
+  it("forwards events with request context and the Access JWT", async () =&gt; {
+    const env = fakeEnv();
+    const res = await handleFlightdeck(
+      post('{"events":[{"kind":"click","name":"cta","ts":1}]}', { "User-Agent": "UA/1", "Cf-Access-Jwt-Assertion": "jwt" }),
+      env,
+    );
+    expect(res?.status).toBe(204);
+    expect(env.ingest).toHaveBeenCalledWith({
+      events: [{ kind: "click", name: "cta", ts: 1 }],
+      context: { userAgent: "UA/1" },
+      accessJwt: "jwt",
+    });
+  });
+
+  it("maps validation errors to 400 and other failures to 502", async () =&gt; {
+    const invalid = fakeEnv(vi.fn(async () =&gt; Promise.reject(new Error("invalid batch"))));
+    expect((await handleFlightdeck(post('{"events":[]}'), invalid))?.status).toBe(400);
+    const down = fakeEnv(vi.fn(async () =&gt; Promise.reject(new Error("boom"))));
+    expect((await handleFlightdeck(post('{"events":[]}'), down))?.status).toBe(502);
+  });
+});
+
+it("withFlightdeck intercepts the endpoint and passes everything else through", async () =&gt; {
+  const handler = withFlightdeck({ fetch: async () =&gt; new Response("app") });
+  const env = fakeEnv();
+  const ctx = {} as ExecutionContext;
+  expect((await handler.fetch!(post('{"events":[]}') as never, env, ctx)).status).toBe(204);
+  expect(await (await handler.fetch!(new Request(`${ORIGIN}/`) as never, env, ctx)).text()).toBe("app");
+});</code></pre></li><li><p>Implement. The browser sends <code>text/plain</code> beacons (no CORS preflight), so the body is parsed from text.</p><div class="codelabel">packages/worker/src/index.ts</div><pre><code class="lang-ts">import type { IngestRpc, RequestContext } from "@flightdeckhq/schema";
+
+export type { IngestResult, IngestRpc } from "@flightdeckhq/schema";
+
+export type FlightdeckOptions = {
+  /** Env binding name of the Flightdeck service binding. Default `FLIGHTDECK`. */
+  binding?: string;
+  /** Endpoint path the browser script posts to. Default `/_fd/e`. */
+  path?: string;
+  /** Extra origins allowed to post, besides the request's own origin. */
+  allowedOrigins?: string[];
+  /** Default 64 KiB. */
+  maxBodyBytes?: number;
+};
+
+const DEFAULT_PATH = "/_fd/e";
+const DEFAULT_MAX_BODY = 64 * 1024;
+
+/** Handles the browser endpoint. Returns null when the request is not for Flightdeck. */
+export async function handleFlightdeck(request: Request, env: object, options: FlightdeckOptions = {}): Promise&lt;Response | null&gt; {
+  const url = new URL(request.url);
+  if (url.pathname !== (options.path ?? DEFAULT_PATH)) return null;
+  if (request.method !== "POST") return new Response(null, { status: 405, headers: { Allow: "POST" } });
+
+  const origin = request.headers.get("Origin");
+  if (origin &amp;&amp; origin !== url.origin &amp;&amp; !options.allowedOrigins?.includes(origin)) {
+    return new Response(null, { status: 403 });
+  }
+
+  const bindingName = options.binding ?? "FLIGHTDECK";
+  const binding = (env as Record&lt;string, IngestRpc | undefined&gt;)[bindingName];
+  if (!binding) throw new Error(`Flightdeck: env.${bindingName} service binding is missing`);
+
+  const text = await request.text();
+  if (text.length &gt; (options.maxBodyBytes ?? DEFAULT_MAX_BODY)) return new Response(null, { status: 413 });
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return new Response(null, { status: 400 });
+  }
+  if (typeof body !== "object" || body === null) return new Response(null, { status: 400 });
+
+  const country = (request as { cf?: { country?: string } }).cf?.country;
+  const userAgent = request.headers.get("User-Agent")?.slice(0, 512);
+  const context: RequestContext = { ...(country ? { country } : {}), ...(userAgent ? { userAgent } : {}) };
+  const accessJwt = request.headers.get("Cf-Access-Jwt-Assertion");
+
+  try {
+    await binding.ingest({ events: (body as { events?: unknown }).events, context, ...(accessJwt ? { accessJwt } : {}) });
+  } catch (err) {
+    const invalid = err instanceof Error &amp;&amp; err.message.startsWith("invalid batch");
+    if (!invalid) console.error("Flightdeck ingest failed", err);
+    return new Response(null, { status: invalid ? 400 : 502 });
+  }
+  return new Response(null, { status: 204 });
+}
+
+/** Wraps a Worker's default export so it serves the Flightdeck browser endpoint. */
+export function withFlightdeck&lt;E extends object&gt;(handler: ExportedHandler&lt;E&gt;, options?: FlightdeckOptions): ExportedHandler&lt;E&gt; {
+  return {
+    ...handler,
+    async fetch(request, env, ctx) {
+      const res = await handleFlightdeck(request as unknown as Request, env, options);
+      if (res) return res;
+      if (!handler.fetch) return new Response("Not found", { status: 404 });
+      return handler.fetch(request, env, ctx);
+    },
+  };
+}</code></pre><div class="run"><span class="k">Run</span><code>pnpm install &amp;&amp; pnpm vitest run --project worker</code><span class="k">Expect</span><span>6 passed</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-6: @flightdeckhq/worker endpoint and wrapper"</code></pre></li></ol></div></details><details class="task" id="t1.9"><summary><span class="tid">1.9</span> @flightdeckhq/browser auto-capture</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: packages/browser/package.json</code></li><li><code>Create: packages/browser/tsconfig.json</code></li><li><code>Create: packages/browser/vitest.config.ts</code></li><li><code>Create: packages/browser/src/ids.ts</code></li><li><code>Create: packages/browser/src/queue.ts</code></li><li><code>Create: packages/browser/src/capture.ts</code></li><li><code>Create: packages/browser/src/index.ts</code></li><li><code>Create: packages/browser/scripts/size.mjs</code></li><li><code>Test: packages/browser/test/browser.test.ts</code></li></ul><div class="k">Done when</div><p>happy-dom tests cover ids, click/submit/view capture, batching and beacon fallback, SPA page views; pnpm size reports &lt; 3 KB gzip</p><ol class="steps"><li><p>Package files.</p><div class="codelabel">packages/browser/package.json</div><pre><code class="lang-json">{
+  "name": "@flightdeckhq/browser",
+  "version": "0.0.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc -p .", "size": "node scripts/size.mjs" },
+  "devDependencies": { "@flightdeckhq/schema": "workspace:*", "esbuild": "^0.28.2", "happy-dom": "^21.0.4" }
+}</code></pre><div class="codelabel">packages/browser/tsconfig.json</div><pre><code class="lang-json">{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "lib": ["es2024", "dom", "dom.iterable"] },
+  "include": ["src", "test"]
+}</code></pre><div class="codelabel">packages/browser/vitest.config.ts</div><pre><code class="lang-ts">import { defineConfig } from "vitest/config";
+
+export default defineConfig({ test: { name: "browser", environment: "happy-dom" } });</code></pre></li><li><p>Failing tests.</p><div class="codelabel">packages/browser/test/browser.test.ts</div><pre><code class="lang-ts">import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { _reset, init, track } from "../src";
+import { SESSION_IDLE_MS, anonymousId, sessionId } from "../src/ids";
+import { EventQueue } from "../src/queue";
+
+type Sent = { events: { kind: string; name: string; path?: string; props?: Record&lt;string, string&gt; }[] };
+const beacons: Sent[] = [];
+
+beforeEach(() =&gt; {
+  beacons.length = 0;
+  sessionStorage.clear();
+  localStorage.clear();
+  document.body.innerHTML = "";
+  history.replaceState(null, "", "/");
+  Object.defineProperty(navigator, "sendBeacon", {
+    configurable: true,
+    value: (_url: string, blob: Blob) =&gt; {
+      void blob.text().then((t) =&gt; beacons.push(JSON.parse(t)));
+      return true;
+    },
+  });
+});
+afterEach(() =&gt; _reset());
+
+const flush = async () =&gt; {
+  document.dispatchEvent(new Event("visibilitychange"));
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+  document.dispatchEvent(new Event("visibilitychange"));
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  await new Promise((r) =&gt; setTimeout(r, 0));
+  return beacons.flatMap((b) =&gt; b.events);
+};
+
+describe("ids", () =&gt; {
+  it("keeps the session id until 30 minutes idle", () =&gt; {
+    const a = sessionId(1_000);
+    expect(sessionId(1_000 + SESSION_IDLE_MS - 1)).toBe(a);
+    expect(sessionId(1_000 + 2 * SESSION_IDLE_MS)).not.toBe(a);
+  });
+  it("persists the anonymous id by default", () =&gt; {
+    const a = anonymousId(true);
+    expect(localStorage.getItem("fd_aid")).toBe(a);
+    expect(anonymousId(false)).not.toBe(a);
+  });
+});
+
+describe("capture", () =&gt; {
+  it("emits a page view, clicks with props, and form submits", async () =&gt; {
+    document.body.innerHTML = `
+      &lt;button data-flightdeck="pricing.cta" data-flightdeck-plan="pro"&gt;&lt;span id="inner"&gt;Go&lt;/span&gt;&lt;/button&gt;
+      &lt;form data-flightdeck="signup.form"&gt;&lt;button id="submit" type="button"&gt;Sign up&lt;/button&gt;&lt;/form&gt;`;
+    init({ flushIntervalMs: 60_000 });
+    document.getElementById("inner")!.click();
+    document.getElementById("submit")!.click();
+    document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true }));
+    expect((await flush()).map((e) =&gt; [e.kind, e.name, e.props])).toEqual([
+      ["page", "/", undefined],
+      ["click", "pricing.cta", { plan: "pro" }],
+      ["submit", "signup.form", undefined],
+    ]);
+  });
+
+  it("emits views once for data-flightdeck-view elements", async () =&gt; {
+    let callback: IntersectionObserverCallback = () =&gt; {};
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(cb: IntersectionObserverCallback) { callback = cb; }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+    document.body.innerHTML = `&lt;section data-flightdeck="hero" data-flightdeck-view&gt;&lt;/section&gt;`;
+    init({ trackPages: false });
+    const target = document.querySelector("section")!;
+    callback([{ isIntersecting: true, target } as unknown as IntersectionObserverEntry], {} as IntersectionObserver);
+    callback([{ isIntersecting: true, target } as unknown as IntersectionObserverEntry], {} as IntersectionObserver);
+    expect((await flush()).map((e) =&gt; [e.kind, e.name])).toEqual([["view", "hero"]]);
+    vi.unstubAllGlobals();
+  });
+
+  it("tracks SPA navigations once per path and custom events", async () =&gt; {
+    init();
+    history.pushState(null, "", "/docs");
+    history.pushState(null, "", "/docs");
+    track("export.csv", { rows: "10" });
+    expect((await flush()).map((e) =&gt; [e.kind, e.name])).toEqual([
+      ["page", "/"],
+      ["page", "/docs"],
+      ["track", "export.csv"],
+    ]);
+  });
+});
+
+describe("EventQueue", () =&gt; {
+  it("flushes when maxBatch is reached", () =&gt; {
+    const transport = vi.fn();
+    const q = new EventQueue({ endpoint: "/_fd/e", maxBatch: 2 }, transport);
+    q.push({ kind: "track", name: "a", ts: 1 });
+    expect(transport).not.toHaveBeenCalled();
+    q.push({ kind: "track", name: "b", ts: 2 });
+    expect(transport).toHaveBeenCalledOnce();
+  });
+});</code></pre></li><li><p>Implement ids, queue, capture, and the public API. Elements with <code>data-flightdeck-view</code> only emit views, never clicks; click handling ignores <code>&lt;form&gt;</code> matches because submits cover forms.</p><div class="codelabel">packages/browser/src/ids.ts</div><pre><code class="lang-ts">const SESSION_KEY = "fd_sid";
+const LAST_KEY = "fd_last";
+const ANON_KEY = "fd_aid";
+export const SESSION_IDLE_MS = 30 * 60_000;
+
+const memory = new Map&lt;string, string&gt;();
+let ephemeralAnon: string | undefined;
+
+export function randomId(): string {
+  return crypto.randomUUID().replaceAll("-", "");
+}
+
+function read(store: () =&gt; Storage, key: string): string | null {
+  try {
+    return store().getItem(key);
+  } catch {
+    return memory.get(key) ?? null;
+  }
+}
+
+function write(store: () =&gt; Storage, key: string, value: string): void {
+  try {
+    store().setItem(key, value);
+  } catch {
+    memory.set(key, value);
+  }
+}
+
+/** Session id in sessionStorage, rotated after 30 minutes without activity. */
+export function sessionId(now = Date.now()): string {
+  const session = () =&gt; sessionStorage;
+  let id = read(session, SESSION_KEY);
+  if (!id || now - Number(read(session, LAST_KEY) ?? 0) &gt; SESSION_IDLE_MS) {
+    id = randomId();
+    write(session, SESSION_KEY, id);
+  }
+  write(session, LAST_KEY, String(now));
+  return id;
+}
+
+/** Persistent anonymous id in localStorage, or a page-lifetime id when persistence is off. */
+export function anonymousId(persist: boolean): string {
+  if (!persist) return (ephemeralAnon ??= randomId());
+  const local = () =&gt; localStorage;
+  let id = read(local, ANON_KEY);
+  if (!id) {
+    id = randomId();
+    write(local, ANON_KEY, id);
+  }
+  return id;
+}</code></pre><div class="codelabel">packages/browser/src/queue.ts</div><pre><code class="lang-ts">import type { ClientEvent } from "@flightdeckhq/schema";
+
+const MAX_BATCH = 50;
+
+export type Transport = (endpoint: string, body: string) =&gt; void;
+
+export function sendBatch(endpoint: string, body: string): void {
+  if (navigator.sendBeacon?.(endpoint, new Blob([body], { type: "text/plain" }))) return;
+  void fetch(endpoint, { method: "POST", body, keepalive: true, headers: { "Content-Type": "text/plain" } }).catch(() =&gt; {});
+}
+
+export class EventQueue {
+  private events: ClientEvent[] = [];
+
+  constructor(
+    private readonly opts: { endpoint: string; maxBatch: number },
+    private readonly transport: Transport = sendBatch,
+  ) {}
+
+  push(event: ClientEvent): void {
+    this.events.push(event);
+    if (this.events.length &gt;= this.opts.maxBatch) this.flush();
+  }
+
+  flush(): void {
+    while (this.events.length) {
+      this.transport(this.opts.endpoint, JSON.stringify({ events: this.events.splice(0, MAX_BATCH) }));
+    }
+  }
+}</code></pre><div class="codelabel">packages/browser/src/capture.ts</div><pre><code class="lang-ts">import type { EventKind } from "@flightdeckhq/schema";
+
+export const ATTR = "data-flightdeck";
+const VIEW_ATTR = `${ATTR}-view`;
+
+export type Emit = (kind: EventKind, name: string, props?: Record&lt;string, string&gt;) =&gt; void;
+
+/** `data-flightdeck-plan="pro"` becomes `{ plan: "pro" }`. */
+export function propsFrom(el: HTMLElement): Record&lt;string, string&gt; | undefined {
+  const props: Record&lt;string, string&gt; = {};
+  for (const [key, value] of Object.entries(el.dataset)) {
+    if (!key.startsWith("flightdeck") || key === "flightdeck" || key === "flightdeckView" || value === undefined) continue;
+    const name = key.slice("flightdeck".length);
+    props[name.charAt(0).toLowerCase() + name.slice(1)] = value;
+  }
+  return Object.keys(props).length ? props : undefined;
+}
+
+export function installCapture(doc: Document, emit: Emit): () =&gt; void {
+  const onClick = (ev: Event) =&gt; {
+    const el = (ev.target as Element | null)?.closest?.&lt;HTMLElement&gt;(`[${ATTR}]`);
+    if (!el || el.tagName === "FORM" || el.hasAttribute(VIEW_ATTR)) return;
+    emit("click", el.getAttribute(ATTR) ?? "", propsFrom(el));
+  };
+  const onSubmit = (ev: Event) =&gt; {
+    const form = ev.target as HTMLElement;
+    const name = form.getAttribute?.(ATTR);
+    if (name) emit("submit", name, propsFrom(form));
+  };
+  doc.addEventListener("click", onClick, true);
+  doc.addEventListener("submit", onSubmit, true);
+
+  const seen = new WeakSet&lt;Element&gt;();
+  const io =
+    typeof IntersectionObserver === "undefined"
+      ? null
+      : new IntersectionObserver(
+          (entries) =&gt; {
+            for (const entry of entries) {
+              if (!entry.isIntersecting || seen.has(entry.target)) continue;
+              seen.add(entry.target);
+              io?.unobserve(entry.target);
+              const el = entry.target as HTMLElement;
+              emit("view", el.getAttribute(ATTR) ?? "", propsFrom(el));
+            }
+          },
+          { threshold: 0.5 },
+        );
+  const observeAll = () =&gt; {
+    for (const el of doc.querySelectorAll(`[${ATTR}][${VIEW_ATTR}]`)) if (!seen.has(el)) io?.observe(el);
+  };
+  observeAll();
+  const mo = new MutationObserver(observeAll);
+  mo.observe(doc.documentElement, { childList: true, subtree: true });
+
+  return () =&gt; {
+    doc.removeEventListener("click", onClick, true);
+    doc.removeEventListener("submit", onSubmit, true);
+    io?.disconnect();
+    mo.disconnect();
+  };
+}</code></pre><div class="codelabel">packages/browser/src/index.ts</div><pre><code class="lang-ts">import type { EventKind } from "@flightdeckhq/schema";
+import { installCapture } from "./capture";
+import { anonymousId, sessionId } from "./ids";
+import { EventQueue } from "./queue";
+
+export type InitOptions = {
+  /** Same-origin endpoint served by withFlightdeck/handleFlightdeck. Default `/_fd/e`. */
+  endpoint?: string;
+  /** Keep a persistent anonymous id in localStorage. Default true. */
+  persistAnonymousId?: boolean;
+  /** Record page views, including SPA navigations. Default true. */
+  trackPages?: boolean;
+  maxBatch?: number;
+  flushIntervalMs?: number;
+};
+
+class Client {
+  private readonly queue: EventQueue;
+  private readonly persist: boolean;
+  private readonly cleanup: (() =&gt; void)[] = [];
+  private userId: string | undefined;
+  private lastPath: string | undefined;
+
+  constructor(o: InitOptions) {
+    this.persist = o.persistAnonymousId ?? true;
+    this.queue = new EventQueue({ endpoint: o.endpoint ?? "/_fd/e", maxBatch: o.maxBatch ?? 20 });
+    const flush = () =&gt; this.queue.flush();
+    const onHidden = () =&gt; document.visibilityState === "hidden" &amp;&amp; flush();
+    const timer = setInterval(flush, o.flushIntervalMs ?? 5_000);
+    document.addEventListener("visibilitychange", onHidden);
+    addEventListener("pagehide", flush);
+    this.cleanup.push(() =&gt; {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onHidden);
+      removeEventListener("pagehide", flush);
+    });
+    this.cleanup.push(installCapture(document, (kind, name, props) =&gt; this.emit(kind, name, props)));
+    if (o.trackPages ?? true) {
+      this.page();
+      this.cleanup.push(watchHistory(() =&gt; this.page()));
+    }
+  }
+
+  emit(kind: EventKind, name: string, props?: Record&lt;string, string | number | boolean | null&gt;): void {
+    this.queue.push({
+      kind,
+      name,
+      ts: Date.now(),
+      sessionId: sessionId(),
+      anonymousId: anonymousId(this.persist),
+      path: location.pathname,
+      ...(this.userId ? { userId: this.userId } : {}),
+      ...(props ? { props } : {}),
+    });
+  }
+
+  page(): void {
+    if (location.pathname === this.lastPath) return;
+    const first = this.lastPath === undefined;
+    this.lastPath = location.pathname;
+    this.queue.push({
+      kind: "page",
+      name: location.pathname,
+      ts: Date.now(),
+      sessionId: sessionId(),
+      anonymousId: anonymousId(this.persist),
+      path: location.pathname,
+      ...(first &amp;&amp; document.referrer ? { referrer: document.referrer } : {}),
+      ...(this.userId ? { userId: this.userId } : {}),
+    });
+  }
+
+  identify(userId: string): void {
+    this.userId = userId;
+    this.emit("identify", "identify");
+  }
+
+  destroy(): void {
+    this.queue.flush();
+    for (const fn of this.cleanup) fn();
+  }
+}
+
+function watchHistory(onChange: () =&gt; void): () =&gt; void {
+  const { pushState, replaceState } = history;
+  history.pushState = function (...args: Parameters&lt;History["pushState"]&gt;) {
+    pushState.apply(this, args);
+    onChange();
+  };
+  history.replaceState = function (...args: Parameters&lt;History["replaceState"]&gt;) {
+    replaceState.apply(this, args);
+    onChange();
+  };
+  addEventListener("popstate", onChange);
+  return () =&gt; {
+    history.pushState = pushState;
+    history.replaceState = replaceState;
+    removeEventListener("popstate", onChange);
+  };
+}
+
+let client: Client | undefined;
+
+export function init(options: InitOptions = {}): void {
+  if (client || typeof window === "undefined") return;
+  client = new Client(options);
+}
+
+export function track(name: string, props?: Record&lt;string, string | number | boolean | null&gt;): void {
+  client?.emit("track", name, props);
+}
+
+export function identify(userId: string): void {
+  client?.identify(userId);
+}
+
+/** Test hook: tear down the singleton. */
+export function _reset(): void {
+  client?.destroy();
+  client = undefined;
+}</code></pre><div class="codelabel">packages/browser/scripts/size.mjs</div><pre><code class="lang-js">import { gzipSync } from "node:zlib";
+import { build } from "esbuild";
+
+const LIMIT = 3 * 1024;
+const out = await build({
+  entryPoints: [new URL("../src/index.ts", import.meta.url).pathname],
+  bundle: true,
+  minify: true,
+  format: "esm",
+  write: false,
+});
+const gz = gzipSync(out.outputFiles[0].contents).length;
+console.log(`@flightdeckhq/browser: ${gz} B gzip (limit ${LIMIT})`);
+if (gz &gt; LIMIT) process.exit(1);</code></pre><div class="run"><span class="k">Run</span><code>pnpm install &amp;&amp; pnpm vitest run --project browser &amp;&amp; pnpm --filter @flightdeckhq/browser size</code><span class="k">Expect</span><span>all browser tests pass; size under 3072 B gzip</span></div></li><li><p>Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-6: @flightdeckhq/browser auto-capture"</code></pre></li></ol></div></details><details class="task" id="t1.10"><summary><span class="tid">1.10</span> Pipelines stream schemas and dev provisioning</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: apps/flightdeck/pipelines/events.schema.json</code></li><li><code>Create: apps/flightdeck/pipelines/sessions.schema.json</code></li><li><code>Create: scripts/provision-dev.sh</code></li><li><code>Modify: apps/flightdeck/wrangler.jsonc (IDs)</code></li></ul><div class="k">Done when</div><p>Script creates bucket, catalog, two streams, two Iceberg sinks, two pipelines, and D1 in a dev account; wrangler.jsonc holds the real IDs</p><ol class="steps"><li><p>Stream schemas mirror <code>StoredEvent</code> and <code>SessionRecord</code>. Timestamps are epoch milliseconds; if the stream API rejects <code>timestamp</code> for ms integers, use <code>int64</code> and convert in Basin SQL. Confirm field syntax against <code>wrangler basin pipelines streams create --help</code> and the stream schema docs before running.</p><div class="codelabel">apps/flightdeck/pipelines/events.schema.json</div><pre><code class="lang-json">{
+  "fields": [
+    { "name": "event_id", "type": "string", "required": true },
+    { "name": "app_id", "type": "string", "required": true },
+    { "name": "kind", "type": "string", "required": true },
+    { "name": "name", "type": "string", "required": true },
+    { "name": "ts", "type": "timestamp", "unit": "millisecond", "required": true },
+    { "name": "received_at", "type": "timestamp", "unit": "millisecond", "required": true },
+    { "name": "session_id", "type": "string", "required": false },
+    { "name": "anonymous_id", "type": "string", "required": false },
+    { "name": "user_id", "type": "string", "required": false },
+    { "name": "path", "type": "string", "required": false },
+    { "name": "referrer", "type": "string", "required": false },
+    { "name": "props", "type": "json", "required": false },
+    { "name": "country", "type": "string", "required": false },
+    { "name": "device", "type": "string", "required": true },
+    { "name": "browser", "type": "string", "required": true },
+    { "name": "os", "type": "string", "required": true },
+    { "name": "source", "type": "string", "required": true }
+  ]
+}</code></pre><div class="codelabel">apps/flightdeck/pipelines/sessions.schema.json</div><pre><code class="lang-json">{
+  "fields": [
+    { "name": "session_id", "type": "string", "required": true },
+    { "name": "app_id", "type": "string", "required": true },
+    { "name": "anonymous_id", "type": "string", "required": false },
+    { "name": "user_id", "type": "string", "required": false },
+    { "name": "started_at", "type": "timestamp", "unit": "millisecond", "required": true },
+    { "name": "ended_at", "type": "timestamp", "unit": "millisecond", "required": true },
+    { "name": "duration_ms", "type": "int64", "required": true },
+    { "name": "entry", "type": "string", "required": false },
+    { "name": "exit", "type": "string", "required": false },
+    { "name": "steps", "type": "json", "required": true },
+    { "name": "step_count", "type": "int32", "required": true },
+    { "name": "event_count", "type": "int32", "required": true },
+    { "name": "country", "type": "string", "required": false },
+    { "name": "device", "type": "string", "required": true }
+  ]
+}</code></pre></li><li><p>Dev provisioning script (Phase 2's <code>create-flightdeck</code> replaces it). Command names and flags were checked against wrangler 4.156.0. HTTP ingestion is disabled because events only enter through the Worker binding.</p><div class="codelabel">scripts/provision-dev.sh</div><pre><code class="lang-bash">#!/usr/bin/env bash
+# Phase 1 dev-account setup. Replaced by `npx create-flightdeck` in Phase 2.
+set -euo pipefail
+: "${CATALOG_TOKEN:?Create an R2 API token with Admin Read &amp; Write and export CATALOG_TOKEN}"
+BUCKET=${BUCKET:-flightdeck-lake}
+cd "$(dirname "$0")/../apps/flightdeck"
+w() { pnpm exec wrangler "$@"; }
+
+w r2 bucket create "$BUCKET" || echo "bucket exists"
+w r2 bucket catalog enable "$BUCKET"
+for t in events sessions; do
+  w basin pipelines streams create "fd_$t" --schema-file "pipelines/$t.schema.json" --http-enabled false
+  w basin pipelines sinks create "fd_${t}_sink" --type r2-data-catalog --bucket "$BUCKET" \
+    --namespace flightdeck --table "$t" --catalog-token "$CATALOG_TOKEN" --roll-interval 60
+  w basin pipelines create "fd_${t}_pipeline" --sql "INSERT INTO fd_${t}_sink SELECT * FROM fd_$t"
+done
+w d1 create flightdeck || echo "database exists"
+w basin pipelines streams list
+echo "Next: put the D1 database_id and the fd_events / fd_sessions stream IDs into wrangler.jsonc, then"
+echo "      pnpm exec wrangler d1 migrations apply flightdeck --remote"</code></pre><div class="run"><span class="k">Run</span><code>chmod +x scripts/provision-dev.sh &amp;&amp; CATALOG_TOKEN=... ./scripts/provision-dev.sh</code><span class="k">Expect</span><span>streams, sinks, and pipelines listed; IDs copied into wrangler.jsonc</span></div></li><li><p>Commit (IDs are not secrets; tokens never enter the repo).</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-6: Pipelines stream schemas and dev provisioning"</code></pre></li></ol></div></details><details class="task" id="t1.11"><summary><span class="tid">1.11</span> Demo app and local smoke test</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Create: examples/demo-app/package.json</code></li><li><code>Create: examples/demo-app/wrangler.jsonc</code></li><li><code>Create: examples/demo-app/src/index.ts</code></li><li><code>Create: examples/demo-app/src/counter.ts</code></li><li><code>Create: examples/demo-app/public/index.html</code></li><li><code>Create: scripts/smoke.sh</code></li></ul><div class="k">Done when</div><p>smoke.sh: both Workers run locally; page, click, Worker-side track, and DO-side events reach the AppDO snapshot</p><ol class="steps"><li><p>Demo Worker: serves a static page, mounts the endpoint with <code>withFlightdeck</code>, tracks a server event, and has a Durable Object that serves the endpoint with <code>handleFlightdeck</code>.</p><div class="codelabel">examples/demo-app/package.json</div><pre><code class="lang-json">{
+  "name": "@flightdeckhq/demo-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bundle:browser": "esbuild ../../packages/browser/src/index.ts --bundle --minify --format=esm --outfile=public/fd.js",
+    "dev": "pnpm bundle:browser &amp;&amp; wrangler dev"
+  },
+  "dependencies": { "@flightdeckhq/worker": "workspace:*" },
+  "devDependencies": { "esbuild": "^0.28.2", "wrangler": "^4.156.0" }
+}</code></pre><div class="codelabel">examples/demo-app/wrangler.jsonc</div><pre><code class="lang-jsonc">{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "flightdeck-demo",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-30",
+  "assets": { "directory": "public", "run_worker_first": ["/_fd/*", "/api/*", "/room/*"] },
+  "services": [
+    { "binding": "FLIGHTDECK", "service": "flightdeck", "entrypoint": "Ingest", "props": { "appId": "app_demo" } }
+  ],
+  "durable_objects": { "bindings": [{ "name": "COUNTER", "class_name": "Counter" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Counter"] }]
+}</code></pre><div class="codelabel">examples/demo-app/src/index.ts</div><pre><code class="lang-ts">import { withFlightdeck } from "@flightdeckhq/worker";
+
+export { Counter } from "./counter";
+
+export default withFlightdeck&lt;Env&gt;({
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    if (url.pathname === "/api/checkout") {
+      ctx.waitUntil(env.FLIGHTDECK.track({ name: "checkout.completed", props: { plan: "pro" } }));
+      return Response.json({ ok: true });
+    }
+    if (url.pathname.startsWith("/room/")) {
+      return env.COUNTER.get(env.COUNTER.idFromName("demo")).fetch(request);
+    }
+    return new Response("Not found", { status: 404 });
+  },
+});</code></pre><div class="codelabel">examples/demo-app/src/counter.ts</div><pre><code class="lang-ts">import { handleFlightdeck } from "@flightdeckhq/worker";
+import { DurableObject } from "cloudflare:workers";
+
+/** Shows the endpoint inside a Durable Object: the DO's own fetch serves /room/_fd/e. */
+export class Counter extends DurableObject&lt;Env&gt; {
+  async fetch(request: Request): Promise&lt;Response&gt; {
+    const fd = await handleFlightdeck(request, this.env, { path: "/room/_fd/e" });
+    if (fd) return fd;
+    return new Response("counter");
+  }
+}</code></pre><div class="codelabel">examples/demo-app/public/index.html</div><pre><code class="lang-html">&lt;!doctype html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;&lt;meta charset="utf-8"&gt;&lt;title&gt;Flightdeck demo&lt;/title&gt;&lt;/head&gt;
+  &lt;body&gt;
+    &lt;h1&gt;Demo&lt;/h1&gt;
+    &lt;a href="/pricing" data-flightdeck="nav.pricing"&gt;Pricing&lt;/a&gt;
+    &lt;button data-flightdeck="pricing.cta" data-flightdeck-plan="pro"&gt;Start trial&lt;/button&gt;
+    &lt;section data-flightdeck="hero" data-flightdeck-view style="height: 60vh"&gt;Hero&lt;/section&gt;
+    &lt;script type="module"&gt;
+      import { init } from "/fd.js";
+      init();
+    &lt;/script&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre></li><li><p>Smoke script: runs Flightdeck and the demo app as two <code>wrangler dev</code> processes (service bindings resolve through the local dev registry), registers the app, sends one event through each path (browser endpoint on the Worker, endpoint inside the DO, server-side <code>track()</code>), and checks the AppDO snapshot. Pipelines writes are local simulations here; Iceberg is checked in 1.12.</p><div class="codelabel">scripts/smoke.sh</div><pre><code class="lang-bash">#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+FD=http://localhost:8798
+APP=http://localhost:8799
+UA="Mozilla/5.0 (Macintosh) Chrome/141.0"
+
+pnpm --filter @flightdeckhq/demo-app bundle:browser
+(cd apps/flightdeck &amp;&amp; pnpm exec wrangler d1 migrations apply flightdeck --local)
+(cd apps/flightdeck &amp;&amp; pnpm exec wrangler dev --port 8798 --var FLIGHTDECK_DEV:1) &amp;
+FD_PID=$!
+(cd examples/demo-app &amp;&amp; pnpm exec wrangler dev --port 8799) &amp;
+APP_PID=$!
+trap 'kill $FD_PID $APP_PID' EXIT
+until curl -sf "$FD/healthz" &gt;/dev/null &amp;&amp; curl -sf "$APP/" &gt;/dev/null; do sleep 1; done
+
+curl -sf -X POST "$FD/__dev/apps" -d '{"id":"app_demo","name":"Demo"}'
+TS=$(($(date +%s) * 1000))
+SID=$(openssl rand -hex 16)
+curl -sf -X POST "$APP/_fd/e" -H "Origin: $APP" -H "User-Agent: $UA" -d "{\"events\":[
+  {\"kind\":\"page\",\"name\":\"/\",\"path\":\"/\",\"ts\":$TS,\"sessionId\":\"$SID\"},
+  {\"kind\":\"click\",\"name\":\"pricing.cta\",\"ts\":$TS,\"sessionId\":\"$SID\"}]}"
+curl -sf -X POST "$APP/room/_fd/e" -H "Origin: $APP" -H "User-Agent: $UA" \
+  -d "{\"events\":[{\"kind\":\"track\",\"name\":\"room.joined\",\"ts\":$TS}]}"
+curl -sf "$APP/api/checkout" &gt;/dev/null
+sleep 1
+
+curl -sf "$FD/__dev/apps/app_demo/hours/$(date -u +%Y-%m-%dT%H)" | tee /dev/stderr | node -e '
+  const s = JSON.parse(require("fs").readFileSync(0, "utf8"));
+  const names = new Set(s.counters.map((c) =&gt; c.name));
+  for (const n of ["/", "pricing.cta", "room.joined", "checkout.completed"]) {
+    if (!names.has(n)) { console.error("missing", n); process.exit(1); }
+  }'
+echo "smoke OK"</code></pre><div class="run"><span class="k">Run</span><code>chmod +x scripts/smoke.sh &amp;&amp; ./scripts/smoke.sh</code><span class="k">Expect</span><span>snapshot JSON printed, then &quot;smoke OK&quot;</span></div></li><li><p>Open <code>http://localhost:8799</code>, click around, and confirm counters grow in the snapshot. Commit.</p><pre><code class="lang-bash">git add -A &amp;&amp; git commit -m "FLIG-6: demo app and local smoke test"</code></pre></li></ol></div></details><details class="task" id="t1.12"><summary><span class="tid">1.12</span> Deploy to the dev account and verify Iceberg</summary><div class="taskbody"><div class="k">Files</div><ul class="files"><li><code>Modify: docs/plans (record results in the FLIG-6 issue)</code></li></ul><div class="k">Done when</div><p>Demo traffic appears as rows in the Iceberg events and sessions tables, and the counts match the AppDO snapshot for the same hour</p><ol class="steps"><li><p>Deploy both Workers with dev mode on for Flightdeck.</p><div class="run"><span class="k">Run</span><code>pnpm --filter @flightdeckhq/app exec wrangler deploy --var FLIGHTDECK_DEV:1 &amp;&amp; pnpm --filter @flightdeckhq/demo-app exec wrangler deploy</code><span class="k">Expect</span><span>two workers.dev URLs</span></div></li><li><p>Register the demo app and generate traffic in a browser for a few minutes. Wait 30+ minutes for a session to close, or temporarily lower <code>IDLE_MS</code> on the dev deploy.</p><div class="run"><span class="k">Run</span><code>curl -X POST https://flightdeck.&lt;sub&gt;.workers.dev/__dev/apps -d &#x27;{&quot;id&quot;:&quot;app_demo&quot;,&quot;name&quot;:&quot;Demo&quot;}&#x27;</code><span class="k">Expect</span><span>201</span></div></li><li><p>Query the lake. The warehouse name is printed by <code>wrangler r2 bucket catalog get flightdeck-lake</code>; tables appear after the first roll interval.</p><pre><code class="lang-bash">pnpm exec wrangler basin sql query "$WAREHOUSE" \
+  "SELECT name, count(*) FROM flightdeck.events WHERE app_id = 'app_demo' GROUP BY name ORDER BY 2 DESC"
+pnpm exec wrangler basin sql query "$WAREHOUSE" \
+  "SELECT session_id, entry, exit, step_count FROM flightdeck.sessions WHERE app_id = 'app_demo' LIMIT 10"</code></pre><div class="run"><span class="k">Run</span><code>curl https://flightdeck.&lt;sub&gt;.workers.dev/__dev/apps/app_demo/hours/&lt;hour&gt;</code><span class="k">Expect</span><span>counts equal the Basin SQL counts for that hour</span></div></li><li><p>Record the deploy, the query output, and any schema adjustments in FLIG-6, then redeploy Flightdeck with <code>FLIGHTDECK_DEV</code> back to 0.</p></li></ol></div></details>
+
+  <h2>Risks and unknowns to resolve during implementation</h2>
+  <div class="table-scroll"><table>
+    <thead><tr><th>Unknown</th><th>Where</th><th>Fallback</th></tr></thead>
+    <tbody>
+      <tr><td>Whether the vitest plugin accepts a <code>pipelines</code> binding locally</td><td>1.1</td><td>A <code>wrangler.test.jsonc</code> without <code>pipelines</code>; all writes are stubbed through <code>sinks</code></td></tr>
+      <tr><td>The <code>exports.Ingest({ props })</code> loopback in tests</td><td>1.7</td><td>A self service binding with <code>props</code> in the test config</td></tr>
+      <tr><td>Stream schema field syntax for ms timestamps and JSON</td><td>1.10</td><td>Use <code>int64</code> and <code>string</code>; convert in Basin SQL</td></tr>
+      <tr><td>Service bindings resolving between two local <code>wrangler dev</code> processes</td><td>1.11</td><td>One multi-config session: <code>wrangler dev -c examples/demo-app/wrangler.jsonc -c apps/flightdeck/wrangler.jsonc</code></td></tr>
+      <tr><td>TypeScript 7 compatibility with generated runtime types</td><td>0.1</td><td>Pin TypeScript 6.x</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>Verification for the whole plan</h2>
+  <ul class="checks">
+    <li><code>pnpm lint &amp;&amp; pnpm typecheck &amp;&amp; pnpm test</code> pass locally and in CI</li>
+    <li><code>pnpm --filter @flightdeckhq/browser size</code> is under 3 KB gzip</li>
+    <li><code>./scripts/smoke.sh</code> prints <code>smoke OK</code></li>
+    <li>Basin SQL shows demo events and closed sessions; counts match the AppDO snapshot for the same hour</li>
+  </ul>
+</main>
+</body>
+</html>
