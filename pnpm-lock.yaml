@@ -198,6 +198,22 @@ importers:
         specifier: ^4.156.0
         version: 4.156.0(@cloudflare/workers-types@5.20261030.1)(@types/node@26.6.6)
 
+  examples/demo-app:
+    dependencies:
+      '@flightdeckhq/worker':
+        specifier: workspace:*
+        version: link:../../packages/worker
+    devDependencies:
+      '@flightdeckhq/browser':
+        specifier: workspace:*
+        version: link:../../packages/browser
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      wrangler:
+        specifier: ^4.156.0
+        version: 4.156.0(@cloudflare/workers-types@5.20261030.1)(@types/node@26.6.6)
+
   packages/browser:
     devDependencies:
       '@flightdeckhq/schema':

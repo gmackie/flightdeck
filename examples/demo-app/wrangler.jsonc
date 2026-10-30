@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "flightdeck-demo",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-30",
+  "assets": { "directory": "public", "run_worker_first": ["/_fd/*", "/api/*", "/room/*"] },
+  "services": [
+    {
+      "binding": "FLIGHTDECK",
+      "service": "flightdeck",
+      "entrypoint": "Ingest",
+      "props": { "appId": "app_demo" }
+    }
+  ],
+  "durable_objects": { "bindings": [{ "name": "COUNTER", "class_name": "Counter" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Counter"] }]
+}
