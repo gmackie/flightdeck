@@ -6,6 +6,9 @@ describe("normalizeRoute", () => {
     ["/users/123", "/users/:id"],
     ["/orders/0b6f8d0e-6c1e-4a59-9a43-6f1f0f6c2b11/items", "/orders/:id/items"],
     ["/r/01JBQ8Z6X3K2M4N5P6Q7R8S9T0", "/r/:id"],
+    ["/r/01jbq8z6x3k2m4n5p6q7r8s9t0", "/r/:id"],
+    ["/blog/my-first-post", "/blog/my-first-post"],
+    ["/docs/getting-started", "/docs/getting-started"],
     ["/blob/9f86d081884c7d65", "/blob/:id"],
     ["/pricing?plan=pro#faq", "/pricing"],
     ["/docs/", "/docs"],
@@ -30,7 +33,21 @@ describe("parseUserAgent", () => {
       parseUserAgent("Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) Safari/604.1").device,
     ).toBe("tablet");
     expect(parseUserAgent("Mozilla/5.0 (compatible; Googlebot/2.1)").device).toBe("bot");
+    expect(parseUserAgent("curl/8.7.1").device).toBe("bot");
     expect(parseUserAgent(undefined)).toEqual({ device: "unknown", browser: "Other", os: "Other" });
+  });
+});
+
+describe("parseUserAgent edge cases", () => {
+  it("does not treat Cubot phones as bots", () => {
+    const ua =
+      "Mozilla/5.0 (Linux; Android 13; CUBOT KINGKONG 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36";
+    expect(parseUserAgent(ua).device).toBe("mobile");
+  });
+  it("detects Edge on Android", () => {
+    const ua =
+      "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36 EdgA/141.0.0.0";
+    expect(parseUserAgent(ua)).toEqual({ device: "mobile", browser: "Edge", os: "Android" });
   });
 });
 

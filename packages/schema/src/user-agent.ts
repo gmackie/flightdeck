@@ -7,10 +7,13 @@ export type UserAgentInfo = {
 /** Coarse device, browser, and OS families. Deliberately small; no full UA database. */
 export function parseUserAgent(ua: string | undefined): UserAgentInfo {
   if (!ua) return { device: "unknown", browser: "Other", os: "Other" };
-  const bot = /bot|crawl|spider|slurp|headless|lighthouse/i.test(ua);
+  const bot =
+    /bot\b|bot\/|crawl|spider|slurp|headless|lighthouse|curl\/|wget\/|python-requests|okhttp|node-fetch|go-http-client/i.test(
+      ua,
+    ) && !/cubot/i.test(ua);
   const tablet = /iPad|Tablet/i.test(ua) || (/Android/.test(ua) && !/Mobile/.test(ua));
   const mobile = !tablet && /Mobi|iPhone|iPod|Android/.test(ua);
-  const browser = /Edg\//.test(ua)
+  const browser = /Edg(e|A|iOS)?\//.test(ua)
     ? "Edge"
     : /OPR\/|Opera/.test(ua)
       ? "Opera"
