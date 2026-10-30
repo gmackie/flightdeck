@@ -42,13 +42,25 @@ class Client {
     if (o.trackPages ?? true) {
       this.page();
       this.cleanup.push(watchHistory(() => this.page()));
+      // A back/forward cache restore is a new view of the same path.
+      const onShow = (ev: PageTransitionEvent) => ev.persisted && this.page(true);
+      addEventListener("pageshow", onShow);
+      this.cleanup.push(() => removeEventListener("pageshow", onShow));
     }
   }
 
   emit(kind: EventKind, name: string, props?: Props, extra?: Partial<ClientEventInput>): void {
+    // Mirror the server's truncation so one oversized value can't push a batch over the limit.
+    if (props) {
+      props = { ...props };
+      for (const k in props) {
+        const v = props[k];
+        if (typeof v === "string") props[k] = v.slice(0, 512);
+      }
+    }
     this.queue.push({
       kind,
-      name,
+      name: name.slice(0, 256),
       eventId: randomId(),
       ts: Date.now(),
       sessionId: sessionId(),
@@ -60,17 +72,13 @@ class Client {
     });
   }
 
-  page(): void {
+  /** `force` records the view even when the path is unchanged (bfcache restores). */
+  page(force?: boolean): void {
     const path = location.pathname;
-    if (path === this.lastPath) return;
+    if (path === this.lastPath && !force) return;
     const first = this.lastPath === undefined;
     this.lastPath = path;
-    this.emit(
-      "page",
-      path,
-      undefined,
-      first && document.referrer ? { referrer: document.referrer } : {},
-    );
+    this.emit("page", path, undefined, first ? referrer() : {});
   }
 
   identify(userId: string): void {
@@ -84,7 +92,24 @@ class Client {
   }
 }
 
-function watchHistory(onChange: () => void): () => void {
+/** Only the referring origin: full URLs can carry search terms, tokens, or other PII. */
+function referrer(): Partial<ClientEventInput> {
+  try {
+    const origin = new URL(document.referrer).origin;
+    // Opaque origins (about:, data:, file:) serialize as "null".
+    return origin === "null" ? {} : { referrer: origin };
+  } catch {
+    return {};
+  }
+}
+
+/** Analytics must never break navigation, so errors from onChange are swallowed. */
+function watchHistory(track: () => void): () => void {
+  const onChange = () => {
+    try {
+      track();
+    } catch {}
+  };
   const { pushState, replaceState } = history;
   history.pushState = function (...args: Parameters<History["pushState"]>) {
     pushState.apply(this, args);
@@ -115,7 +140,11 @@ export function track(name: string, props?: Props): void {
 
 /** Associates later events with `userId` and records an identify event. */
 export function identify(userId: string): void {
-  if (userId) client?.identify(userId);
+  if (!userId || userId.length > 128) {
+    console.warn("Flightdeck: identify() needs a userId of 1-128 characters");
+    return;
+  }
+  client?.identify(userId);
 }
 
 /** Test hook: tear down the singleton. */

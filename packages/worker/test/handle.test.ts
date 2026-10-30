@@ -85,12 +85,11 @@ describe("handleFlightdeck", () => {
     // Node's Request may drop a user-set Content-Length, so stub the header read directly.
     const headers = new Headers(req.headers);
     headers.set("Content-Length", "100");
-    const text = vi.fn(async () => '{"events":[]}');
-    const arrayBuffer = vi.fn(async () => new ArrayBuffer(0));
-    const fake = { url: req.url, method: "POST", headers, text, arrayBuffer } as unknown as Request;
+    const pull = vi.fn((c: ReadableStreamDefaultController<Uint8Array>) => c.close());
+    const body = new ReadableStream<Uint8Array>({ pull }, { highWaterMark: 0 });
+    const fake = { url: req.url, method: "POST", headers, body } as unknown as Request;
     expect((await handleFlightdeck(fake, env, { maxBodyBytes: 50 }))?.status).toBe(413);
-    expect(text).not.toHaveBeenCalled();
-    expect(arrayBuffer).not.toHaveBeenCalled();
+    expect(pull).not.toHaveBeenCalled();
   });
 
   it("enforces the limit on actual body bytes when Content-Length is absent or lying", async () => {
@@ -112,10 +111,47 @@ describe("handleFlightdeck", () => {
       url: `${ORIGIN}/_fd/e`,
       method: "POST",
       headers,
-      text: async () => body,
-      arrayBuffer: async () => new TextEncoder().encode(body).buffer,
+      body: new Blob([body]).stream(),
     } as unknown as Request;
     expect((await handleFlightdeck(lying, env, { maxBodyBytes: limit }))?.status).toBe(413);
+    expect(env.ingest).not.toHaveBeenCalled();
+  });
+
+  it("stops reading a streamed body as soon as it exceeds the limit", async () => {
+    const env = fakeEnv();
+    let pulls = 0;
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(c) {
+          pulls++;
+          if (pulls > 100) c.close();
+          else c.enqueue(new Uint8Array(1024).fill(32));
+        },
+        cancel,
+      },
+      { highWaterMark: 0 },
+    );
+    const fake = {
+      url: `${ORIGIN}/_fd/e`,
+      method: "POST",
+      headers: new Headers({ Origin: ORIGIN, "Content-Type": "text/plain" }),
+      body,
+    } as unknown as Request;
+    expect((await handleFlightdeck(fake, env, { maxBodyBytes: 4 * 1024 }))?.status).toBe(413);
+    expect(pulls).toBeLessThanOrEqual(6);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(env.ingest).not.toHaveBeenCalled();
+  });
+
+  it("rejects a POST without a body with 400", async () => {
+    const env = fakeEnv();
+    const empty = new Request(`${ORIGIN}/_fd/e`, {
+      method: "POST",
+      headers: { Origin: ORIGIN, "Content-Type": "text/plain" },
+    });
+    expect(empty.body).toBeNull();
+    expect((await handleFlightdeck(empty, env))?.status).toBe(400);
     expect(env.ingest).not.toHaveBeenCalled();
   });
 
@@ -208,6 +244,34 @@ it("withFlightdeck intercepts the endpoint and passes everything else through", 
   expect(await (await call(handler, new Request(`${ORIGIN}/`))).text()).toBe("app");
 
   expect((await call(withFlightdeck({}), new Request(`${ORIGIN}/`))).status).toBe(404);
+});
+
+it("withFlightdeck keeps a handler's other methods, including class-instance ones", async () => {
+  const env = fakeEnv();
+  const ctx = {} as ExecutionContext;
+  const scheduled = vi.fn(async () => {});
+  const plain = withFlightdeck<typeof env>({ fetch: async () => new Response("app"), scheduled });
+  await plain.scheduled?.({} as ScheduledController, env, ctx);
+  expect(scheduled).toHaveBeenCalledOnce();
+
+  class App {
+    greeting = "from class";
+    queued: string[] = [];
+    async fetch() {
+      return new Response(this.greeting);
+    }
+    async queue() {
+      this.queued.push(this.greeting);
+    }
+  }
+  const app = new App();
+  const wrapped = withFlightdeck<typeof env>(app);
+  expect(typeof wrapped.queue).toBe("function");
+  await wrapped.queue?.({} as MessageBatch, env, ctx);
+  expect(app.queued).toEqual(["from class"]);
+  const res = await wrapped.fetch?.(new Request(`${ORIGIN}/`) as never, env, ctx);
+  expect(await res?.text()).toBe("from class");
+  expect((await wrapped.fetch?.(post('{"events":[]}') as never, env, ctx))?.status).toBe(204);
 });
 
 describe("flightdeck", () => {

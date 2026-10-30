@@ -9,7 +9,8 @@ type SentEvent = {
   eventId?: string;
   userId?: string;
   path?: string;
-  props?: Record<string, string>;
+  referrer?: string;
+  props?: Record<string, unknown>;
 };
 type Sent = { events: SentEvent[] };
 const beacons: Sent[] = [];
@@ -44,6 +45,12 @@ const flush = async () => {
 };
 
 describe("ids", () => {
+  it("rotates the session when fd_last is corrupt", () => {
+    sessionStorage.setItem("fd_sid", "a".repeat(32));
+    sessionStorage.setItem("fd_last", "garbage");
+    expect(sessionId(Date.now())).not.toBe("a".repeat(32));
+  });
+
   it("keeps the session id until 30 minutes idle", () => {
     const a = sessionId(1_000);
     expect(sessionId(1_000 + SESSION_IDLE_MS - 1)).toBe(a);
@@ -105,7 +112,13 @@ describe("capture", () => {
     document.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true }));
     const target = document.querySelector("section") as Element;
     callback(
-      [{ isIntersecting: true, target } as unknown as IntersectionObserverEntry],
+      [
+        {
+          isIntersecting: true,
+          intersectionRatio: 1,
+          target,
+        } as unknown as IntersectionObserverEntry,
+      ],
       {} as IntersectionObserver,
     );
     expect(await flush()).toEqual([]);
@@ -127,7 +140,11 @@ describe("capture", () => {
     document.body.innerHTML = `<section data-flightdeck="hero" data-flightdeck-view></section>`;
     init({ trackPages: false });
     const target = document.querySelector("section") as Element;
-    const entry = { isIntersecting: true, target } as unknown as IntersectionObserverEntry;
+    const entry = {
+      isIntersecting: true,
+      intersectionRatio: 1,
+      target,
+    } as unknown as IntersectionObserverEntry;
     callback([entry], {} as IntersectionObserver);
     callback([entry], {} as IntersectionObserver);
     target.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -227,5 +244,196 @@ describe("sendBatch", () => {
     vi.stubGlobal("fetch", fetchMock);
     sendBatch("/_fd/e", '{"events":[]}');
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
+
+type IOStub = {
+  callback: IntersectionObserverCallback;
+  options?: IntersectionObserverInit;
+  observed: Element[];
+};
+const stubIO = (): IOStub => {
+  const stub: IOStub = { callback: () => {}, observed: [] };
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      constructor(cb: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+        stub.callback = cb;
+        stub.options = options;
+      }
+      observe(el: Element) {
+        stub.observed.push(el);
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  return stub;
+};
+const viewEntry = (
+  target: Element,
+  intersectionRatio: number,
+  rectHeight: number,
+  rootHeight = 800,
+) =>
+  ({
+    isIntersecting: true,
+    intersectionRatio,
+    target,
+    intersectionRect: { height: rectHeight },
+    rootBounds: { height: rootHeight },
+  }) as unknown as IntersectionObserverEntry;
+
+describe("view accuracy", () => {
+  it("observes at thresholds 0 and 0.5", () => {
+    const io = stubIO();
+    init({ trackPages: false });
+    expect(io.options?.threshold).toEqual([0, 0.5]);
+  });
+
+  it("ignores a barely intersecting element", async () => {
+    const io = stubIO();
+    document.body.innerHTML = `<section data-flightdeck="hero" data-flightdeck-view></section>`;
+    init({ trackPages: false });
+    const target = document.querySelector("section") as Element;
+    io.callback([viewEntry(target, 0.01, 4)], {} as IntersectionObserver);
+    expect(await flush()).toEqual([]);
+  });
+
+  it("counts an element at least half visible once", async () => {
+    const io = stubIO();
+    document.body.innerHTML = `<section data-flightdeck="hero" data-flightdeck-view></section>`;
+    init({ trackPages: false });
+    const target = document.querySelector("section") as Element;
+    io.callback([viewEntry(target, 0.6, 120)], {} as IntersectionObserver);
+    io.callback([viewEntry(target, 0.6, 120)], {} as IntersectionObserver);
+    expect((await flush()).map((e) => [e.kind, e.name])).toEqual([["view", "hero"]]);
+  });
+
+  it("counts a tall element filling half the viewport", async () => {
+    const io = stubIO();
+    document.body.innerHTML = `<section data-flightdeck="tall" data-flightdeck-view></section>`;
+    init({ trackPages: false });
+    const target = document.querySelector("section") as Element;
+    io.callback([viewEntry(target, 0.3, 400, 800)], {} as IntersectionObserver);
+    expect((await flush()).map((e) => [e.kind, e.name])).toEqual([["view", "tall"]]);
+  });
+
+  it("observes view elements added after init", async () => {
+    const io = stubIO();
+    init({ trackPages: false });
+    const rescan = vi.spyOn(document, "querySelectorAll");
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `<section data-flightdeck="late" data-flightdeck-view></section>`;
+    const direct = document.createElement("aside");
+    direct.setAttribute("data-flightdeck", "direct");
+    direct.setAttribute("data-flightdeck-view", "");
+    document.body.append(wrap, direct);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(io.observed).toContain(wrap.firstElementChild);
+    expect(io.observed).toContain(direct);
+    expect(io.observed).not.toContain(wrap);
+    expect(rescan).not.toHaveBeenCalled();
+  });
+
+  it("skips the MutationObserver without IntersectionObserver", () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const created = vi.fn();
+    vi.stubGlobal(
+      "MutationObserver",
+      class {
+        constructor() {
+          created();
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    init({ trackPages: false });
+    expect(created).not.toHaveBeenCalled();
+  });
+});
+
+describe("robustness", () => {
+  it("captures clicks inside an open shadow root", async () => {
+    document.body.innerHTML = `<div id="host"></div>`;
+    const host = document.getElementById("host") as HTMLElement;
+    const root = host.attachShadow({ mode: "open" });
+    root.innerHTML = `<button data-flightdeck="shadow.cta" data-flightdeck-plan="pro"><span>Go</span></button>`;
+    init({ trackPages: false });
+    // Browsers retarget a composed event to the shadow host outside the shadow tree, so the
+    // document listener only sees the button through composedPath().
+    const span = root.querySelector("span") as HTMLElement;
+    const button = root.querySelector("button") as HTMLElement;
+    const ev = new MouseEvent("click", { bubbles: true, composed: true });
+    const path = [span, button, root, host, document.body, document.documentElement, document];
+    Object.defineProperty(ev, "composedPath", { value: () => path });
+    host.dispatchEvent(ev);
+    expect((await flush()).map((e) => [e.kind, e.name, e.props])).toEqual([
+      ["click", "shadow.cta", { plan: "pro" }],
+    ]);
+  });
+
+  it("rejects empty and over-long user ids", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    init({ trackPages: false });
+    identify("");
+    identify("u".repeat(129));
+    track("after");
+    const events = await flush();
+    expect(events.map((e) => [e.kind, e.userId])).toEqual([["track", undefined]]);
+    expect(warn).toHaveBeenCalledTimes(2);
+    identify("u".repeat(128));
+    expect((await flush()).at(-1)?.userId).toBe("u".repeat(128));
+  });
+
+  it("never breaks navigation when emitting throws", () => {
+    init();
+    vi.stubGlobal("crypto", {
+      randomUUID: () => {
+        throw new Error("boom");
+      },
+    });
+    expect(() => history.pushState(null, "", "/a")).not.toThrow();
+    expect(location.pathname).toBe("/a");
+    expect(() => history.replaceState(null, "", "/b")).not.toThrow();
+    expect(location.pathname).toBe("/b");
+  });
+
+  it("sends only the referrer origin, and none for an invalid referrer", async () => {
+    Object.defineProperty(document, "referrer", {
+      configurable: true,
+      value: "https://search.example/q?term=secret",
+    });
+    init();
+    expect((await flush())[0]?.referrer).toBe("https://search.example");
+    _reset();
+    beacons.length = 0;
+    Object.defineProperty(document, "referrer", { configurable: true, value: "not a url" });
+    init();
+    const [page] = await flush();
+    expect(page?.kind).toBe("page");
+    expect(page?.referrer).toBeUndefined();
+    Object.defineProperty(document, "referrer", { configurable: true, value: "" });
+  });
+
+  it("truncates long names and string props before queueing", async () => {
+    init({ trackPages: false });
+    track("n".repeat(300), { long: "v".repeat(600), n: 5, ok: true });
+    const [e] = await flush();
+    expect(e?.name).toHaveLength(256);
+    expect(e?.props).toEqual({ long: "v".repeat(512), n: 5, ok: true });
+  });
+
+  it("records a page view when restored from the back/forward cache", async () => {
+    init();
+    const show = (persisted: boolean) =>
+      dispatchEvent(Object.assign(new Event("pageshow"), { persisted }));
+    show(false);
+    show(true);
+    expect((await flush()).map((e) => [e.kind, e.name])).toEqual([
+      ["page", "/"],
+      ["page", "/"],
+    ]);
   });
 });

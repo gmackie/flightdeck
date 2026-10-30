@@ -11,9 +11,13 @@
 #   BUCKET              R2 bucket with Basin Catalog enabled (default: flightdeck-demo-events)
 #   --write-config      write the D1 id and stream ids into apps/flightdeck/wrangler.jsonc
 #   --migrate           apply D1 migrations remotely (needs real ids in wrangler.jsonc)
+#
+# Note: wrangler only accepts the catalog token as a --catalog-token argument, so the token is
+# visible in the process list while that wrangler command runs. That is acceptable on a
+# single-user dev machine; Phase 2 `create-flightdeck` should create sinks via the REST API.
 set -euo pipefail
 
-usage() { sed -n '2,13s/^# \{0,1\}//p' "$0"; }
+usage() { sed -n '2,17s/^# \{0,1\}//p' "$0"; }
 
 WRITE_CONFIG=0
 MIGRATE=0
@@ -57,7 +61,13 @@ catalog_token() {
     echo "CATALOG_TOKEN_FILE is not readable: $CATALOG_TOKEN_FILE" >&2
     exit 1
   fi
-  cat "$CATALOG_TOKEN_FILE"
+  local token
+  token=$(<"$CATALOG_TOKEN_FILE")
+  if [[ -z "$token" ]]; then
+    echo "CATALOG_TOKEN_FILE is empty: $CATALOG_TOKEN_FILE" >&2
+    exit 1
+  fi
+  printf '%s\n' "$token"
 }
 
 # 1. R2 bucket
@@ -79,6 +89,16 @@ streams=$(w basin pipelines streams list --json --per-page 100)
 sinks=$(w basin pipelines sinks list --json --per-page 100)
 pipelines=$(w basin pipelines list --json --per-page 100)
 
+# Read the token once, up front, and only if a sink is missing. A plain assignment (not inside
+# an argument list) makes set -e abort here when the file is missing, unreadable, or empty.
+CATALOG_TOKEN=
+for t in "${TABLES[@]}"; do
+  if ! has_name "fd_${t}_sink" <<<"$sinks"; then
+    CATALOG_TOKEN="$(catalog_token)"
+    break
+  fi
+done
+
 for t in "${TABLES[@]}"; do
   stream="fd_$t"
   sink="fd_${t}_sink"
@@ -96,7 +116,7 @@ for t in "${TABLES[@]}"; do
   else
     w basin pipelines sinks create "$sink" --type r2-data-catalog --bucket "$BUCKET" \
       --namespace "$NAMESPACE" --table "$t" --roll-interval 60 \
-      --catalog-token "$(catalog_token)"
+      --catalog-token "$CATALOG_TOKEN"
   fi
 
   if has_name "$pipeline" <<<"$pipelines"; then

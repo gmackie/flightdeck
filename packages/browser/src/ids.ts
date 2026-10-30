@@ -31,11 +31,11 @@ function write(store: () => Storage, key: string, value: string): void {
   }
 }
 
-/** Session id in sessionStorage, rotated after 30 minutes without activity. */
+/** Session id in sessionStorage, rotated after 30 minutes without activity (or a corrupt fd_last). */
 export function sessionId(now = Date.now()): string {
   const session = () => sessionStorage;
   let id = read(session, SESSION_KEY);
-  if (!id || now - Number(read(session, LAST_KEY) ?? 0) > SESSION_IDLE_MS) {
+  if (!id || now - (Number(read(session, LAST_KEY)) || 0) > SESSION_IDLE_MS) {
     id = randomId();
     write(session, SESSION_KEY, id);
   }

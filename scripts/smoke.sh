@@ -10,6 +10,15 @@ APP_PORT=${APP_PORT:-8799}
 FD=http://localhost:$FD_PORT
 APP=http://localhost:$APP_PORT
 UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36"
+# A leftover wrangler on either port would answer the health checks and mask a failed start.
+port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null || (exec 3<>"/dev/tcp/localhost/$1") 2>/dev/null; }
+for port in "$FD_PORT" "$APP_PORT"; do
+  if port_in_use "$port"; then
+    echo "port $port is already in use; stop whatever is listening (lsof -i :$port) or set FD_PORT/APP_PORT" >&2
+    exit 1
+  fi
+done
+
 STATE=$(mktemp -d "${TMPDIR:-/tmp}/flightdeck-smoke.XXXXXX")
 LOGS=$STATE/logs
 mkdir -p "$LOGS"
@@ -58,10 +67,10 @@ for _ in $(seq 60); do
   if curl -sf "$FD/healthz" >/dev/null && curl -sf "$APP/" >/dev/null; then break; fi
   sleep 1
 done
-curl -sf "$FD/healthz" >/dev/null && curl -sf "$APP/" >/dev/null || {
+if ! { curl -sf "$FD/healthz" >/dev/null && curl -sf "$APP/" >/dev/null; }; then
   echo "workers did not start" >&2
   exit 1
-}
+fi
 
 post() {
   curl -sf -X POST "$1" -H "Origin: $APP" -H "User-Agent: $UA" \
@@ -91,7 +100,7 @@ CHECK='
   const missing = ["/", "pricing.cta", "room.joined", "checkout.completed"].filter((n) => !names.has(n));
   if (missing.length) { console.error("missing", missing.join(", ")); process.exit(1); }'
 for attempt in $(seq 20); do
-  SNAPSHOT=$(curl -sf "$FD/__dev/apps/app_demo/hours/$HOUR")
+  SNAPSHOT=$(curl -sf "$FD/__dev/apps/app_demo/hours/$HOUR" || true)
   if node -e "$CHECK" <<<"$SNAPSHOT" 2>/dev/null; then break; fi
   if [ "$attempt" -eq 20 ]; then
     echo "$SNAPSHOT"
