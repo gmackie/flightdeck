@@ -174,7 +174,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.0.5
-        version: 5.0.5(vite@8.3.5(esbuild@0.28.2))
+        version: 5.0.5(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2))
 
   apps/flightdeck:
     dependencies:
@@ -193,10 +193,22 @@ importers:
     devDependencies:
       '@cloudflare/vitest-plugin':
         specifier: ^1.4.11
-        version: 1.4.11(@cloudflare/workers-types@5.20261030.1)(vitest@5.0.5(vite@8.3.5(esbuild@0.28.2)))
+        version: 1.4.11(@cloudflare/workers-types@5.20261030.1)(@types/node@26.6.6)(vitest@5.0.5(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)))
       wrangler:
         specifier: ^4.156.0
-        version: 4.156.0(@cloudflare/workers-types@5.20261030.1)
+        version: 4.156.0(@cloudflare/workers-types@5.20261030.1)(@types/node@26.6.6)
+
+  packages/browser:
+    devDependencies:
+      '@flightdeckhq/schema':
+        specifier: workspace:*
+        version: link:../schema
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      happy-dom:
+        specifier: ^21.0.4
+        version: 21.0.4
 
   packages/schema:
     dependencies:
@@ -801,6 +813,15 @@ packages:
   '@types/estree@1.0.10':
     resolution: {integrity: sha512-lTyOMnOcmRBzdCv6/4zUZCrEhV0xrqQiUZBZtVcbmLHBXKLnN8q89v/wKRF/Q0HbwVsqbIG3o5HDoFl9sduM+g==}
 
+  '@types/node@26.6.6':
+    resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
+
+  '@types/whatwg-mimetype@3.0.2':
+    resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
+
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
     engines: {node: '>=16.20.0'}
@@ -942,6 +963,10 @@ packages:
   blake3-wasm@2.1.5:
     resolution: {integrity: sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g==}
 
+  buffer-image-size@0.6.4:
+    resolution: {integrity: sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ==}
+    engines: {node: '>=4.0'}
+
   chai@6.3.0:
     resolution: {integrity: sha512-XWAtwJ6OHO+tj0EKCs0Y2UamnyOxseZWltU4x2U2wh8g4AigdjwvtUjvLP2tqkA/avxHEtzxNaqGq/YGNwckKg==}
     engines: {node: '>=18'}
@@ -956,6 +981,10 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
+
+  entities@7.0.1:
+    resolution: {integrity: sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA==}
+    engines: {node: '>=0.12'}
 
   error-stack-parser-es@1.0.5:
     resolution: {integrity: sha512-5qucVt2XcuGMcEGgWI7i+yZpmpByQ8J1lHhcL7PwqCwu9FPP3VUXzT4ltHe5i2z9dePwEHcDVOAfSnHsOlCXRA==}
@@ -988,6 +1017,10 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  happy-dom@21.0.4:
+    resolution: {integrity: sha512-tFm+GaLBgo6o0awHnvHaNoraVo27qJ+2tZEtZ+cIa08hXbeitrxAJajLI05hsUy/2/YTKcUjQYzHe5mCcraLBw==}
+    engines: {node: '>=20.0.0'}
 
   jose@6.2.14:
     resolution: {integrity: sha512-3JasLuki1NRLQvY4wCoC37KZk4qxoBx2k2aFqLxT84IezqW0bkJKnNtxnZj/Fu1xsQivoc/lytxaRHJoGLjJ1A==}
@@ -1157,6 +1190,9 @@ packages:
     resolution: {integrity: sha512-yu26mwteFYzBAot7KVMqFGCVpsF6g8wXfJzQUHvu1no3+rRRSFcSV2nKeYvNPLD2J4b08jYBDhHUjeH0ygIl9w==}
     hasBin: true
 
+  undici-types@8.9.0:
+    resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
+
   undici@7.30.1:
     resolution: {integrity: sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==}
     engines: {node: '>=20.18.1'}
@@ -1256,6 +1292,10 @@ packages:
       jsdom:
         optional: true
 
+  whatwg-mimetype@3.0.0:
+    resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
+    engines: {node: '>=12'}
+
   why-is-node-running@3.2.1:
     resolution: {integrity: sha512-Tb2FUhB4vUsGQlfSquQLYkApkuPAFQXGFzxWKHHumVz2dK+X1RUm/HnID4+TfIGYJ1kTcwOaCk/buYCEJr6YjQ==}
     engines: {node: '>=20.11'}
@@ -1350,13 +1390,13 @@ snapshots:
     optionalDependencies:
       workerd: 1.20261023.1
 
-  '@cloudflare/vitest-plugin@1.4.11(@cloudflare/workers-types@5.20261030.1)(vitest@5.0.5(vite@8.3.5(esbuild@0.28.2)))':
+  '@cloudflare/vitest-plugin@1.4.11(@cloudflare/workers-types@5.20261030.1)(@types/node@26.6.6)(vitest@5.0.5(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)))':
     dependencies:
       cjs-module-lexer: 1.2.3
       esbuild: 0.28.2
-      miniflare: 5.20261023.3-beta
-      vitest: 5.0.5(vite@8.3.5(esbuild@0.28.2))
-      wrangler: 4.156.0(@cloudflare/workers-types@5.20261030.1)
+      miniflare: 5.20261023.3-beta(@types/node@26.6.6)
+      vitest: 5.0.5(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2))
+      wrangler: 4.156.0(@cloudflare/workers-types@5.20261030.1)(@types/node@26.6.6)
       zod: 4.6.6
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
@@ -1662,6 +1702,16 @@ snapshots:
 
   '@types/estree@1.0.10': {}
 
+  '@types/node@26.6.6':
+    dependencies:
+      undici-types: 8.9.0
+
+  '@types/whatwg-mimetype@3.0.2': {}
+
+  '@types/ws@8.18.2':
+    dependencies:
+      '@types/node': 26.6.6
+
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true
 
@@ -1722,20 +1772,24 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@vitest/mocker@5.0.5(vite@8.3.5(esbuild@0.28.2))':
+  '@vitest/mocker@5.0.5(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2))':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/spy': 5.0.5
       estree-walker: 3.0.3
       magic-string: 1.4.5
     optionalDependencies:
-      vite: 8.3.5(esbuild@0.28.2)
+      vite: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)
 
   '@vitest/spy@5.0.5': {}
 
   assertion-error@2.0.1: {}
 
   blake3-wasm@2.1.5: {}
+
+  buffer-image-size@0.6.4:
+    dependencies:
+      '@types/node': 26.6.6
 
   chai@6.3.0: {}
 
@@ -1744,6 +1798,8 @@ snapshots:
   cookie@1.1.1: {}
 
   detect-libc@2.1.2: {}
+
+  entities@7.0.1: {}
 
   error-stack-parser-es@1.0.5: {}
 
@@ -1790,6 +1846,19 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
+
+  happy-dom@21.0.4:
+    dependencies:
+      '@types/node': 26.6.6
+      '@types/whatwg-mimetype': 3.0.2
+      '@types/ws': 8.18.2
+      buffer-image-size: 0.6.4
+      entities: 7.0.1
+      whatwg-mimetype: 3.0.0
+      ws: 8.21.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   jose@6.2.14: {}
 
@@ -1848,10 +1917,10 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  miniflare@5.20261023.3-beta:
+  miniflare@5.20261023.3-beta(@types/node@26.6.6):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
-      sharp: 0.35.5
+      sharp: 0.35.5(@types/node@26.6.6)
       undici: 7.30.1
       workerd: 1.20261023.1
       ws: 8.21.0
@@ -1902,7 +1971,7 @@ snapshots:
 
   semver@7.8.5: {}
 
-  sharp@0.35.5:
+  sharp@0.35.5(@types/node@26.6.6):
     dependencies:
       '@img/colour': 1.1.0
       detect-libc: 2.1.2
@@ -1933,6 +2002,7 @@ snapshots:
       '@img/sharp-win32-arm64': 0.35.5
       '@img/sharp-win32-ia32': 0.35.5
       '@img/sharp-win32-x64': 0.35.5
+      '@types/node': 26.6.6
 
   source-map-js@1.2.2: {}
 
@@ -1977,6 +2047,8 @@ snapshots:
 
   ulid@3.0.2: {}
 
+  undici-types@8.9.0: {}
+
   undici@7.30.1: {}
 
   unenv@2.0.0-rc.24:
@@ -1987,7 +2059,7 @@ snapshots:
     optionalDependencies:
       typescript: 7.0.2
 
-  vite@8.3.5(esbuild@0.28.2):
+  vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
@@ -1995,13 +2067,14 @@ snapshots:
       rolldown: 1.2.15
       tinyglobby: 0.2.17
     optionalDependencies:
+      '@types/node': 26.6.6
       esbuild: 0.28.2
       fsevents: 2.3.3
 
-  vitest@5.0.5(vite@8.3.5(esbuild@0.28.2)):
+  vitest@5.0.5(@types/node@26.6.6)(happy-dom@21.0.4)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)):
     dependencies:
       '@types/chai': 5.2.3
-      '@vitest/mocker': 5.0.5(vite@8.3.5(esbuild@0.28.2))
+      '@vitest/mocker': 5.0.5(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2))
       chai: 6.3.0
       es-module-lexer: 2.3.2
       expect-type: 1.4.0
@@ -2012,10 +2085,15 @@ snapshots:
       tinybench: 6.2.2
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
-      vite: 8.3.5(esbuild@0.28.2)
+      vite: 8.3.5(@types/node@26.6.6)(esbuild@0.28.2)
       why-is-node-running: 3.2.1
+    optionalDependencies:
+      '@types/node': 26.6.6
+      happy-dom: 21.0.4
     transitivePeerDependencies:
       - msw
+
+  whatwg-mimetype@3.0.0: {}
 
   why-is-node-running@3.2.1: {}
 
@@ -2027,13 +2105,13 @@ snapshots:
       '@cloudflare/workerd-linux-arm64': 1.20261023.1
       '@cloudflare/workerd-windows-64': 1.20261023.1
 
-  wrangler@4.156.0(@cloudflare/workers-types@5.20261030.1):
+  wrangler@4.156.0(@cloudflare/workers-types@5.20261030.1)(@types/node@26.6.6):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
       '@cloudflare/unenv-preset': 2.16.2(unenv@2.0.0-rc.24)(workerd@1.20261023.1)
       blake3-wasm: 2.1.5
       esbuild: 0.28.2
-      miniflare: 5.20261023.3-beta
+      miniflare: 5.20261023.3-beta(@types/node@26.6.6)
       path-to-regexp: 6.3.0
       unenv: 2.0.0-rc.24
       workerd: 1.20261023.1
