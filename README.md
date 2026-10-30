@@ -2,4 +2,10 @@
 
 Open-source, self-hosted product analytics and behavioral intelligence for Cloudflare.
 
-**Status:** initial bootstrap, not production ready. Architecture, deployment, and worker scaffolding are being drafted.
+## Layout
+
+Design and implementation plans live in [`docs/plans/`](docs/plans/).
+
+- `apps/` — deployable Cloudflare Workers (planned)
+- `packages/` — shared libraries and SDKs (planned)
+- `examples/` — example integrations (planned)
