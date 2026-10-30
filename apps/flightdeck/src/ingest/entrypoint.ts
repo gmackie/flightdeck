@@ -33,7 +33,7 @@ export class Ingest extends WorkerEntrypoint<Env, IngestProps> implements Ingest
     if (!appId) throw new IngestError("service binding is missing props.appId");
     const app = await getApp(this.env.DB, appId);
     if (!app) throw new IngestError(`unknown app ${appId}`);
-    return ingestBatch(appId, input, source, deps(this.env, app));
+    return ingestBatch(appId, input, source, deps(this.env, this.ctx, app));
   }
 }
 
@@ -43,7 +43,7 @@ function serverEvent(value: unknown, fixed: { kind: string; name?: string }): un
   return { ts: Date.now(), ...value, ...fixed };
 }
 
-function deps(env: Env, app: AppRecord): IngestDeps {
+function deps(env: Env, ctx: ExecutionContext, app: AppRecord): IngestDeps {
   const teamDomain = env.ACCESS_TEAM_DOMAIN.trim();
   return {
     now: Date.now,
@@ -54,6 +54,7 @@ function deps(env: Env, app: AppRecord): IngestDeps {
     sendEvents: (rows: StoredEvent[]) => sinks.events(env, rows),
     appendToSession: (appId, sessionId, rows) =>
       sessionStub(env, appId, sessionId).append(appId, sessionId, rows),
-    recordCounts: (appId, hour, rows) => appShard(env, appId, hour).recordEvents(rows),
+    recordCounts: (appId, hour, rows) => appShard(env, appId, hour).recordEvents(hour, rows),
+    defer: (work) => ctx.waitUntil(work),
   };
 }

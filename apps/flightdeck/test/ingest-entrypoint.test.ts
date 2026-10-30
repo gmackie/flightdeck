@@ -6,7 +6,13 @@ import worker from "../src/index";
 import { sinks } from "../src/sinks";
 import { CHROME, sid } from "./fixtures";
 
-const APPS = ["app_e2e_browser", "app_e2e_server", "app_e2e_invalid", "app_e2e_dev"];
+const APPS = [
+  "app_e2e_browser",
+  "app_e2e_server",
+  "app_e2e_invalid",
+  "app_e2e_dev",
+  "app_e2e_sinkfail",
+];
 
 beforeAll(async () => {
   await env.DB.batch(
@@ -50,9 +56,23 @@ it("ingests a browser batch into Pipelines and the hour shard", async () => {
     country: "GB",
     source: "browser",
   });
-  const snap = await appShard(env, "app_e2e_browser", hourKey(ts)).snapshot();
-  expect(snap.counters).toContainEqual({ kind: "page", name: "/users/:id", count: 1 });
-  expect(snap.sessions).toBe(1);
+  // DO fan-out runs after the response via waitUntil, so poll for it.
+  await vi.waitFor(async () => {
+    const snap = await appShard(env, "app_e2e_browser", hourKey(ts)).snapshot();
+    expect(snap.counters).toContainEqual({ kind: "page", name: "/users/:id", count: 1 });
+    expect(snap.sessions).toBe(1);
+  });
+});
+
+it("fails the call when the Pipelines send fails", async () => {
+  vi.spyOn(sinks, "events").mockRejectedValue(new Error("pipeline down"));
+  expect(
+    await rpcError(() =>
+      ingestFor("app_e2e_sinkfail").ingest({
+        events: [{ kind: "track", name: "x", ts: Date.now() }],
+      }),
+    ),
+  ).toMatch(/pipeline down/);
 });
 
 it("track() and identify() record server events", async () => {

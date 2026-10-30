@@ -1,4 +1,4 @@
-import { runDurableObjectAlarm } from "cloudflare:test";
+import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, expect, it, vi } from "vitest";
 import { appShard, sessionStub } from "../src/do/shards";
@@ -54,7 +54,7 @@ it("continues the same journey across separate appends", async () => {
   expect(await runDurableObjectAlarm(stub)).toBe(true);
   expect(sessions.mock.calls[0]?.[1]).toEqual([
     expect.objectContaining({
-      steps: JSON.stringify(["/", "/pricing", "buy"]),
+      steps: ["/", "/pricing", "buy"],
       event_count: 3,
       duration_ms: 5_000,
     }),
@@ -86,7 +86,7 @@ it("closes on alarm: writes the record, adds the exit transition, clears state",
       user_id: "user_1",
       entry: "/",
       exit: "/pricing",
-      steps: JSON.stringify(["/", "/pricing"]),
+      steps: ["/", "/pricing"],
       step_count: 2,
       event_count: 3,
       duration_ms: 60_000,
@@ -97,5 +97,87 @@ it("closes on alarm: writes the record, adds the exit transition, clears state",
     target: "$exit",
     count: 1,
   });
+  expect(await runDurableObjectAlarm(stub)).toBe(false);
+});
+
+const stateOf = (stub: ReturnType<typeof sessionStub>) =>
+  runInDurableObject(stub, async (_, state) => ({
+    state: await state.storage.get<{ eventCount: number; steps: string[]; closeAttempts?: number }>(
+      "state",
+    ),
+    alarm: await state.storage.getAlarm(),
+  }));
+
+it("starts the session at the earliest event even when it arrives late", async () => {
+  const sessions = vi.spyOn(sinks, "sessions").mockResolvedValue(undefined);
+  const s = sid("e");
+  const stub = sessionStub(env, "app_m1", s);
+  await stub.append("app_m1", s, [row({ app_id: "app_m1", session_id: s, ts: T0 + 10_000 })]);
+  await stub.append("app_m1", s, [row({ app_id: "app_m1", session_id: s, path: "/late", ts: T0 })]);
+  expect(await runDurableObjectAlarm(stub)).toBe(true);
+  expect(sessions.mock.calls[0]?.[1][0]).toMatchObject({ started_at: T0, duration_ms: 10_000 });
+});
+
+it("keeps events appended while the close is in flight as a new open session", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const sessions = vi.spyOn(sinks, "sessions").mockImplementation(() => held);
+  const s = sid("f");
+  const stub = sessionStub(env, "app_race", s);
+  await stub.append("app_race", s, [row({ app_id: "app_race", session_id: s, path: "/", ts: T0 })]);
+
+  const closing = runDurableObjectAlarm(stub);
+  await vi.waitFor(() => expect(sessions).toHaveBeenCalledOnce());
+  await stub.append("app_race", s, [
+    row({ app_id: "app_race", session_id: s, path: "/again", ts: T0 + 40 * 60_000 }),
+  ]);
+  release();
+  expect(await closing).toBe(true);
+
+  expect(sessions).toHaveBeenCalledOnce();
+  expect(sessions.mock.calls[0]?.[1]).toEqual([
+    expect.objectContaining({ steps: ["/"], event_count: 1 }),
+  ]);
+  const after = await stateOf(stub);
+  expect(after.state).toMatchObject({ eventCount: 1, steps: ["/again"] });
+  expect(after.alarm).not.toBeNull();
+});
+
+it("restores state and re-arms the alarm with backoff when the close fails", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(sinks, "sessions").mockRejectedValue(new Error("pipeline down"));
+  const s = sid("g");
+  const stub = sessionStub(env, "app_fail", s);
+  await stub.append("app_fail", s, [row({ app_id: "app_fail", session_id: s, ts: T0 })]);
+
+  const before = Date.now();
+  expect(await runDurableObjectAlarm(stub)).toBe(true);
+  const after = await stateOf(stub);
+  expect(after.state).toMatchObject({ eventCount: 1, closeAttempts: 1 });
+  expect(after.alarm).toBeGreaterThanOrEqual(before + 60_000);
+  expect(after.alarm).toBeLessThan(before + 120_000);
+
+  expect(await runDurableObjectAlarm(stub)).toBe(true);
+  const second = await stateOf(stub);
+  expect(second.state?.closeAttempts).toBe(2);
+  expect(second.alarm).toBeGreaterThanOrEqual(before + 120_000);
+});
+
+it("drops the session after five failed close attempts without throwing", async () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  const sessions = vi.spyOn(sinks, "sessions").mockRejectedValue(new Error("pipeline down"));
+  const s = sid("h");
+  const stub = sessionStub(env, "app_drop", s);
+  await stub.append("app_drop", s, [row({ app_id: "app_drop", session_id: s, ts: T0 })]);
+
+  for (let i = 0; i < 5; i++) expect(await runDurableObjectAlarm(stub)).toBe(true);
+  expect(sessions).toHaveBeenCalledTimes(5);
+  expect(await stateOf(stub)).toEqual({ state: undefined, alarm: null });
+  expect(error).toHaveBeenCalledWith(
+    expect.stringContaining("dropping session"),
+    expect.anything(),
+  );
   expect(await runDurableObjectAlarm(stub)).toBe(false);
 });
