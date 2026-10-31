@@ -227,6 +227,12 @@ importers:
 
   apps/flightdeck:
     dependencies:
+      '@flightdeckhq/lifecycle':
+        specifier: workspace:*
+        version: link:../../packages/lifecycle
+      '@flightdeckhq/lifecycle-queries':
+        specifier: workspace:*
+        version: link:../../packages/lifecycle-queries
       '@flightdeckhq/schema':
         specifier: workspace:*
         version: link:../../packages/schema
@@ -297,6 +303,8 @@ importers:
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
+
+  packages/lifecycle: {}
 
   packages/lifecycle-queries:
     devDependencies:

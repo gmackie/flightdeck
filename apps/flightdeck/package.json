@@ -9,6 +9,8 @@
     "typecheck": "wrangler types --strict-vars false && tsc -p ."
   },
   "dependencies": {
+    "@flightdeckhq/lifecycle": "workspace:*",
+    "@flightdeckhq/lifecycle-queries": "workspace:*",
     "@flightdeckhq/schema": "workspace:*",
     "@flightdeckhq/worker": "workspace:*",
     "jose": "^6.2.14",
