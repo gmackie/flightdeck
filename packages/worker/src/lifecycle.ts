@@ -17,9 +17,15 @@ export function flightdeckLifecycle<E extends object>(
 
 /**
  * True when Flightdeck rejected the batch for good (invalid, unsupported version, personal-data
- * keys, future time, duplicate ids): retrying the same events fails the same way, so quarantine
- * them. Anything else (`lifecycle forbidden`, `lifecycle unavailable`, network) is retryable.
+ * keys, duplicate ids): retrying the same events fails the same way, so quarantine them.
+ * Anything else is retryable: `lifecycle forbidden`, `lifecycle unavailable`, network errors,
+ * and `future_occurred_at` (clock skew, which passes once Flightdeck's clock catches up).
  */
 export function isPermanentLifecycleError(error: unknown): boolean {
-  return error instanceof Error && error.message.startsWith("lifecycle rejected");
+  if (!(error instanceof Error)) return false;
+  const { message } = error;
+  return (
+    message.startsWith("lifecycle rejected") &&
+    !message.startsWith("lifecycle rejected (future_occurred_at)")
+  );
 }

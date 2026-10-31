@@ -169,7 +169,10 @@ describe("sensitive keys", () => {
     for (const key of ["email", "e_mail", "firstName", "api_key", "API-Key", "user.password"]) {
       expect(isSensitiveKey(key), key).toBe(true);
     }
-    for (const key of ["department", "seniority", "region", "zip_region", "tier", "remote"]) {
+    for (const key of ["useremail", "phonenumber", "accesstoken", "dateofbirth", "zip"]) {
+      expect(isSensitiveKey(key), key).toBe(true);
+    }
+    for (const key of ["department", "seniority", "region", "zone", "tier", "remote"]) {
       expect(isSensitiveKey(key), key).toBe(false);
     }
   });

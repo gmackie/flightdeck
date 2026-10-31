@@ -54,6 +54,7 @@ const SENSITIVE_SEGMENTS = new Set([
   "address",
   "street",
   "postcode",
+  "zip",
   "zipcode",
   "name",
   "firstname",
@@ -75,7 +76,33 @@ const SENSITIVE_SEGMENTS = new Set([
   "taxid",
 ]);
 
-/** True when `key` names personal or secret data and must never be stored as a dimension. */
+// Matched anywhere in the key with separators removed, so `useremail` and `phonenumber` match.
+const SENSITIVE_SUBSTRINGS = [
+  "email",
+  "phone",
+  "password",
+  "passwd",
+  "secret",
+  "token",
+  "address",
+  "apikey",
+  "privatekey",
+  "username",
+  "firstname",
+  "lastname",
+  "fullname",
+  "surname",
+  "birth",
+  "credential",
+  "passport",
+  "creditcard",
+  "cardnumber",
+];
+
+/**
+ * True when `key` names personal or secret data and must never be stored. A best-effort
+ * denylist: it catches common spellings, not every possible one, and cannot judge values.
+ */
 export function isSensitiveKey(key: string): boolean {
   const parts = key
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
@@ -88,7 +115,8 @@ export function isSensitiveKey(key: string): boolean {
     const next = parts[i + 1];
     if (next && SENSITIVE_SEGMENTS.has(part + next)) return true;
   }
-  return false;
+  const compact = parts.join("");
+  return SENSITIVE_SUBSTRINGS.some((term) => compact.includes(term));
 }
 
 /** Every object key in `value` (depth-bounded) that `isSensitiveKey` flags. */
@@ -382,7 +410,8 @@ export type LifecycleIngestResult = { accepted: number };
 /**
  * Lifecycle methods on `env.FLIGHTDECK`. Server-only: Flightdeck must have granted the bound
  * app `lifecycle.write`. A batch is accepted or rejected whole; errors whose message starts
- * with `lifecycle rejected` are permanent (fix or quarantine the events), others are retryable.
+ * with `lifecycle rejected` are permanent (fix or quarantine the events) except
+ * `lifecycle rejected (future_occurred_at)`; others are retryable.
  */
 export interface LifecycleRpc {
   trackLifecycle(event: unknown): Promise<LifecycleIngestResult>;

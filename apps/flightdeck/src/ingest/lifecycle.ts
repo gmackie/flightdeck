@@ -29,7 +29,10 @@ export type LifecycleIssueCode =
 /** `index` is the event's position in the batch, or null for envelope issues. Never echoes values. */
 export type LifecycleIssue = { index: number | null; code: LifecycleIssueCode; message: string };
 
-/** Permanent: retrying the same batch fails the same way. Fix or quarantine the events. */
+/**
+ * Retrying the same batch fails the same way: fix or quarantine the events. The exception is
+ * `future_occurred_at` (producer clock skew), which succeeds once Flightdeck's clock catches up.
+ */
 export class LifecycleRejected extends Error {
   constructor(readonly issues: LifecycleIssue[]) {
     const first = issues[0];
@@ -110,6 +113,17 @@ function checkEvent(
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     return { code: "invalid_event", message: "expected an object" };
   }
+  // Size first, so the key scan below is bounded. RPC structured clone can carry BigInt and
+  // cycles, which JSON cannot: those are permanent rejections, not retryable crashes.
+  let size: number;
+  try {
+    size = encoder.encode(JSON.stringify(raw)).byteLength;
+  } catch {
+    return { code: "invalid_event", message: "not JSON-serializable" };
+  }
+  if (size > MAX_LIFECYCLE_EVENT_BYTES) {
+    return { code: "event_too_large", message: `over ${MAX_LIFECYCLE_EVENT_BYTES} bytes` };
+  }
   const version = (raw as { schemaVersion?: unknown }).schemaVersion;
   if (version !== LIFECYCLE_SCHEMA_VERSION) {
     return {
@@ -120,9 +134,6 @@ function checkEvent(
   const prohibited = prohibitedKeys(raw);
   if (prohibited.length) {
     return { code: "prohibited_key", message: `key names personal data: ${safe(prohibited[0])}` };
-  }
-  if (encoder.encode(JSON.stringify(raw)).byteLength > MAX_LIFECYCLE_EVENT_BYTES) {
-    return { code: "event_too_large", message: `over ${MAX_LIFECYCLE_EVENT_BYTES} bytes` };
   }
   const parsed = v.safeParse(LifecycleEventV1, raw);
   if (!parsed.success) return { code: "invalid_event", message: describe(parsed.issues[0]) };
@@ -140,7 +151,8 @@ function checkEvent(
 function describe(issue: v.BaseIssue<unknown> | undefined): string {
   if (!issue) return "invalid";
   const path = v.getDotPath(issue);
-  const message = issue.message.replace(/ but received .*$/s, "").slice(0, MAX_MESSAGE);
+  // valibot appends the input (`... but received 3.25`, `Invalid integer: Received 3.25`).
+  const message = issue.message.replace(/(:| but)? [Rr]eceived .*$/s, "").slice(0, MAX_MESSAGE);
   return path ? `${safe(path)}: ${message}` : message;
 }
 
