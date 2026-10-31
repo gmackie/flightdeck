@@ -266,7 +266,7 @@ importers:
   packages/browser:
     dependencies:
       '@flightdeckhq/schema':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../schema
     devDependencies:
       esbuild:
@@ -294,7 +294,7 @@ importers:
   packages/worker:
     dependencies:
       '@flightdeckhq/schema':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../schema
     devDependencies:
       '@cloudflare/workers-types':

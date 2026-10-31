@@ -1,15 +1,56 @@
 {
   "name": "@flightdeckhq/worker",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Cloudflare Worker SDK for Flightdeck: serve the browser endpoint and track server-side events over a service binding.",
+  "keywords": [
+    "flightdeck",
+    "analytics",
+    "product-analytics",
+    "cloudflare",
+    "cloudflare-workers",
+    "durable-objects"
+  ],
+  "homepage": "https://github.com/gmackie/flightdeck/tree/main/packages/worker#readme",
+  "bugs": {
+    "url": "https://github.com/gmackie/flightdeck/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gmackie/flightdeck.git",
+    "directory": "packages/worker"
+  },
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
   "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build",
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@flightdeckhq/schema": "workspace:*"
+    "@flightdeckhq/schema": "workspace:^"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261030.1"

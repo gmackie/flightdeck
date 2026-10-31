@@ -60,6 +60,5 @@ After better-auth (or the app's auth) establishes a session, call `identifyUser(
 
 ## Gotchas
 
-- `@flightdeckhq/*` packages ship TypeScript sources until Flightdeck publishes builds; Next must transpile the browser package (see the frontend skill: `transpilePackages`). The Worker wrapper is bundled by wrangler/esbuild, which handles `.ts`.
 - Next middleware never sees `/_fd/e`, because the wrapper answers first; no matcher change is needed.
 - Production traffic for ForgeGraph reaches `forgegraf` through `forgegraph-router`. Confirm the browser's `Origin` matches the URL the Worker sees; if not, set `allowedOrigins` in `fdOptions` (recipe-plain-worker.md).

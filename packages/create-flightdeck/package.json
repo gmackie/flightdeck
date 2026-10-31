@@ -1,19 +1,43 @@
 {
   "name": "create-flightdeck",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Register apps with a self-hosted Flightdeck and (later) install it.",
+  "keywords": [
+    "flightdeck",
+    "analytics",
+    "cloudflare",
+    "cli",
+    "create"
+  ],
+  "homepage": "https://github.com/gmackie/flightdeck/tree/main/packages/create-flightdeck#readme",
+  "bugs": {
+    "url": "https://github.com/gmackie/flightdeck/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gmackie/flightdeck.git",
+    "directory": "packages/create-flightdeck"
+  },
+  "license": "MIT",
   "type": "module",
   "bin": {
     "create-flightdeck": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=24"
   },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
-    "build": "esbuild src/bin.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/cli.js --banner:js='#!/usr/bin/env node'",
+    "build": "rm -rf dist && esbuild src/bin.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/cli.js --banner:js=\"#!/usr/bin/env node\" && chmod +x dist/cli.js",
+    "prepack": "pnpm run build",
     "typecheck": "tsc -p ."
   },
   "devDependencies": {

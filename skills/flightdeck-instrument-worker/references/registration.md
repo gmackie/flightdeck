@@ -4,15 +4,9 @@ If your brief already lists the production and staging appIds, use them and skip
 
 ## Getting the CLI
 
-Once published: `npx create-flightdeck apps add ...`. Until then, build it from a Flightdeck checkout that contains `packages/create-flightdeck` (FLIG-10):
+Run it from npm with `npx create-flightdeck apps add ...` (or `pnpm dlx create-flightdeck ...`). It needs Node 24 or later; nothing to install or build.
 
-```bash
-cd ~/dev/flightdeck && wt switch --create fd-cli      # a worktree; never build inside the seed
-pnpm install && pnpm --filter create-flightdeck build  # writes packages/create-flightdeck/dist/cli.js
-create-flightdeck() { node ~/work/flightdeck/fd-cli/packages/create-flightdeck/dist/cli.js "$@"; }
-```
-
-If `packages/create-flightdeck` is missing, FLIG-10 has not merged yet: use the ids from the coordinator, or ask for them.
+Until 0.1.0 is published, `npm view create-flightdeck version` returns 404. If it does, use the ids from the coordinator or ask for them, and report on FLIG-14 (the npm release). Don't build the CLI from a Flightdeck checkout.
 
 ## Configuration
 
@@ -27,9 +21,9 @@ Never print or commit the Access secret; read it from the secret store your envi
 ## Commands
 
 ```bash
-create-flightdeck apps add <name> --json                    # production: app_<slug>
-create-flightdeck apps add <name> --stage staging --json    # staging and every non-production lane: app_<slug>_staging
-create-flightdeck apps list --json
+npx create-flightdeck apps add <name> --json                    # production: app_<slug>
+npx create-flightdeck apps add <name> --stage staging --json    # staging and every non-production lane: app_<slug>_staging
+npx create-flightdeck apps list --json
 ```
 
 `add` prints `{ app: { id, name, created_at }, binding: { binding, service, entrypoint, props: { appId } } }`; the `binding` object is the `services` entry for the wrangler config. Use the staging id for staging, beta, previews and one-boxes; do not register extra stages.

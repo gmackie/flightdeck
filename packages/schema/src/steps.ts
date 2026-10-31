@@ -1,4 +1,4 @@
-import type { StoredEvent } from "./events";
+import type { StoredEvent } from "./events.js";
 
 export const START = "$start";
 export const EXIT = "$exit";

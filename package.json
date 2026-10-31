@@ -1,6 +1,7 @@
 {
   "name": "flightdeck",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@12.14.0",
   "engines": {
@@ -11,7 +12,9 @@
     "format": "biome check --write .",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "smoke:pack": "bash scripts/pack-smoke.sh",
+    "release:version": "node scripts/release-version.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.4",

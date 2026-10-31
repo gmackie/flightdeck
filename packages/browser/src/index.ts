@@ -1,7 +1,7 @@
 import type { ClientEventInput, EventKind } from "@flightdeckhq/schema";
-import { installCapture } from "./capture";
-import { anonymousId, randomId, sessionId } from "./ids";
-import { EventQueue } from "./queue";
+import { installCapture } from "./capture.js";
+import { anonymousId, randomId, sessionId } from "./ids.js";
+import { EventQueue } from "./queue.js";
 
 /** An event as built by the SDK, before it is queued. */
 export type FlightdeckEvent = ClientEventInput;

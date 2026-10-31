@@ -11,7 +11,9 @@ You own the client entry and components. Do not edit the worker entry or wrangle
 
 ## 1. Install
 
-`npm view @flightdeckhq/browser version` must succeed, or the coordinator (FLIG-13) must have given you a tarball or workspace path; otherwise stop and report. Then `pnpm add @flightdeckhq/browser` (or the coordinator's tarball/path) in the web app's package.
+`pnpm add @flightdeckhq/browser` (or the repo's package manager) in the web app's package. It ships compiled ESM with types, so no `transpilePackages` or bundler changes are needed.
+
+Until 0.1.0 is published, `npm view @flightdeckhq/browser version` returns 404. If it does, stop and report on FLIG-14 (the npm release). Never vendor copies of the SDK or install it from a Flightdeck checkout.
 
 ## 2. Init once in the client entry
 
