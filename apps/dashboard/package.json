@@ -22,6 +22,7 @@
     "@cloudflare/kumo": "^2.16.0",
     "@flightdeckhq/browser": "workspace:*",
     "@phosphor-icons/react": "^2.1.10",
+    "echarts": "^6.1.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   }

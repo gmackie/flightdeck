@@ -100,11 +100,12 @@ async function fanOut(appId: string, rows: StoredEvent[], deps: IngestDeps): Pro
   }
 }
 
-const toCounterRow = ({ kind, name, path, session_id }: StoredEvent): CounterRow => ({
+const toCounterRow = ({ kind, name, path, session_id, ts }: StoredEvent): CounterRow => ({
   kind,
   name,
   path,
   session_id,
+  ts,
 });
 
 function summarize(issue: v.BaseIssue<unknown> | undefined): string {
@@ -118,6 +119,8 @@ function validateEvent(raw: unknown): ClientEvent | null {
   const parsed = v.safeParse(ClientEvent, raw);
   if (!parsed.success) return null;
   const event = parsed.output;
+  // `$` names are Flightdeck's own (`$start`, `$exit`, the `$other` rollup row).
+  if (event.kind !== "page" && event.name.startsWith("$")) return null;
   if (event.props && propsBytes(event.props) > MAX_PROPS_BYTES) return null;
   return event;
 }

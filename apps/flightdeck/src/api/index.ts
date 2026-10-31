@@ -4,6 +4,7 @@ import { forgetApp } from "../apps";
 import { trackDogfood } from "../dogfood";
 import { authenticate } from "./auth";
 import { fail, json, readJson } from "./http";
+import { liveSocket, liveView, parseHours } from "./live";
 import {
   appIdentity,
   MAX_KEY_LIFETIME_MS,
@@ -12,11 +13,14 @@ import {
   serviceBinding,
   TOKEN_HASH,
 } from "./registry";
+import { parseTrendsQuery, trendsView } from "./trends";
 
 type AppRow = { id: string; name: string; created_at: number };
 
 const KEYS_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/server-keys$/;
 const KEY_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/server-keys\/([^/]+)$/;
+/** Read routes for one app: `live`, `live/ws` and `trends`. */
+const QUERY_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/(live|live\/ws|trends)$/;
 
 /** The Access-protected admin API; `keys` lets tests verify tokens against a local JWKS. */
 export async function apiRoutes(
@@ -27,7 +31,8 @@ export async function apiRoutes(
 ): Promise<Response> {
   const principal = await authenticate(request, env, opts.keys);
   if (principal instanceof Response) return principal;
-  const { pathname } = new URL(request.url);
+  const url = new URL(request.url);
+  const { pathname } = url;
   const { method } = request;
 
   if (pathname === "/api/me") {
@@ -44,7 +49,38 @@ export async function apiRoutes(
   if (key?.[1] && key[2]) {
     return method === "DELETE" ? deleteKey(env, key[1], key[2]) : notAllowed("DELETE");
   }
+  const query = pathname.match(QUERY_ROUTE);
+  if (query?.[1] && query[2]) {
+    if (method !== "GET") return notAllowed("GET");
+    return queryApp(request, url, env, ctx, query[1], query[2]);
+  }
   return fail(404, "Not found");
+}
+
+/** Dashboard reads. The app must be registered, so a client never names an arbitrary shard. */
+async function queryApp(
+  request: Request,
+  url: URL,
+  env: Env,
+  ctx: ExecutionContext,
+  appId: string,
+  endpoint: string,
+): Promise<Response> {
+  const app = await env.DB.prepare("SELECT id FROM apps WHERE id = ?").bind(appId).first();
+  if (!app) return fail(404, "Unknown app");
+  if (endpoint === "live/ws") return liveSocket(request, env, appId);
+  if (endpoint === "live") {
+    const hours = parseHours(url.searchParams.get("hours"));
+    if (hours === null) return fail(400, "hours must be an integer from 1 to 24");
+    const view = await liveView(env, appId, hours);
+    trackDogfood(ctx, "query.run", { endpoint, range: `${hours}h` });
+    return json(view);
+  }
+  const parsed = parseTrendsQuery(url.searchParams);
+  if (typeof parsed === "string") return fail(400, parsed);
+  const view = await trendsView(env, appId, parsed);
+  trackDogfood(ctx, "query.run", { endpoint, range: parsed.range });
+  return json(view);
 }
 
 const notAllowed = (allow: string) => fail(405, "Method not allowed", { Allow: allow });

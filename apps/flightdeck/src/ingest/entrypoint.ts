@@ -67,7 +67,7 @@ export function deps(env: Env, ctx: ExecutionContext, app: AppRecord): IngestDep
     sendEvents: (rows: StoredEvent[]) => sinks.events(env, rows),
     appendToSession: (appId, sessionId, rows) =>
       sessionStub(env, appId, sessionId).append(appId, sessionId, rows),
-    recordCounts: (appId, hour, rows) => appShard(env, appId, hour).recordEvents(hour, rows),
+    recordCounts: (appId, hour, rows) => appShard(env, appId, hour).recordEvents(appId, hour, rows),
     defer: (work) => ctx.waitUntil(work),
   };
 }
