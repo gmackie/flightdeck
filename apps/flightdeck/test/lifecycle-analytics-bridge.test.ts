@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import type { Query } from "@flightdeckhq/lifecycle-queries";
+import type { MetricRow, Query } from "@flightdeckhq/lifecycle-queries";
 import { beforeAll, describe, expect, it } from "vitest";
 import { generate } from "../../../examples/lifecycle-fixtures/lib/generate.mjs";
 import { type BridgeScope, materializedAdapter } from "../src/lifecycle-analytics/bridge";
@@ -83,7 +83,7 @@ describe("G queries over the materialized read model", () => {
       const key = g.status === "open" ? "open" : OUTCOMES[g.outcome as keyof typeof OUTCOMES];
       expected[key] = (expected[key] ?? 0) + g.case_count;
     }
-    const raw = Object.fromEntries(result.rows.map((r) => [r.key, r.count]));
+    const raw = Object.fromEntries((result.rows as MetricRow[]).map((r) => [r.key, r.count]));
     // G releases a count only at or above its minimum; compare those it released.
     const got = Object.fromEntries(Object.entries(raw).filter(([, n]) => n !== null));
     for (const [key, n] of Object.entries(expected)) if (n < 2) delete expected[key];
@@ -131,7 +131,8 @@ describe("G queries over the materialized read model", () => {
       p50Ms: nearest(0.5),
       p90Ms: nearest(0.9),
     });
-    if (censored >= POLICY.minSampleSize) expect(result.rows[0]?.censoredCases).toBe(censored);
+    if (censored >= POLICY.minSampleSize)
+      expect((result.rows as MetricRow[])[0]?.censoredCases).toBe(censored);
   });
 
   it("excludes and counts outcomes without an explicit mapping instead of guessing", async () => {

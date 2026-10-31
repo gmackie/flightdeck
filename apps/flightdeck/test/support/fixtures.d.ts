@@ -40,3 +40,11 @@ declare module "*/lifecycle-fixtures/lib/generate.mjs" {
     };
   };
 }
+
+/** Vite's eager JSON glob, used to load the committed fixture scenarios. */
+interface ImportMeta {
+  glob<T = unknown>(
+    pattern: string,
+    options: { eager: true; import: "default" },
+  ): Record<string, T>;
+}
