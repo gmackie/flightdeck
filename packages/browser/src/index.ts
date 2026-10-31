@@ -3,6 +3,9 @@ import { installCapture } from "./capture";
 import { anonymousId, randomId, sessionId } from "./ids";
 import { EventQueue } from "./queue";
 
+/** An event as built by the SDK, before it is queued. */
+export type FlightdeckEvent = ClientEventInput;
+
 export type InitOptions = {
   /** Same-origin endpoint served by withFlightdeck/handleFlightdeck. Default `/_fd/e`. */
   endpoint?: string;
@@ -12,6 +15,13 @@ export type InitOptions = {
   trackPages?: boolean;
   maxBatch?: number;
   flushIntervalMs?: number;
+  /** Prop keys removed from every event, including `data-flightdeck-*` attributes. */
+  redactProps?: string[];
+  /**
+   * Runs on every event before it is queued, after `redactProps`. Return the event (rewritten
+   * or not) to send it, or null to drop it. An exception drops the event.
+   */
+  beforeSend?: (event: FlightdeckEvent) => FlightdeckEvent | null;
 };
 
 export type Props = Record<string, string | number | boolean | null>;
@@ -19,12 +29,16 @@ export type Props = Record<string, string | number | boolean | null>;
 class Client {
   private readonly queue: EventQueue;
   private readonly persist: boolean;
+  private readonly redact: string[];
+  private readonly beforeSend: InitOptions["beforeSend"];
   private readonly cleanup: (() => void)[] = [];
   private userId: string | undefined;
   private lastPath: string | undefined;
 
   constructor(o: InitOptions) {
     this.persist = o.persistAnonymousId ?? true;
+    this.redact = o.redactProps ?? [];
+    this.beforeSend = o.beforeSend;
     this.queue = new EventQueue({ endpoint: o.endpoint ?? "/_fd/e", maxBatch: o.maxBatch ?? 20 });
     const flush = () => this.queue.flush();
     const onHidden = () => document.visibilityState === "hidden" && flush();
@@ -55,10 +69,11 @@ class Client {
       props = { ...props };
       for (const k in props) {
         const v = props[k];
-        if (typeof v === "string") props[k] = v.slice(0, 512);
+        if (this.redact.includes(k)) delete props[k];
+        else if (typeof v === "string") props[k] = v.slice(0, 512);
       }
     }
-    this.queue.push({
+    let event: FlightdeckEvent | null = {
       kind,
       name: name.slice(0, 256),
       eventId: randomId(),
@@ -67,9 +82,17 @@ class Client {
       anonymousId: anonymousId(this.persist),
       path: location.pathname,
       ...(this.userId ? { userId: this.userId } : {}),
-      ...(props ? { props } : {}),
+      ...(props && Object.keys(props).length ? { props } : {}),
       ...extra,
-    });
+    };
+    if (this.beforeSend) {
+      try {
+        event = this.beforeSend(event);
+      } catch {
+        event = null;
+      }
+    }
+    if (event) this.queue.push(event);
   }
 
   /** `force` records the view even when the path is unchanged (bfcache restores). */

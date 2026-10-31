@@ -437,3 +437,78 @@ describe("robustness", () => {
     ]);
   });
 });
+
+describe("privacy", () => {
+  it("never captures query strings or fragments in paths", async () => {
+    history.replaceState(null, "", "/search?q=jane%40example.com#token=abc");
+    init();
+    history.pushState(null, "", "/students?name=jane");
+    track("search.run");
+    expect((await flush()).map((e) => [e.kind, e.name, e.path])).toEqual([
+      ["page", "/search", "/search"],
+      ["page", "/students", "/students"],
+      ["track", "search.run", "/students"],
+    ]);
+  });
+
+  it("strips redactProps keys from tracked and captured props", async () => {
+    document.body.innerHTML = `<button data-flightdeck="cta" data-flightdeck-email="a@b.c" data-flightdeck-plan="pro">Go</button>`;
+    init({ trackPages: false, redactProps: ["email", "studentId"] });
+    track("roster.export", { studentId: "s-1", rows: 3 });
+    document.querySelector("button")?.click();
+    expect((await flush()).map((e) => [e.name, e.props])).toEqual([
+      ["roster.export", { rows: 3 }],
+      ["cta", { plan: "pro" }],
+    ]);
+  });
+
+  it("runs beforeSend on every event, which can rewrite or drop it", async () => {
+    const seen: string[] = [];
+    init({
+      beforeSend: (event) => {
+        seen.push(event.kind);
+        if (event.name === "secret") return null;
+        return { ...event, path: "/redacted", props: { ...event.props, scrubbed: true } };
+      },
+    });
+    track("secret");
+    track("kept", { a: 1 });
+    identify("user-1");
+    const events = await flush();
+    expect(seen).toEqual(["page", "track", "track", "identify"]);
+    expect(events.map((e) => [e.kind, e.name, e.path, e.props])).toEqual([
+      ["page", "/", "/redacted", { scrubbed: true }],
+      ["track", "kept", "/redacted", { a: 1, scrubbed: true }],
+      ["identify", "identify", "/redacted", { scrubbed: true }],
+    ]);
+  });
+
+  it("drops the event when beforeSend throws", async () => {
+    init({
+      trackPages: false,
+      beforeSend: (event) => {
+        if (event.name === "bad") throw new Error("boom");
+        return event;
+      },
+    });
+    expect(() => track("bad")).not.toThrow();
+    track("good");
+    expect((await flush()).map((e) => e.name)).toEqual(["good"]);
+  });
+
+  it("applies redactProps before beforeSend sees the event", async () => {
+    const seen: (Record<string, unknown> | null | undefined)[] = [];
+    init({
+      trackPages: false,
+      redactProps: ["email"],
+      beforeSend: (event) => {
+        seen.push(event.props);
+        return event;
+      },
+    });
+    track("a", { email: "a@b.c", plan: "pro" });
+    track("b", { email: "a@b.c" });
+    await flush();
+    expect(seen).toEqual([{ plan: "pro" }, undefined]);
+  });
+});
