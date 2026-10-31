@@ -137,7 +137,7 @@ const browser = await import("@flightdeckhq/browser");
 for (const name of ["init", "track", "identify"])
   if (typeof browser[name] !== "function") throw new Error(`browser: ${name} missing`);
 const lifecycle = await import("@flightdeckhq/lifecycle");
-for (const name of ["id", "replay", "stageMetrics", "caseMetrics", "funnel", "summarize"])
+for (const name of ["id", "replay", "stageMetrics", "caseMetrics", "funnel", "summarize", "normalizeCanonicalDefinition", "normalizeCanonicalEnvelope", "sanitizeDiagnostics"])
   if (typeof lifecycle[name] !== "function") throw new Error(`lifecycle: ${name} missing`);
 const empty = lifecycle.replay({ definitions: [], cases: [], stageInstances: [], events: [], asOf: 0 });
 if (lifecycle.summarize(empty).cases !== 0) throw new Error("lifecycle: empty replay failed");

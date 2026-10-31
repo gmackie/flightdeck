@@ -1,3 +1,4 @@
+export { sanitizeDiagnostics } from "./diagnostics.js";
 export type {
   CaseMetrics,
   CohortFilter,
@@ -17,7 +18,15 @@ export {
   unionDuration,
   variants,
 } from "./metrics.js";
-export type { NormalizationContext, NormalizationResult } from "./normalize.js";
-export { normalizeCanonicalTransition } from "./normalize.js";
+export type {
+  CanonicalProcessDefinition,
+  NormalizationContext,
+  NormalizationResult,
+} from "./normalize.js";
+export {
+  normalizeCanonicalDefinition,
+  normalizeCanonicalEnvelope,
+  normalizeCanonicalTransition,
+} from "./normalize.js";
 export { replay } from "./replay.js";
 export * from "./types.js";

@@ -92,13 +92,21 @@ Epoch zero is valid. Pre-1970 timestamps are valid; a negative **duration** is n
 
 - `ProcessDefinition`: immutable version ID, stage definitions, optional initial stage IDs and
   allowed predecessor edges. Version a definition with a new ID when semantics change.
-  With nonempty `transitions`, a stage can enter if any explicitly closed prior instance in
-  that case has an allowed edge; the first entry requires `initialStages`. This is an observed
-  predecessor rule, not a Petri net or exclusive single-stage workflow. Definition cycles and
-  self edges intentionally permit loops/retries; they are not invalid hierarchy cycles.
+  With nonempty `transitions`, entry must follow the **latest closed predecessor** in the
+  same `branchId` and current explicit case episode. A constrained definition requires
+  nonempty, unique `initialStages`; invalid references and duplicate edges are rejected.
+  Initial-stage restrictions also apply when transitions are absent. A constrained branch
+  permits one open attempt; distinct `branchId`s support independent parallel paths. Branch
+  frontiers reset at reopen; old episodes and other branches cannot authorize an entry.
+  Forks/joins require explicitly assigned branch stages; this is not inferred Petri-net
+  conformance. Definition self edges and cycles intentionally permit retries and loops.
+  A stage's optional `terminal` must be one of the six terminal classes: entering it explicitly
+  ends the case episode and records that class. The terminal marker closes at its entry time
+  with zero continuing dwell. It does not invent exits for other still-open attempts.
 - `CaseInput`: stable case ID, process version ID and optional cohort attributes.
 - `StageInstanceInput`: stable attempt ID, case ID and stage ID. Parallel and repeated stages
-  use distinct instance IDs, even when their stage ID is the same. Reusing a closed instance
+  use distinct instance IDs, even when their stage ID is the same. Constrained parallel paths
+  must have distinct `branchId`s; the default is one serial branch. Reusing a closed instance
   ID for entry is invalid. There is no inferred retry count or HR-specific identity.
 - `LifecycleEvent`: globally unique event ID, authoritative `occurredAt`, source ID, optional
   sequence, optional `supersedes`, and a discriminated event payload.
@@ -138,16 +146,28 @@ child terminations or stage exits.
 2. Resolve correction chains over the entire supplied log. A replacement supersedes one
    event and uses its own occurrence time. Competing replacements are excluded and the
    original remains; missing targets and cycles are diagnosed. Corrections depending on
-   invalid corrections are excluded. Retractions remove evidence; they never infer outcomes.
-3. Apply effective events at/before `asOf`, ordered first by occurrence time, then source ID,
-   then source sequence for sources explicitly listed in `reliableSources`, then event ID.
-   Sequence only orders equal timestamps within the same reliable source. Missing sequences
-   sort after supplied sequences. Repeated/backward reliable sequences produce
-   `sequence_time_conflict`; occurrence time takes precedence, never silently overridden.
-4. Equal timestamps without distinct sequences from a common reliable source produce an
-   `ambiguous_order` diagnostic. Source/event IDs give stable fallback order, **not evidence
-   of causality**. Funnel matching treats equal-time entries as an unordered group; variant
-   keys do too. Cross-source clock skew is not automatically corrected.
+   invalid corrections are excluded. An amendment may change occurrence time/source metadata,
+   but must preserve the target action and subject IDs; subject-mutating amendments are rejected.
+   Retractions remove evidence; they never infer outcomes. `uncertainEventIds` identifies excluded
+   or disputed evidence, including missing-target corrections, so its case/attempt cannot be
+   confidently reported as open-aged.
+3. Apply effective events at/before `asOf`, first by occurrence time. Equal-time case timelines
+   are independent; their stable case-ID order has no causal meaning. `reliableCases` enables
+   authoritative **per-case** sequence ordering across producer/source names. Legacy
+   `reliableSources` orders only within the same source **and case**. Use one case-wide sequence
+   stream for A, not a producer name before a case-wide sequence. Chronology always wins over
+   backward sequences; `sequence_time_conflict` reports contradictions and repeats.
+4. Within an equal-time case group lacking comparable reliable sequence evidence, topologically
+   order explicit lifecycle prerequisites: case start/reopen before stage actions, an attempt's
+   entry before its interruptions/exit, predecessor exit before successor entry, and stage
+   actions before case termination. Terminal marker entries follow prior stage exits. Matched
+   interruption/link starts precede their ends. This handles zero-duration stages and coincident
+   boundaries without letting event IDs drop actions. A comparable reliable sequence takes
+   precedence; if it contradicts a prerequisite, report it rather than silently rewriting source
+   evidence. Remaining **conflicting** unordered actions or prerequisite cycles produce
+   `ambiguous_order`; stable event IDs provide a diagnosed fallback. Independent cases and
+   commuting parallel entries do not produce ambiguity warnings. No cross-source clock repair
+   or inferred causal ordering is performed.
 
 `asOf` is an occurrence-time cutoff with **current knowledge from the supplied log**. It is
 not a historical receipt/knowledge-time query: a correction in the supplied log applies even
@@ -196,23 +216,36 @@ unknown while leaving a supported explicit parent duration intact. Open interval
 `percentile(samples, q)` linearly interpolates at `(n − 1) × q`; p50 and p90 use q=.5 and .9.
 Empty distributions yield `null` percentiles. Invalid negative/nonfinite duration samples
 throw. `summarize` uses only closed cases with known open duration and closed stage instances
-with known dwell for distributions, returning sample sizes, open censor counts, unknown and
-skip counts. It does not treat open ages as completed dwell or implement survival analysis.
-`completionRatio = explicitly completed cases / explicitly terminated cases` (all six outcomes
-in the denominator); a zero denominator is `null`. `ratio` returns `null` on zero denominator.
+with known dwell **and complete timing** for distributions, returning sample sizes, open censor
+counts, unknown and skip counts. A case with an incomplete attempt is excluded from completed
+case-duration distributions; its explicit parent boundaries remain available through raw
+`caseMetrics` when the case evidence itself is complete. Missing correction targets poison the
+subject case/attempt. Incomplete open histories have unknown age and are counted under unknown,
+not as known open-censored observations. It does not treat open ages as completed dwell or implement survival analysis.
+`completionRatio = complete-evidence completed cases / complete-evidence terminated cases`
+(all six outcomes in the denominator). `completionDenominator` and `completionUnknown` expose
+eligible and excluded closed cases. The terminal histogram retains all explicit observed
+outcomes, including those with incomplete timing; it is not the ratio's filtered numerator.
+A zero denominator is `null`. `ratio` also returns `null` on zero denominator.
 
 `funnel(result, [stageA, stageB, ...])` matches case-level nondecreasing-time entry subsequences.
 Retries do not multiply a case's reached/converted counts. Skips do not count as entries.
 At each step, `reached` is the cases matching that prefix and `converted` is those also matching
 the next prefix. Equal-time groups can match either requested order without claiming causality.
-`all-reached` (default) uses all reached cases, **including open censored cases**, in the
-conversion denominator. `closed-only` uses only explicitly terminated reached cases for both
-ratio numerator and denominator. The raw `converted` count remains all reached conversions.
+`all-reached` (default) uses reached cases with complete evidence, **including known open
+censored cases**, in the conversion denominator. `closed-only` uses only explicitly terminated
+reached cases with complete evidence for both ratio numerator and denominator. Both exclude
+incomplete histories, report them as `unknown`, and preserve raw observed reached counts. The raw `converted` count remains all reached conversions.
 Both policies expose the open censor and incomplete counts. Last-step conversion and empty
 ratios are `null`. These are observed conversion ratios, not eventual conversion predictions.
 
-Cohorts support process version, first explicit start in `[startedFrom, startedBefore)`, exact
+Cohorts support `hierarchy: "all" | "roots" | "children"` in addition to process version, first explicit start in `[startedFrom, startedBefore)`, exact
 attributes, current status, current explicit terminal class and currently linked objects.
+Default `all` totals count **cases**, including both parents and children; they are not counts
+of independent root processes. `roots` excludes every known child link within the supplied
+replay horizon, including subsequently unlinked/reparented children. `children` selects those
+children. A multi-parent child counts once. The filter is shared by summaries, funnels and
+variants. Unknown hierarchy outside the supplied log cannot be discovered.
 Missing starts fail date filters. Attributes are static supplied case attributes, not historical
 attribute changes. Variants group process version + equal-time stage-entry groups + current
 terminal/status; repeated instances remain repeated entries, with counts/shares and open censor
@@ -274,8 +307,10 @@ The envelope/catalog adapter must deliberately map these before transition norma
   Collision-free JSON tuples or persisted opaque lookup IDs work; do not join raw IDs with
   ambiguous delimiters. Definition IDs must include A's `processId` **and** `processVersion`.
 - Copy `occurredAt` unchanged. A's `sourceSequence` is **per case**, so `source.id` in this
-  engine must represent `(app, source, case)`, not just the source name. List these scoped
-  source IDs in `reliableSources` only when the producer guarantees sequence reliability.
+  engine must represent `(app, case)` across producer names. `normalizeCanonicalEnvelope(wire,
+  appId)` scopes event IDs and this stream correctly, preserving the producer in `source.producer`.
+  Enable `reliableCases` for scoped case IDs (or `reliableSources` for these scoped streams)
+  only when the source guarantees sequence reliability.
 - A does not currently encode a terminal class on `case.terminated`. Require authoritative
   context or a configured, explicit reason-code→class mapping; absent evidence is unknown.
   Do not equate every termination to rejection, cancellation or failure.
@@ -316,7 +351,7 @@ const normalized = normalizeCanonicalTransition(
     id: id<"event">(JSON.stringify([scope, wire.eventId])),
     occurredAt: wire.occurredAt,
     source: {
-      id: JSON.stringify([scope, wire.source, wire.caseId]),
+      id: JSON.stringify([scope, wire.caseId]),
       sequence: wire.sourceSequence,
     },
   },
@@ -332,3 +367,34 @@ claim that the history is complete. `test/normalize.test.ts` checks canonical st
 completion replay equivalence, interruption overlap, explicit terminal/identity requirements,
 object normalization and rejection of incompatible names. The canonical schema is still
 owned by A; this mapping records the inspected contract without editing its files.
+
+
+### Canonical terminal definitions and safe diagnostics
+
+A's `ProcessDefinitionV1.stages[].terminal: true` explicitly means entering that stage ends
+case active time. Use `normalizeCanonicalDefinition(definition, { processId, stageIds,
+terminalClasses })`: IDs are explicit mappings, and `terminalClasses` maps each canonical
+terminal stage ID to an authoritative outcome. A boolean terminal flag alone does not identify
+completed/rejected/withdrawn/cancelled/failed/expired, so normalization returns `missing_context`
+when that mapping is missing. A raw boolean passed as an engine terminal class is rejected
+as an invalid definition. The engine does not silently leave an unmapped terminal case open.
+The mapped terminal entry closes case pauses and all stage interruption windows at entry time,
+while preserving missing exits on other attempts as unknown. An explicit same-time termination
+with the same class is consistent confirmation. Different classes are diagnosed.
+
+Raw `ReplayResult` and programmatic diagnostics retain caller-owned IDs/attributes for repair;
+they are not a privacy-filtered serving payload. Before logging or rendering diagnostics, use
+`sanitizeDiagnostics(result.diagnostics)`: it removes subject/event IDs and all original text,
+returns only allowlisted codes plus a constant safe message, and never mutates the raw result.
+Unknown canonical transition errors and unknown-ID exceptions do not echo input strings.
+Validate/redact source attributes in the ingestion/serving layer, and render strings as text,
+not HTML. This package itself does not write diagnostics to logs or UI.
+
+Raw blocked/paused intervals now end at explicit stage exit or case/terminal-stage termination.
+Closing an interruption window does not fabricate a stage exit or terminal outcome.
+
+Remaining limits after the correctness review: ambiguous equal-time loops or branch joins need
+source sequence/explicit modeling and remain diagnosed; no automatic branch discovery, full
+schema-envelope adapter, historical dimension materialization or privacy policy for raw case
+attributes is introduced here. All seven P1/P2 review findings and the listed P3 behaviors have
+regressions; these broader capabilities are outside the standalone engine's contract.
