@@ -35,6 +35,7 @@ export function LifecycleRow({
           <strong>{node.label}</strong>
           <span>
             {node.kind} · {node.relationship ?? node.owner}
+            {node.outcome ? ` · outcome ${node.outcome}` : ""}
           </span>
         </div>
       </div>

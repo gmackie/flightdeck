@@ -2,6 +2,13 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { env } from "cloudflare:workers";
 import type { LifecycleEventInput } from "@flightdeckhq/schema";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { diagnoseWorkflowSnapshot } from "../../dashboard/src/workflows/adapter";
+import {
+  isCaseDetailEnvelope,
+  isCaseList,
+  isProcessList,
+  liveSnapshot,
+} from "../../dashboard/src/workflows/live-adapter";
 import { lifecycleIngest } from "../src/ingest/lifecycle-http";
 import { LifecycleProjector } from "../src/lifecycle-projection/projector";
 import { drainLifecycle } from "../src/lifecycle-projection/schedule";
@@ -193,6 +200,43 @@ describe("parent-child interview loops", () => {
         jwt,
       );
       for (const a of assessments.body.data) expect(a.process_key).toBe("recruiting.assessment");
+    }
+  });
+});
+
+describe("dashboard contract", () => {
+  it("real API responses pass the dashboard's guards and map into its live view model", async () => {
+    const jwt = await token(READER);
+    const processes = await read(`/api/apps/${APP}/lifecycle/processes`, jwt);
+    expect(isProcessList(processes.body)).toBe(true);
+    const groups = [];
+    for (const process of processes.body.data) {
+      const list = await read(
+        `/api/apps/${APP}/lifecycle/cases?process_key=${process.process_key}&version=${process.version}&limit=100`,
+        jwt,
+      );
+      expect(isCaseList(list.body)).toBe(true);
+      const cases = [];
+      for (const c of list.body.data) {
+        const detail = await read(`/api/apps/${APP}/lifecycle/cases/${c.case_id}`, jwt);
+        expect(isCaseDetailEnvelope(detail.body)).toBe(true);
+        cases.push(detail.body.data);
+      }
+      groups.push({ process, cases });
+    }
+    const snapshot = liveSnapshot(groups, processes.body.as_of);
+    expect(snapshot.source.synthetic).toBe(false);
+    expect(diagnoseWorkflowSnapshot(snapshot)).toEqual([]);
+    // Interview loops nest under their candidate in the dashboard hierarchy.
+    const nested = (nodes: readonly Json[]): Json[] =>
+      nodes.flatMap((n) => [n, ...nested(n.children ?? [])]);
+    const all = snapshot.portfolios.flatMap((p) => nested(p.roots));
+    const loops = (await servedModel(APP)).cases.filter(
+      (c: Json) => c.process_key === "recruiting.interview_loop",
+    );
+    for (const loop of loops) {
+      const parent = all.find((n) => n.id === loop.parent_case_id);
+      expect(parent?.children?.map((c: Json) => c.id)).toContain(loop.case_id);
     }
   });
 });

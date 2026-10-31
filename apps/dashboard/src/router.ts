@@ -40,6 +40,20 @@ export function useLocation(): string {
   return useSyncExternalStore(subscribe, snapshot);
 }
 
+/** `?view=demo` opts into the synthetic Workflows demo; live data is the default. */
+export const VIEW_PARAM = "view";
+
+export function isDemoView(search = location.search): boolean {
+  return new URLSearchParams(search).get(VIEW_PARAM) === "demo";
+}
+
+/** The synthetic Workflows demo, keeping the selected app for the way back to live data. */
+export function workflowsDemoHref(appId = selectedAppParam()): string {
+  const params = new URLSearchParams({ [VIEW_PARAM]: "demo" });
+  if (appId) params.set(APP_PARAM, appId);
+  return `/workflows?${params}`;
+}
+
 /** `/trends` -> "trends"; `/` -> "live"; anything else -> null (not found). */
 export function pageFrom(pathname: string): PageId | null {
   const segment = pathname.split("/")[1] || "live";
