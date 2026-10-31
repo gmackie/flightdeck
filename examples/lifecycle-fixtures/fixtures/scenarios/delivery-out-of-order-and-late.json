@@ -1,0 +1,191 @@
+{
+  "schema": "flightdeck.lifecycle-fixture/v1",
+  "name": "delivery-out-of-order-and-late",
+  "description": "One ticket's history arrives scrambled and late (close first, middle events a day or two behind). The reduced state ignores arrival order.",
+  "covers": ["late_delivery", "out_of_order"],
+  "asOf": "2026-04-01T09:00:00.000Z",
+  "records": [
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "pe28jbs5lvrcekwwe08m",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "ticket",
+          "id": "b0rx960klzz7o7rglxbi"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:00:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "lxgoofsnslmxoy56d0sl",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "b0rx960klzz7o7rglxbi"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:00:00.000Z",
+        "stage": {
+          "name": "triage",
+          "instanceId": "dnqem6acswb4kqtlcxb9"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-03T09:00:01.000Z",
+      "event": {
+        "eventId": "dnknw7q5566cjrwbq6ng",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "ticket",
+          "id": "b0rx960klzz7o7rglxbi"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-03T09:00:00.000Z",
+        "stage": {
+          "name": "triage",
+          "instanceId": "dnqem6acswb4kqtlcxb9"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-05T09:00:10.000Z",
+      "event": {
+        "eventId": "rvmbvic015etdwjfni3l",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "ticket",
+          "id": "b0rx960klzz7o7rglxbi"
+        },
+        "version": 8,
+        "occurredAt": "2026-03-05T09:00:00.000Z",
+        "outcome": "resolved"
+      }
+    },
+    {
+      "receivedAt": "2026-03-05T11:00:00.000Z",
+      "event": {
+        "eventId": "kjwtlj1lnjyja2fz6p4a",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "ticket",
+          "id": "b0rx960klzz7o7rglxbi"
+        },
+        "version": 7,
+        "occurredAt": "2026-03-05T09:00:00.000Z",
+        "stage": {
+          "name": "monitoring",
+          "instanceId": "qo917zmo3ws6lfkpsrpt"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-05T12:00:00.000Z",
+      "event": {
+        "eventId": "sg4l49ymgc34sa5n11mr",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "b0rx960klzz7o7rglxbi"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-03T09:00:00.000Z",
+        "stage": {
+          "name": "investigating",
+          "instanceId": "ni4b795b7z1k4zm7nlmx"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-06T09:00:00.000Z",
+      "event": {
+        "eventId": "m71f4y04pje8k2omop5g",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "b0rx960klzz7o7rglxbi"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-04T09:00:00.000Z",
+        "stage": {
+          "name": "monitoring",
+          "instanceId": "qo917zmo3ws6lfkpsrpt"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-07T09:00:00.000Z",
+      "event": {
+        "eventId": "apscxzmimxslivmjetkr",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "ticket",
+          "id": "b0rx960klzz7o7rglxbi"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-04T09:00:00.000Z",
+        "stage": {
+          "name": "investigating",
+          "instanceId": "ni4b795b7z1k4zm7nlmx"
+        },
+        "outcome": "advanced"
+      }
+    }
+  ],
+  "expected": {
+    "totals": {
+      "appliedEvents": 8,
+      "invalid": {
+        "count": 0
+      }
+    },
+    "entities": [
+      {
+        "id": "b0rx960klzz7o7rglxbi",
+        "status": "closed",
+        "outcome": "resolved",
+        "version": 8,
+        "openedAt": 1772442000000,
+        "closedAt": 1772701200000
+      }
+    ],
+    "apps": {
+      "app_support": {
+        "stages": {
+          "ticket/triage": {
+            "closedDwell": {
+              "count": 1,
+              "sumMs": 86400000
+            }
+          }
+        }
+      }
+    },
+    "delivery": {
+      "outOfOrderDeliveries": 4,
+      "lateEvents": 4
+    }
+  }
+}

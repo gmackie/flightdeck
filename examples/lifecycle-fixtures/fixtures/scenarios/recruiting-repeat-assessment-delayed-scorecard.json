@@ -1,0 +1,657 @@
+{
+  "schema": "flightdeck.lifecycle-fixture/v1",
+  "name": "recruiting-repeat-assessment-delayed-scorecard",
+  "description": "A no-show assessment is retaken as attempt 2 (supersedes attempt 1); the retake's scorecard is submitted nine days late.",
+  "covers": ["recruiting", "repeated_assessment", "delayed_scorecard", "terminal:no_show"],
+  "asOf": "2026-05-01T09:00:00.000Z",
+  "records": [
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "n359po5vgvphtlhgjmmy",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "on0w6zwwruhv99ykaf3i"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:00:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "ljf97fbpdcwaumtant9p",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "on0w6zwwruhv99ykaf3i"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:00:00.000Z",
+        "stage": {
+          "name": "pending_approval",
+          "instanceId": "024pxqoh6ev1vm2k7w1s"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-03T09:00:01.000Z",
+      "event": {
+        "eventId": "dy0kzy2r5sujc5l9pdxd",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "on0w6zwwruhv99ykaf3i"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-03T09:00:00.000Z",
+        "stage": {
+          "name": "pending_approval",
+          "instanceId": "024pxqoh6ev1vm2k7w1s"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-03T09:00:01.000Z",
+      "event": {
+        "eventId": "d4vs4qkb01kyfik9adgz",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "on0w6zwwruhv99ykaf3i"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-03T09:00:00.000Z",
+        "stage": {
+          "name": "approved",
+          "instanceId": "cggjwmt2m4tox9ggbtiq"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-03T09:00:01.000Z",
+      "event": {
+        "eventId": "7fxyvg83kqciv40s8ntb",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "requisition",
+          "id": "k3y98moi82tercblx68k"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-03T09:00:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "headcount_need",
+            "id": "on0w6zwwruhv99ykaf3i"
+          }
+        ]
+      }
+    },
+    {
+      "receivedAt": "2026-03-03T09:00:01.000Z",
+      "event": {
+        "eventId": "aopfm7wewk8b0awvvcbe",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "requisition",
+          "id": "k3y98moi82tercblx68k"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-03T09:00:00.000Z",
+        "stage": {
+          "name": "sourcing",
+          "instanceId": "8nvjy8uurdntkxe06ndp"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-04T09:00:01.000Z",
+      "event": {
+        "eventId": "zmidvxa6bhmc0jnbr3o0",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "requisition",
+          "id": "k3y98moi82tercblx68k"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-04T09:00:00.000Z",
+        "stage": {
+          "name": "sourcing",
+          "instanceId": "8nvjy8uurdntkxe06ndp"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-04T09:00:01.000Z",
+      "event": {
+        "eventId": "wxv2gvrpp9jxhvjcjvzc",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "requisition",
+          "id": "k3y98moi82tercblx68k"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-04T09:00:00.000Z",
+        "stage": {
+          "name": "interviewing",
+          "instanceId": "v6ux76qu0zy6jcua2aq0"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-04T09:00:01.000Z",
+      "event": {
+        "eventId": "ts7ryuwmk7p2vo2pxx1a",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "candidate",
+          "id": "x3459rmeda8odr3lapew"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-04T09:00:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "requisition",
+            "id": "k3y98moi82tercblx68k"
+          }
+        ]
+      }
+    },
+    {
+      "receivedAt": "2026-03-04T09:00:01.000Z",
+      "event": {
+        "eventId": "852dd1pgd16wgj1ygonq",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "candidate",
+          "id": "x3459rmeda8odr3lapew"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-04T09:00:00.000Z",
+        "stage": {
+          "name": "applied",
+          "instanceId": "o9o78mv1oyzj13mk6xfl"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-05T09:00:01.000Z",
+      "event": {
+        "eventId": "wmuw6gviz30bal8mlnhg",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "candidate",
+          "id": "x3459rmeda8odr3lapew"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-05T09:00:00.000Z",
+        "stage": {
+          "name": "applied",
+          "instanceId": "o9o78mv1oyzj13mk6xfl"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-05T09:00:01.000Z",
+      "event": {
+        "eventId": "100f4i1vucb6urmlma9a",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "candidate",
+          "id": "x3459rmeda8odr3lapew"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-05T09:00:00.000Z",
+        "stage": {
+          "name": "screen",
+          "instanceId": "sksuou2r9qzzrxiybism"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-06T09:00:01.000Z",
+      "event": {
+        "eventId": "lva2ht53btoxc77v6me1",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "candidate",
+          "id": "x3459rmeda8odr3lapew"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-06T09:00:00.000Z",
+        "stage": {
+          "name": "screen",
+          "instanceId": "sksuou2r9qzzrxiybism"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-06T09:00:01.000Z",
+      "event": {
+        "eventId": "7wdhg1cvq8jlebfu85kg",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "candidate",
+          "id": "x3459rmeda8odr3lapew"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-06T09:00:00.000Z",
+        "stage": {
+          "name": "interview_loop",
+          "instanceId": "0c81499k1qzqywl3dde9"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-06T09:00:01.000Z",
+      "event": {
+        "eventId": "q6t9vto1l16pf7c9pauu",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "interview_loop",
+          "id": "z1qnbtpx79ze3s79rxiu"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-06T09:00:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "candidate",
+            "id": "x3459rmeda8odr3lapew"
+          }
+        ]
+      }
+    },
+    {
+      "receivedAt": "2026-03-06T09:00:01.000Z",
+      "event": {
+        "eventId": "n54jsmqetmuc5e67cwco",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "interview_loop",
+          "id": "z1qnbtpx79ze3s79rxiu"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-06T09:00:00.000Z",
+        "stage": {
+          "name": "in_progress",
+          "instanceId": "ul0zwn80egmynjq4d7u8"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-06T09:00:01.000Z",
+      "event": {
+        "eventId": "jplwu998e5moc762q2gh",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "assessment",
+          "id": "utxwqv0rm5z84i7vih5q"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-06T09:00:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "interview_loop",
+            "id": "z1qnbtpx79ze3s79rxiu"
+          }
+        ],
+        "attributes": {
+          "type": "technical"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-06T09:00:01.000Z",
+      "event": {
+        "eventId": "0gykg03nhcl4kz7wfe76",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "assessment",
+          "id": "utxwqv0rm5z84i7vih5q"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-06T09:00:00.000Z",
+        "stage": {
+          "name": "scheduled",
+          "instanceId": "pk3s9v5ja8wbqpi7y8s5"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-07T09:00:01.000Z",
+      "event": {
+        "eventId": "57mlr547nigxr8qcyrn0",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "assessment",
+          "id": "utxwqv0rm5z84i7vih5q"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-07T09:00:00.000Z",
+        "stage": {
+          "name": "scheduled",
+          "instanceId": "pk3s9v5ja8wbqpi7y8s5"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-07T09:00:01.000Z",
+      "event": {
+        "eventId": "pfmgjhphmqgg3ujvjisi",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "assessment",
+          "id": "utxwqv0rm5z84i7vih5q"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-07T09:00:00.000Z",
+        "stage": {
+          "name": "interview",
+          "instanceId": "sjvjtwt2wyh01jeguggd"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-07T11:00:01.000Z",
+      "event": {
+        "eventId": "o53jnm5udqpt0okw6izs",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "assessment",
+          "id": "utxwqv0rm5z84i7vih5q"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-07T11:00:00.000Z",
+        "stage": {
+          "name": "interview",
+          "instanceId": "sjvjtwt2wyh01jeguggd"
+        },
+        "outcome": "terminated"
+      }
+    },
+    {
+      "receivedAt": "2026-03-07T11:00:01.000Z",
+      "event": {
+        "eventId": "uciww255h5pw3tcd2pha",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "assessment",
+          "id": "utxwqv0rm5z84i7vih5q"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-07T11:00:00.000Z",
+        "outcome": "no_show"
+      }
+    },
+    {
+      "receivedAt": "2026-03-08T11:00:01.000Z",
+      "event": {
+        "eventId": "47msfmsnxdn3iipijeuy",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "assessment",
+          "id": "bgd29wgctjzolotnjysl"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-08T11:00:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "interview_loop",
+            "id": "z1qnbtpx79ze3s79rxiu"
+          },
+          {
+            "type": "supersedes",
+            "kind": "assessment",
+            "id": "utxwqv0rm5z84i7vih5q"
+          }
+        ],
+        "attributes": {
+          "type": "technical",
+          "attempt": 2
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-08T11:00:01.000Z",
+      "event": {
+        "eventId": "6hk55tkv1slnvt6ami9u",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "assessment",
+          "id": "bgd29wgctjzolotnjysl"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-08T11:00:00.000Z",
+        "stage": {
+          "name": "scheduled",
+          "instanceId": "gd1a794c98j3tvqral71"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-10T11:00:01.000Z",
+      "event": {
+        "eventId": "430190pvb7zkegjfko69",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "assessment",
+          "id": "bgd29wgctjzolotnjysl"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-10T11:00:00.000Z",
+        "stage": {
+          "name": "scheduled",
+          "instanceId": "gd1a794c98j3tvqral71"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-10T11:00:01.000Z",
+      "event": {
+        "eventId": "4tufkhxslccrrbpm5r2j",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "assessment",
+          "id": "bgd29wgctjzolotnjysl"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-10T11:00:00.000Z",
+        "stage": {
+          "name": "interview",
+          "instanceId": "pivtozrclk23e0iurh9s"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-10T12:00:01.000Z",
+      "event": {
+        "eventId": "s35j7e6f9fp0xgz867x2",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "assessment",
+          "id": "bgd29wgctjzolotnjysl"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-10T12:00:00.000Z",
+        "stage": {
+          "name": "interview",
+          "instanceId": "pivtozrclk23e0iurh9s"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-10T12:00:01.000Z",
+      "event": {
+        "eventId": "880z7tz99bztpsqvmeb4",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "assessment",
+          "id": "bgd29wgctjzolotnjysl"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-10T12:00:00.000Z",
+        "stage": {
+          "name": "scorecard_pending",
+          "instanceId": "zrjajg9yk3inkyuzcrov"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-19T12:00:01.000Z",
+      "event": {
+        "eventId": "9b0qvncc2m7c6sc2ce8j",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "assessment",
+          "id": "bgd29wgctjzolotnjysl"
+        },
+        "version": 7,
+        "occurredAt": "2026-03-19T12:00:00.000Z",
+        "stage": {
+          "name": "scorecard_pending",
+          "instanceId": "zrjajg9yk3inkyuzcrov"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-19T12:00:01.000Z",
+      "event": {
+        "eventId": "p7pdtkphpamtx48ro6rj",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "assessment",
+          "id": "bgd29wgctjzolotnjysl"
+        },
+        "version": 8,
+        "occurredAt": "2026-03-19T12:00:00.000Z",
+        "outcome": "pass"
+      }
+    }
+  ],
+  "expected": {
+    "totals": {
+      "appliedEvents": 30
+    },
+    "entities": [
+      {
+        "id": "utxwqv0rm5z84i7vih5q",
+        "status": "closed",
+        "outcome": "no_show"
+      },
+      {
+        "id": "bgd29wgctjzolotnjysl",
+        "status": "closed",
+        "outcome": "pass",
+        "attributes": {
+          "type": "technical",
+          "attempt": 2
+        }
+      }
+    ],
+    "apps": {
+      "app_talent": {
+        "entities": {
+          "assessment": {
+            "total": 2,
+            "outcomes": {
+              "no_show": 1,
+              "pass": 1
+            }
+          }
+        },
+        "stages": {
+          "assessment/scorecard_pending": {
+            "closedDwell": {
+              "count": 1,
+              "sumMs": 777600000,
+              "maxMs": 777600000
+            }
+          },
+          "assessment/interview": {
+            "outcomes": {
+              "advanced": 1,
+              "terminated": 1
+            }
+          }
+        },
+        "relations": {
+          "supersedes": 1
+        }
+      }
+    }
+  }
+}

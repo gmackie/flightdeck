@@ -1,0 +1,761 @@
+{
+  "schema": "flightdeck.lifecycle-fixture/v1",
+  "name": "incident-remediation-reopen",
+  "description": "A ticket runs two investigations in parallel (one finds the root cause and spawns a fix, one is inconclusive), keeps a customer-comms stage open alongside its main stage, resolves, then is reopened and resolved again.",
+  "covers": ["incident_response", "concurrent", "reopened", "parallel_stages"],
+  "asOf": "2026-05-01T09:00:00.000Z",
+  "records": [
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "brpqty9i47i4we4p412j",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:00:00.000Z",
+        "attributes": {
+          "severity": "sev2"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "v69uuvhvgs7flqomyvss",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:00:00.000Z",
+        "stage": {
+          "name": "triage",
+          "instanceId": "v28c2ihl044oyqwbmtq4"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:15:01.000Z",
+      "event": {
+        "eventId": "0fhyuiqkjt3vdfw56lrp",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-02T09:15:00.000Z",
+        "stage": {
+          "name": "triage",
+          "instanceId": "v28c2ihl044oyqwbmtq4"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:15:01.000Z",
+      "event": {
+        "eventId": "4okvvuiirj7fe3w3deuy",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-02T09:15:00.000Z",
+        "stage": {
+          "name": "investigating",
+          "instanceId": "y7cwrafoz88ulk46a0ww"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:20:01.000Z",
+      "event": {
+        "eventId": "8emwtlrw20y6uwwxcyzo",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "investigation",
+          "id": "hhk40hqdh7djxg31r4ar"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:20:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "ticket",
+            "id": "cfex1v7nlidjrp74n6b7"
+          }
+        ]
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:20:01.000Z",
+      "event": {
+        "eventId": "8dye5qpgim0rua2m2uc2",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "investigation",
+          "id": "hhk40hqdh7djxg31r4ar"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:20:00.000Z",
+        "stage": {
+          "name": "open",
+          "instanceId": "90bgi1pt1r1qj9lspbq2"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:25:01.000Z",
+      "event": {
+        "eventId": "ww3p2axxz90dr9oj67zp",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "investigation",
+          "id": "mg5i7qn7vbay66gi6z4w"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:25:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "ticket",
+            "id": "cfex1v7nlidjrp74n6b7"
+          }
+        ]
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:25:01.000Z",
+      "event": {
+        "eventId": "iq5t8fl7815tbqvcbmgs",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "investigation",
+          "id": "mg5i7qn7vbay66gi6z4w"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:25:00.000Z",
+        "stage": {
+          "name": "open",
+          "instanceId": "cr5m780myxwfylgn8590"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:30:01.000Z",
+      "event": {
+        "eventId": "x5ca7cgsqunkjj48hd94",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "investigation",
+          "id": "hhk40hqdh7djxg31r4ar"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-02T09:30:00.000Z",
+        "stage": {
+          "name": "open",
+          "instanceId": "90bgi1pt1r1qj9lspbq2"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:30:01.000Z",
+      "event": {
+        "eventId": "7n18qb5d16rsd5soxlvr",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "investigation",
+          "id": "hhk40hqdh7djxg31r4ar"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-02T09:30:00.000Z",
+        "stage": {
+          "name": "analyzing",
+          "instanceId": "r23o8k94p8clwrlr9zsi"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:30:01.000Z",
+      "event": {
+        "eventId": "c3wqrgn0gah349f6jkhn",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "investigation",
+          "id": "mg5i7qn7vbay66gi6z4w"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-02T09:30:00.000Z",
+        "stage": {
+          "name": "open",
+          "instanceId": "cr5m780myxwfylgn8590"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:30:01.000Z",
+      "event": {
+        "eventId": "cidh1hhygjxxohb5vcnt",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "investigation",
+          "id": "mg5i7qn7vbay66gi6z4w"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-02T09:30:00.000Z",
+        "stage": {
+          "name": "analyzing",
+          "instanceId": "i4dgdruz6ltpow8unyxw"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:45:01.000Z",
+      "event": {
+        "eventId": "xs1kxtvfpr9e4gift8qz",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-02T09:45:00.000Z",
+        "stage": {
+          "name": "customer_comms",
+          "instanceId": "38mij2yggl91170dklf5"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T11:30:01.000Z",
+      "event": {
+        "eventId": "tup54kjjxvzoolyc9a8j",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "investigation",
+          "id": "hhk40hqdh7djxg31r4ar"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-02T11:30:00.000Z",
+        "stage": {
+          "name": "analyzing",
+          "instanceId": "r23o8k94p8clwrlr9zsi"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T11:30:01.000Z",
+      "event": {
+        "eventId": "pl8osoex0xin79qgmw6x",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "investigation",
+          "id": "hhk40hqdh7djxg31r4ar"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-02T11:30:00.000Z",
+        "stage": {
+          "name": "remediation",
+          "instanceId": "abx8duat4ykkd51vrh5a"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T11:35:01.000Z",
+      "event": {
+        "eventId": "70iau64sh2sa4ik51y3j",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "remediation",
+          "id": "9nqp3zr3oas2wc0hetdf"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T11:35:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "investigation",
+            "id": "hhk40hqdh7djxg31r4ar"
+          },
+          {
+            "type": "related_to",
+            "kind": "ticket",
+            "id": "cfex1v7nlidjrp74n6b7"
+          }
+        ]
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T11:35:01.000Z",
+      "event": {
+        "eventId": "bkzz76zn00smq1h9nsp9",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "remediation",
+          "id": "9nqp3zr3oas2wc0hetdf"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T11:35:00.000Z",
+        "stage": {
+          "name": "planned",
+          "instanceId": "hhjcfr8zvyvcecn38swu"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T11:55:01.000Z",
+      "event": {
+        "eventId": "q4v1zs266eplgeqhjecg",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "remediation",
+          "id": "9nqp3zr3oas2wc0hetdf"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-02T11:55:00.000Z",
+        "stage": {
+          "name": "planned",
+          "instanceId": "hhjcfr8zvyvcecn38swu"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T11:55:01.000Z",
+      "event": {
+        "eventId": "71j55gxcw34xe7v718rl",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "remediation",
+          "id": "9nqp3zr3oas2wc0hetdf"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-02T11:55:00.000Z",
+        "stage": {
+          "name": "implementing",
+          "instanceId": "6d8600a25suninu3nki2"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T12:30:01.000Z",
+      "event": {
+        "eventId": "9j4kwr1ecg650xm7kkrk",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "investigation",
+          "id": "mg5i7qn7vbay66gi6z4w"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-02T12:30:00.000Z",
+        "stage": {
+          "name": "analyzing",
+          "instanceId": "i4dgdruz6ltpow8unyxw"
+        },
+        "outcome": "terminated"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T12:30:01.000Z",
+      "event": {
+        "eventId": "2jkdkkl6kqvdfbttrj5h",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "investigation",
+          "id": "mg5i7qn7vbay66gi6z4w"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-02T12:30:00.000Z",
+        "outcome": "inconclusive"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T12:55:01.000Z",
+      "event": {
+        "eventId": "ybmgwn59fniusgk0cwir",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "remediation",
+          "id": "9nqp3zr3oas2wc0hetdf"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-02T12:55:00.000Z",
+        "stage": {
+          "name": "implementing",
+          "instanceId": "6d8600a25suninu3nki2"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T12:55:01.000Z",
+      "event": {
+        "eventId": "d4dbxrgde0i9jfcfraeg",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "remediation",
+          "id": "9nqp3zr3oas2wc0hetdf"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-02T12:55:00.000Z",
+        "stage": {
+          "name": "verifying",
+          "instanceId": "nv5owalfiq4a9hihy90i"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T13:25:01.000Z",
+      "event": {
+        "eventId": "4d3ppdqmsr73ypdws81u",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "remediation",
+          "id": "9nqp3zr3oas2wc0hetdf"
+        },
+        "version": 7,
+        "occurredAt": "2026-03-02T13:25:00.000Z",
+        "stage": {
+          "name": "verifying",
+          "instanceId": "nv5owalfiq4a9hihy90i"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T13:25:01.000Z",
+      "event": {
+        "eventId": "idxbrtfo7x9xty8ebcjg",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "remediation",
+          "id": "9nqp3zr3oas2wc0hetdf"
+        },
+        "version": 8,
+        "occurredAt": "2026-03-02T13:25:00.000Z",
+        "outcome": "fixed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T13:26:01.000Z",
+      "event": {
+        "eventId": "l3vorg11by33giz2r2sv",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "investigation",
+          "id": "hhk40hqdh7djxg31r4ar"
+        },
+        "version": 7,
+        "occurredAt": "2026-03-02T13:26:00.000Z",
+        "stage": {
+          "name": "remediation",
+          "instanceId": "abx8duat4ykkd51vrh5a"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T13:26:01.000Z",
+      "event": {
+        "eventId": "usyd1pfb9r8fyv9c8987",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "investigation",
+          "id": "hhk40hqdh7djxg31r4ar"
+        },
+        "version": 8,
+        "occurredAt": "2026-03-02T13:26:00.000Z",
+        "outcome": "root_cause_found"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T13:27:01.000Z",
+      "event": {
+        "eventId": "dftlyg7rvcugx64ht7k4",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-02T13:27:00.000Z",
+        "stage": {
+          "name": "customer_comms",
+          "instanceId": "38mij2yggl91170dklf5"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T13:27:01.000Z",
+      "event": {
+        "eventId": "m3x77gj95n73qriwpnk2",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 7,
+        "occurredAt": "2026-03-02T13:27:00.000Z",
+        "stage": {
+          "name": "investigating",
+          "instanceId": "y7cwrafoz88ulk46a0ww"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T13:27:01.000Z",
+      "event": {
+        "eventId": "us9isol1a71poayuafs1",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 8,
+        "occurredAt": "2026-03-02T13:27:00.000Z",
+        "stage": {
+          "name": "monitoring",
+          "instanceId": "1f949thgfseyrqviy250"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-03T13:27:01.000Z",
+      "event": {
+        "eventId": "7nrn8cl5971whitrw3ft",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 9,
+        "occurredAt": "2026-03-03T13:27:00.000Z",
+        "stage": {
+          "name": "monitoring",
+          "instanceId": "1f949thgfseyrqviy250"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-03T13:27:01.000Z",
+      "event": {
+        "eventId": "frk6b7wsn9vu0qvzv4lh",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 10,
+        "occurredAt": "2026-03-03T13:27:00.000Z",
+        "outcome": "resolved"
+      }
+    },
+    {
+      "receivedAt": "2026-03-06T13:27:01.000Z",
+      "event": {
+        "eventId": "2p3zte17sq6y1yodjd65",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.reopened",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 11,
+        "occurredAt": "2026-03-06T13:27:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-06T13:27:01.000Z",
+      "event": {
+        "eventId": "2y9tafhcnfzguuodz02e",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 12,
+        "occurredAt": "2026-03-06T13:27:00.000Z",
+        "stage": {
+          "name": "investigating",
+          "instanceId": "6myg07rszsqd9zdojj1z"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-06T15:27:01.000Z",
+      "event": {
+        "eventId": "wycw2f42w3it3m61pe30",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 13,
+        "occurredAt": "2026-03-06T15:27:00.000Z",
+        "stage": {
+          "name": "investigating",
+          "instanceId": "6myg07rszsqd9zdojj1z"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-06T15:27:01.000Z",
+      "event": {
+        "eventId": "gjkno3bbfzetcj870i9q",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "ticket",
+          "id": "cfex1v7nlidjrp74n6b7"
+        },
+        "version": 14,
+        "occurredAt": "2026-03-06T15:27:00.000Z",
+        "outcome": "resolved"
+      }
+    }
+  ],
+  "expected": {
+    "totals": {
+      "appliedEvents": 36
+    },
+    "entities": [
+      {
+        "id": "cfex1v7nlidjrp74n6b7",
+        "status": "closed",
+        "outcome": "resolved",
+        "reopenCount": 1,
+        "attributes": {
+          "severity": "sev2"
+        }
+      }
+    ],
+    "apps": {
+      "app_support": {
+        "processes": ["incident_response"],
+        "entities": {
+          "ticket": {
+            "total": 1,
+            "reopenedEntities": 1,
+            "reopenEvents": 1,
+            "parallelStageEntities": 1,
+            "outcomes": {
+              "resolved": 1
+            }
+          },
+          "investigation": {
+            "total": 2,
+            "outcomes": {
+              "inconclusive": 1,
+              "root_cause_found": 1
+            },
+            "peakConcurrentPerParent": 2
+          },
+          "remediation": {
+            "total": 1,
+            "outcomes": {
+              "fixed": 1
+            }
+          }
+        },
+        "stages": {
+          "ticket/investigating": {
+            "entered": 2,
+            "exited": 2,
+            "open": 0
+          },
+          "ticket/customer_comms": {
+            "entered": 1,
+            "exited": 1
+          }
+        },
+        "relations": {
+          "child_of": 3,
+          "related_to": 1
+        }
+      }
+    }
+  }
+}
