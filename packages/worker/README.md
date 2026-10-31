@@ -10,7 +10,7 @@ pnpm add @flightdeckhq/worker
 
 ## Bind Flightdeck
 
-Register the app with `npx create-flightdeck apps add <name> --json` and paste the returned binding into your wrangler config, once per env:
+Register the app with `npx @flightdeckhq/create apps add <name> --json` and paste the returned binding into your wrangler config, once per env:
 
 ```jsonc
 "services": [

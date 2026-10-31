@@ -14,7 +14,7 @@ You are instrumenting `<app>` in `<repo>` with Flightdeck analytics. Kanbanger i
 
 **SDKs:** install from npm (`@flightdeckhq/worker`, plus `@flightdeckhq/browser` for a UI).
 
-**Registration:** production `<app_slug>`, staging `<app_slug_staging>` (already registered). If these are blank, register with `npx create-flightdeck` per `flightdeck-instrument-worker/references/registration.md`. Staging, beta, previews and one-boxes bind the staging id.
+**Registration:** production `<app_slug>`, staging `<app_slug_staging>` (already registered). If these are blank, register with `npx @flightdeckhq/create` per `flightdeck-instrument-worker/references/registration.md`. Staging, beta, previews and one-boxes bind the staging id.
 
 **Ownership:** `<one agent: everything above>` / `<backend: worker entry, wrangler config(s), server code, Durable Objects>` / `<frontend: client entry, components, assets.run_worker_first only>`. Do not edit files outside your ownership; if you need a change there, report it.
 

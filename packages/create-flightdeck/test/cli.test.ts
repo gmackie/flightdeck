@@ -246,7 +246,7 @@ describe("apps key", () => {
       },
     });
     expect(await main(["apps", "key", "app_bob", "--out", "key.txt"], t.deps)).toBe(1);
-    expect(t.err()).toContain(`create-flightdeck apps revoke-key app_bob ${DIGEST}`);
+    expect(t.err()).toContain(`npx @flightdeckhq/create apps revoke-key app_bob ${DIGEST}`);
     expect(t.err()).toContain("ENOSPC");
     expect(t.out() + t.err()).not.toContain(KEY);
     expect(t.file.discard).toHaveBeenCalled();

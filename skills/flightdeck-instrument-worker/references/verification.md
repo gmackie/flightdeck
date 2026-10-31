@@ -19,7 +19,7 @@ pnpm exec wrangler d1 migrations apply flightdeck --local --persist-to "$STATE"
 pnpm exec wrangler dev --port 8798 --persist-to "$STATE" --var FLIGHTDECK_DEV:1
 ```
 
-Register the appId your local config binds (the dev-only route; production uses `create-flightdeck apps add`):
+Register the appId your local config binds (the dev-only route; production uses `npx @flightdeckhq/create apps add`):
 
 ```bash
 curl -sf -X POST http://localhost:8798/__dev/apps -H 'Content-Type: application/json' \

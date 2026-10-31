@@ -2,7 +2,7 @@
 
 Worker apps send analytics to Flightdeck through a `FLIGHTDECK` service binding
 whose `props.appId` names a registered app. Register apps with the
-Access-protected admin API, usually through the `create-flightdeck` CLI. The
+Access-protected admin API, usually through the `@flightdeckhq/create` CLI. The
 `/__dev/*` routes are for local development only; keep `FLIGHTDECK_DEV=0` in
 production.
 
@@ -76,10 +76,10 @@ API reports it as `{ sub: <client id>, serviceToken: true }`. People can use
 ## CLI
 
 ```sh
-npx create-flightdeck apps list [--json]
-npx create-flightdeck apps add kanbanger --stage staging [--json]
-npx create-flightdeck apps key app_bob [--days 90] [--out bob.key] [--json]
-npx create-flightdeck apps revoke-key app_bob <sha256-hex>
+npx @flightdeckhq/create apps list [--json]
+npx @flightdeckhq/create apps add kanbanger --stage staging [--json]
+npx @flightdeckhq/create apps key app_bob [--days 90] [--out bob.key] [--json]
+npx @flightdeckhq/create apps revoke-key app_bob <sha256-hex>
 ```
 
 `--url` overrides `FLIGHTDECK_URL`. HTTPS is required except for `localhost`.
@@ -108,7 +108,7 @@ registering anything, so an existing or unwritable path fails without creating a
 key. If the API rejects the digest, the file is removed and the key is never
 shown. If the key is registered but the write fails, the CLI prints its digest
 and the exact `revoke-key` command, and exits non-zero. Store the key as a secret immediately, e.g.
-`create-flightdeck apps key app_bob | wrangler secret put BOB_FLIGHTDECK_TOKEN`.
+`npx @flightdeckhq/create apps key app_bob | wrangler secret put BOB_FLIGHTDECK_TOKEN`.
 
 ## API
 

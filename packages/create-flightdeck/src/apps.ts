@@ -71,7 +71,7 @@ export async function addKey(
   const key = Buffer.from(deps.randomBytes(32)).toString("base64url");
   const token_hash = createHash("sha256").update(key).digest("hex");
   const expires_at = deps.now() + opts.days * DAY;
-  const revoke = `create-flightdeck apps revoke-key ${opts.appId} ${token_hash}`;
+  const revoke = `npx @flightdeckhq/create apps revoke-key ${opts.appId} ${token_hash}`;
   try {
     await request("POST", `/api/apps/${encodeURIComponent(opts.appId)}/server-keys`, {
       token_hash,

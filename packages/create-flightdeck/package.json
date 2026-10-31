@@ -1,6 +1,6 @@
 {
-  "name": "create-flightdeck",
-  "version": "0.1.0",
+  "name": "@flightdeckhq/create",
+  "version": "0.1.1",
   "description": "Register apps with a self-hosted Flightdeck and (later) install it.",
   "keywords": [
     "flightdeck",

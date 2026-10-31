@@ -2,7 +2,7 @@
 # Packs the publishable packages the way `pnpm publish` would, installs the tarballs with npm
 # into a scratch Worker project outside the workspace, typechecks a Worker and a browser file
 # against them (TypeScript 5 and the repo's version), imports each library in Node, and runs
-# the installed create-flightdeck CLI. Catches missing dist files, broken exports and
+# the installed @flightdeckhq/create CLI. Catches missing dist files, broken exports and
 # unrewritten workspace: dependencies before they reach npm.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -123,7 +123,7 @@ for (const name of ["init", "track", "identify"])
 console.log("libraries import in Node");
 '
 
-node node_modules/create-flightdeck/dist/cli.js --help | grep -q "create-flightdeck apps add"
-npx --no-install create-flightdeck --help | grep -q "create-flightdeck apps add"
-echo "create-flightdeck --help works"
+node node_modules/@flightdeckhq/create/dist/cli.js --help | grep -q "@flightdeckhq/create apps add"
+npx --no-install create-flightdeck --help | grep -q "@flightdeckhq/create apps add"
+echo "@flightdeckhq/create --help works"
 echo "pack smoke test passed"
