@@ -7,7 +7,7 @@ Four packages are published to the public npm registry, all at the same version:
 | `@flightdeckhq/schema` | Event schema, limits, route normalization; ESM + `.d.ts` |
 | `@flightdeckhq/worker` | `withFlightdeck`, `handleFlightdeck`, `flightdeck(env)`; ESM + `.d.ts` |
 | `@flightdeckhq/browser` | `init`, `track`, `identify`; ESM + `.d.ts`, under 3 KB gzip |
-| `create-flightdeck` | The CLI, one bundled `dist/cli.js` with a shebang (Node 24+) |
+| `@flightdeckhq/create` | The CLI, one bundled `dist/cli.js` with a shebang (Node 24+) |
 
 Everything else in the workspace is `private` and never published. The code is
 licensed MIT (`LICENSE` at the root, copied into each package).
@@ -34,7 +34,7 @@ outside that list or a leftover `workspace:` range, installs the tarballs with
 npm into a scratch project outside the workspace, typechecks a Worker using
 `withFlightdeck` and `flightdeck(env).track` and a browser file calling `init`
 (with TypeScript 5 and the repo's TypeScript), imports each library in Node, and
-runs `create-flightdeck --help` from the installed bin. CI runs it on every PR.
+runs `@flightdeckhq/create --help` from the installed bin. CI runs it on every PR.
 
 ## Cutting a release
 
@@ -77,7 +77,7 @@ runs in). Create it on npmjs.com as a granular token with an expiry, "bypass
 two-factor authentication" enabled (CI cannot answer a 2FA prompt), and read and
 write access to all packages, since the four packages do not exist yet. After
 the first publish, narrow it to the `flightdeckhq` organization and the
-`create-flightdeck` package, or switch to trusted publishing (below). The
+`@flightdeckhq/create` package, or switch to trusted publishing (below). The
 job writes `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` to `~/.npmrc`;
 pnpm expands the variable when it reads the file, so the token is never written
 to disk or logged. The `id-token: write` permission lets npm sign provenance.

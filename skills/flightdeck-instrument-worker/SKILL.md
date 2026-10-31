@@ -20,8 +20,8 @@ Work in a worktree (`worktrunk-worktrees` skill). You own the worker entry, wran
 Use the appIds in your brief if the coordinator already registered the app. Otherwise run the registration CLI ([references/registration.md](references/registration.md) covers installing it, `FLIGHTDECK_URL` and Cloudflare Access auth):
 
 ```bash
-npx create-flightdeck apps add <name> --stage production --json
-npx create-flightdeck apps add <name> --stage staging --json
+npx @flightdeckhq/create apps add <name> --stage production --json
+npx @flightdeckhq/create apps add <name> --stage staging --json
 ```
 
 Each returns `{ app: { id, name, created_at }, binding: { binding: "FLIGHTDECK", service: "flightdeck", entrypoint: "Ingest", props: { appId } } }`. Ids are `app_<slug>` for production and `app_<slug>_<stage>` otherwise. Production gets its own appId; staging, beta, PR previews and one-boxes all bind the **staging** appId. Record both ids for the status table.

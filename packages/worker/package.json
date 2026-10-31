@@ -1,6 +1,6 @@
 {
   "name": "@flightdeckhq/worker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Cloudflare Worker SDK for Flightdeck: serve the browser endpoint and track server-side events over a service binding.",
   "keywords": [
     "flightdeck",

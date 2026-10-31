@@ -1,4 +1,4 @@
-# create-flightdeck
+# @flightdeckhq/create
 
 CLI for a self-hosted [Flightdeck](https://github.com/gmackie/flightdeck): register apps and manage their server ingest keys. (Installing Flightdeck itself comes later.) Needs Node 24 or later.
 
@@ -7,12 +7,12 @@ CLI for a self-hosted [Flightdeck](https://github.com/gmackie/flightdeck): regis
 ```bash
 export FLIGHTDECK_URL=https://flightdeck.example.com
 
-npx create-flightdeck apps add myapp --json                  # production: app_myapp
-npx create-flightdeck apps add myapp --stage staging --json  # app_myapp_staging
-npx create-flightdeck apps list
-npx create-flightdeck apps key app_myapp --days 90 --out key.txt
-npx create-flightdeck apps revoke-key app_myapp <sha256>
-npx create-flightdeck --help
+npx @flightdeckhq/create apps add myapp --json                  # production: app_myapp
+npx @flightdeckhq/create apps add myapp --stage staging --json  # app_myapp_staging
+npx @flightdeckhq/create apps list
+npx @flightdeckhq/create apps key app_myapp --days 90 --out key.txt
+npx @flightdeckhq/create apps revoke-key app_myapp <sha256>
+npx @flightdeckhq/create --help
 ```
 
 `apps add` prints the service binding to paste into your wrangler config (see [`@flightdeckhq/worker`](https://www.npmjs.com/package/@flightdeckhq/worker)).

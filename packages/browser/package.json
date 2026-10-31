@@ -1,6 +1,6 @@
 {
   "name": "@flightdeckhq/browser",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tiny (<3 KB gzip) browser SDK for Flightdeck product analytics.",
   "keywords": [
     "flightdeck",

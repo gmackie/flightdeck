@@ -1,5 +1,5 @@
 name: release
-# Publishes @flightdeckhq/schema, @flightdeckhq/worker, @flightdeckhq/browser and create-flightdeck
+# Publishes @flightdeckhq/schema, @flightdeckhq/worker, @flightdeckhq/browser and @flightdeckhq/create
 # to npm. All four share one version; push a tag v<version> that matches it (see
 # docs/operations/releasing.md). Run it by hand with dry_run to check everything but the upload.
 on:

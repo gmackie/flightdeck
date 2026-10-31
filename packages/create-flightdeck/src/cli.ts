@@ -3,14 +3,14 @@ import { addApp, addKey, listApps, MAX_KEY_DAYS, revokeKey } from "./apps";
 import { apiClient, baseUrl } from "./client";
 import { CliError, type Deps } from "./deps";
 
-export const HELP = `create-flightdeck: set up and use a self-hosted Flightdeck
+export const HELP = `@flightdeckhq/create (bin: create-flightdeck): set up and use a self-hosted Flightdeck
 
 Usage:
-  create-flightdeck                         Install Flightdeck (coming in Phase 2)
-  create-flightdeck apps list [--json]
-  create-flightdeck apps add <name> [--stage <stage>] [--json]
-  create-flightdeck apps key <appId> [--days 90] [--out <file>] [--json]
-  create-flightdeck apps revoke-key <appId> <sha256>
+  npx @flightdeckhq/create                         Install Flightdeck (coming in Phase 2)
+  npx @flightdeckhq/create apps list [--json]
+  npx @flightdeckhq/create apps add <name> [--stage <stage>] [--json]
+  npx @flightdeckhq/create apps key <appId> [--days 90] [--out <file>] [--json]
+  npx @flightdeckhq/create apps revoke-key <appId> <sha256>
 
 Options:
   --url <url>      Flightdeck base URL (default: $FLIGHTDECK_URL)
