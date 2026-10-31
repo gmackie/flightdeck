@@ -4,6 +4,7 @@ import { ulid } from "ulid";
 import { verifyAccessUser } from "../access";
 import { type AppRecord, getApp } from "../apps";
 import { appShard, sessionStub } from "../do/shards";
+import { DOGFOOD_APP_ID } from "../dogfood";
 import { sinks } from "../sinks";
 import { type IngestDeps, IngestError, ingestBatch } from "./service";
 
@@ -43,14 +44,26 @@ function serverEvent(value: unknown, fixed: { kind: string; name?: string }): un
   return { ts: Date.now(), ...value, ...fixed };
 }
 
+/**
+ * The Access audience an app's identity assertions must carry. app_flightdeck is registered by
+ * migration without one, so it falls back to the dashboard's own `ACCESS_AUD`; otherwise any
+ * Access application in the team could assert dashboard identities. Null skips the check.
+ */
+export function accessAudience(env: Pick<Env, "ACCESS_AUD">, app: AppRecord): string | null {
+  if (app.access_aud) return app.access_aud;
+  const dashboardAud = env.ACCESS_AUD.trim();
+  return app.id === DOGFOOD_APP_ID && dashboardAud ? dashboardAud : null;
+}
+
 export function deps(env: Env, ctx: ExecutionContext, app: AppRecord): IngestDeps {
   const teamDomain = env.ACCESS_TEAM_DOMAIN.trim();
+  const audience = accessAudience(env, app);
   return {
     now: Date.now,
     newId: () => ulid(),
     // verifyAccessUser normalizes the team domain; an empty domain turns Access identity off.
     resolveUser: async (jwt) =>
-      teamDomain ? verifyAccessUser(jwt, { teamDomain, audience: app.access_aud }) : null,
+      teamDomain ? verifyAccessUser(jwt, { teamDomain, audience }) : null,
     sendEvents: (rows: StoredEvent[]) => sinks.events(env, rows),
     appendToSession: (appId, sessionId, rows) =>
       sessionStub(env, appId, sessionId).append(appId, sessionId, rows),

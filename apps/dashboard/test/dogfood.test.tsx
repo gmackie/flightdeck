@@ -47,7 +47,9 @@ it("posts the dashboard's events to the same-origin /_fd/e", async () => {
   await start();
   const batches = await sent();
   expect(batches.map((b) => b.url)).toEqual(["/_fd/e"]);
-  expect(batches[0]?.events[0]).toMatchObject({ kind: "page", name: "/" });
+  // `/` is rewritten to `/live` before the SDK starts, so the visit is one page view.
+  const pages = batches.flatMap((b) => b.events).filter((e) => e.kind === "page");
+  expect(pages.map((e) => e.name)).toEqual(["/live"]);
 });
 
 it("records clicks on data-flightdeck elements under their names", async () => {

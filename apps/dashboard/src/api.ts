@@ -3,8 +3,10 @@ export type App = { id: string; name: string; created_at: number };
 
 export type AppsResult =
   | { status: "ok"; apps: App[] }
-  /** Cloudflare Access rejected the request: the session is missing or expired. */
+  /** No valid Cloudflare Access session: missing, expired, or redirected to the login page. */
   | { status: "signed-out" }
+  /** Signed in, but not allowed to use this Flightdeck. */
+  | { status: "forbidden" }
   | { status: "error"; message: string };
 
 function isApp(value: unknown): value is App {
@@ -20,11 +22,17 @@ export async function fetchApps(fetcher: typeof fetch = fetch): Promise<AppsResu
     res = await fetcher("/api/apps", {
       headers: { Accept: "application/json" },
       credentials: "same-origin",
+      // An expired Access session answers with a 302 to the team's login domain. Following it
+      // cross-origin fails CORS (a TypeError), so stop at the redirect and read it as signed out.
+      redirect: "manual",
     });
   } catch {
     return { status: "error", message: "Flightdeck is unreachable." };
   }
-  if (res.status === 401 || res.status === 403) return { status: "signed-out" };
+  if (res.type === "opaqueredirect" || res.status === 0 || res.status === 401) {
+    return { status: "signed-out" };
+  }
+  if (res.status === 403) return { status: "forbidden" };
   if (!res.ok) return { status: "error", message: `Loading apps failed (HTTP ${res.status}).` };
   const body: unknown = await res.json().catch(() => null);
   const apps = (body as { apps?: unknown } | null)?.apps;

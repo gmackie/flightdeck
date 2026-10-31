@@ -8,6 +8,7 @@ import { LinkProvider } from "@cloudflare/kumo/utils";
 import {
   AirplaneTiltIcon,
   CompassIcon,
+  LockKeyIcon,
   SignInIcon,
   SquaresFourIcon,
   WarningCircleIcon,
@@ -113,6 +114,17 @@ function Content(props: {
       </Centered>
     );
   }
+  if (state.status === "forbidden") {
+    return (
+      <Centered>
+        <Empty
+          icon={<LockKeyIcon size={40} />}
+          title="You don't have access"
+          description="You are signed in, but your account isn't allowed to use this Flightdeck. Ask an administrator for access."
+        />
+      </Centered>
+    );
+  }
   if (state.status === "error") {
     return (
       <Banner
@@ -179,18 +191,10 @@ export function App() {
       <Sidebar.Provider className="fd-shell">
         <Sidebar aria-label="Flightdeck">
           <Sidebar.Header>
-            <a
-              className="fd-brand"
-              href={pageHref("live")}
-              data-flightdeck="nav.home"
-              onClick={(ev) => {
-                ev.preventDefault();
-                navigate(pageHref("live"));
-              }}
-            >
+            <RouterLink className="fd-brand" href={pageHref("live")} data-flightdeck="nav.home">
               <AirplaneTiltIcon size={20} weight="duotone" aria-hidden />
               <span>Flightdeck</span>
-            </a>
+            </RouterLink>
           </Sidebar.Header>
           <Sidebar.Content>
             <nav aria-label="Primary">

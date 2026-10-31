@@ -11,9 +11,21 @@ it("returns the apps from GET /api/apps", async () => {
   expect(fetcher).toHaveBeenCalledWith("/api/apps", expect.objectContaining({}));
 });
 
-it("treats 401 and 403 as signed out", async () => {
+it("treats 401 as signed out and 403 as no access", async () => {
   expect(await fetchApps(reply(401))).toEqual({ status: "signed-out" });
-  expect(await fetchApps(reply(403))).toEqual({ status: "signed-out" });
+  expect(await fetchApps(reply(403))).toEqual({ status: "forbidden" });
+});
+
+it("treats Access's login redirect as signed out instead of following it", async () => {
+  // With `redirect: "manual"` an expired Access session yields an opaque redirect (status 0);
+  // following the cross-origin 302 would fail CORS and look like a network error.
+  const redirected = { type: "opaqueredirect", status: 0, ok: false } as Response;
+  const fetcher = vi.fn(async () => redirected);
+  expect(await fetchApps(fetcher)).toEqual({ status: "signed-out" });
+  expect(fetcher).toHaveBeenCalledWith(
+    "/api/apps",
+    expect.objectContaining({ redirect: "manual" }),
+  );
 });
 
 it("reports server errors, malformed bodies and network failures", async () => {

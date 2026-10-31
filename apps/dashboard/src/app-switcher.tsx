@@ -17,11 +17,13 @@ export function AppSwitcher(props: {
   const placeholder =
     state.status === "signed-out"
       ? "Signed out"
-      : state.status === "error"
-        ? "Apps unavailable"
-        : state.status === "ok" && apps.length === 0
-          ? "No apps"
-          : "Select an app";
+      : state.status === "forbidden"
+        ? "No access"
+        : state.status === "error"
+          ? "Apps unavailable"
+          : state.status === "ok" && apps.length === 0
+            ? "No apps"
+            : "Select an app";
   return (
     <div className="fd-app-switcher" data-flightdeck="app.switch">
       <Select

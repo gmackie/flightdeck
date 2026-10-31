@@ -5,7 +5,7 @@
   "scripts": {
     "build:dashboard": "pnpm --filter @flightdeckhq/dashboard build",
     "dev": "pnpm build:dashboard && wrangler dev",
-    "deploy": "pnpm build:dashboard && wrangler deploy",
+    "ship": "pnpm build:dashboard && wrangler deploy",
     "typecheck": "wrangler types --strict-vars false && tsc -p ."
   },
   "dependencies": {

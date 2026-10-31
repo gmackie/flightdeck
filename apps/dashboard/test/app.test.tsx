@@ -53,6 +53,20 @@ describe("shell", () => {
     expect(location.search).toBe("?app=app_alpha");
   });
 
+  it("leaves modified clicks on the brand link to the browser", async () => {
+    mockApps(200);
+    render(<App />);
+    await screen.findByText("What is happening in Alpha now");
+    const brand = screen.getByRole("link", { name: "Flightdeck" });
+    expect(brand).toHaveAttribute("href", "/live?app=app_alpha");
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true, metaKey: true });
+    brand.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    const plain = new MouseEvent("click", { bubbles: true, cancelable: true });
+    brand.dispatchEvent(plain);
+    expect(plain.defaultPrevented).toBe(true);
+  });
+
   it("navigates client-side and keeps the selected app", async () => {
     mockApps(200);
     history.replaceState(null, "", "/live?app=app_beta");
@@ -101,6 +115,13 @@ describe("apps states", () => {
       "auth.signin",
     );
     expect(screen.getByRole("combobox", { name: "Select app" })).toHaveTextContent("Signed out");
+  });
+
+  it("shows a no-access state on 403", async () => {
+    mockApps(403);
+    render(<App />);
+    await screen.findByText("You don't have access");
+    expect(screen.getByRole("combobox", { name: "Select app" })).toHaveTextContent("No access");
   });
 
   it("shows empty states when there are no apps", async () => {
