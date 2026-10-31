@@ -51,6 +51,7 @@ The full records, with alternatives considered, are in [13-decision-records.md](
 | D14 | Agents get a **read-only** MCP surface that reuses the same API, grants and suppression. There are no write tools. |
 | D15 | A segmented bar stacks only additive quantities (sums or means of time). Percentiles are never stacked. |
 | D16 | Everything ships dark behind `LIFECYCLE_MODE=off|shadow|on` and a per-app capability. The existing analytics paths are untouched. |
+| D17 | AI-assisted analysis keeps models on the **client**: the MCP server has no model by default and returns deterministic, cited evidence packs with knowledge time, censoring, versions, case mix and `causal: false`. Restricted processes get aggregates only, and no tool automates decisions about people ([14](14-ai-assisted-analysis-mcp.md)). Proposed. |
 
 ## The 12 PRs at a glance
 
@@ -76,6 +77,24 @@ unmerged work exists; nothing is shipped.
 A feature release (`LIFECYCLE_MODE=on`, a non-prerelease npm export, or docs announcing the feature)
 additionally requires integration gates **G1–G8** ([Appendix A](appendix-a-reconciliation.md#a3-integration-gates)).
 
+## Status update (2026-10-31, after this PR opened)
+
+These changes happened after the first revision of this RFC. The sections above are kept as
+written; where they say "in flight", check this list.
+
+- **Merged to `main`:** #31 (E, read authorization, FLIG-18), #32 (C, synthetic lifecycle dashboard
+  demo, FLIG-15), #34 (G, lifecycle query specification and safe Basin SQL adapter), #37 (F,
+  synthetic fixture generator, FLIG-20).
+- **Open drafts:** #33 (B engine), #35 (A events and ingest), #36 (H serving read model, not wired),
+  #38 (I alerts and controlled variant comparisons), #39 (process-definition registry at ingest,
+  stacked on #35), #41 (admin API for grants and key scopes), #42 (ingest rate limits), #43 (outbox
+  example tests), #44 (J, optional read-only lifecycle MCP server on protocol 2026-07-28).
+- **New:** [14 AI-assisted analysis over MCP](14-ai-assisted-analysis-mcp.md) extends 10 §10.5 on
+  top of #44. Its companion package `packages/lifecycle-investigations` is being built on its own
+  branch (`feat/lifecycle-ai-investigations`) and has no code yet.
+- **Gates G1 and G2 still apply:** A's and B's drafts remain separate PRs, and their compatibility
+  has not been shown.
+
 ## Reading order
 
 | Doc | What it answers |
@@ -93,6 +112,7 @@ additionally requires integration gates **G1–G8** ([Appendix A](appendix-a-rec
 | [11 UI: nested segmented bars](11-ui-segmented-bars.md) | Visual semantics, interaction and accessibility. |
 | [12 Rollout, cost, testing](12-rollout-cost-testing.md) | Migrations, provisioning, feature flags, cost and performance budgets, and the test plan. |
 | [13 Decision records](13-decision-records.md) | D1–D16 with context, alternatives and consequences. |
+| [14 AI-assisted analysis over MCP](14-ai-assisted-analysis-mcp.md) | Layered architecture (client LLM, MCP server, deterministic investigation engine), evidence packs and citations, nested workflows (child rollups, parent blocked by child, critical path vs parallel span; a future data-source capability), v1 tools, resources and prompts with schemas, privacy and differencing, budgets and audit, MCP Apps segmented bars, the SEP-2663 Tasks extension, a release gate matrix, three phases and scenario tests. Builds on draft PR #44. |
 | [Appendix A: Reconciliation](appendix-a-reconciliation.md) | Old stacked PRs #1–#18 (reuse concepts, don't merge), in-flight workstreams A–F, and **integration gates G1–G8**. |
 | [Appendix B: Workshop](appendix-b-workshop.md) | Agenda, exercises and the open questions to settle. |
 | [Examples](examples/README.md) | Hiring, deployment and incident walkthroughs with fictional fixtures and hand-checked expected values. |
