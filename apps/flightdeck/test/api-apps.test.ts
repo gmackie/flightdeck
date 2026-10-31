@@ -20,11 +20,6 @@ const api = (path: string, init: RequestInit & { json?: unknown } = {}) =>
 const hex = (c: string) => c.repeat(64);
 const DAY = 24 * 60 * 60 * 1000;
 
-beforeAll(async () => {
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO apps (id, name) VALUES ('app_flightdeck', 'Flightdeck')",
-  ).run();
-});
 afterEach(() => vi.restoreAllMocks());
 
 describe("app ids", () => {
@@ -99,13 +94,15 @@ describe("/api/apps", () => {
     );
   });
 
-  it("still registers when the dogfood event fails, and warns", async () => {
+  it("still registers when the dogfood event fails, and logs it", async () => {
     vi.spyOn(sinks, "events").mockRejectedValue(new Error("down"));
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     expect((await api("/api/apps", { json: { name: "resilient" } })).status).toBe(201);
     await vi.waitFor(() =>
-      expect(warn).toHaveBeenCalledWith("app.registered dogfood event failed", "app_resilient"),
+      expect(log).toHaveBeenCalledWith("Flightdeck dogfood event failed", "app.registered"),
     );
+    // Only the event name: the error could carry sink internals.
+    expect(JSON.stringify(log.mock.calls)).not.toContain("down");
   });
 
   it("lists apps with the fixed { apps: [{ id, name, created_at }] } contract", async () => {

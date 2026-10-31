@@ -1,6 +1,7 @@
 import type { JWTVerifyGetKey } from "jose";
 import * as v from "valibot";
 import { forgetApp } from "../apps";
+import { trackDogfood } from "../dogfood";
 import { authenticate } from "./auth";
 import { fail, json, readJson } from "./http";
 import {
@@ -16,8 +17,6 @@ type AppRow = { id: string; name: string; created_at: number };
 
 const KEYS_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/server-keys$/;
 const KEY_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/server-keys\/([^/]+)$/;
-/** The app Flightdeck reports its own events under (registered by migration 0003). */
-const SELF_APP_ID = "app_flightdeck";
 
 /** The Access-protected admin API; `keys` lets tests verify tokens against a local JWKS. */
 export async function apiRoutes(
@@ -75,17 +74,8 @@ async function registerApp(request: Request, env: Env, ctx: ExecutionContext): P
   const created = insert.meta.changes > 0;
   if (created) {
     forgetApp(app.id);
-    // Best effort dogfooding: never fail or delay registration on analytics. Log only the
-    // app id; the error could carry sink internals.
-    ctx.waitUntil(
-      ctx.exports
-        .Ingest({ props: { appId: SELF_APP_ID } })
-        .track({ name: "app.registered", props: { app_id: app.id } })
-        .then(
-          () => undefined,
-          () => console.warn("app.registered dogfood event failed", app.id),
-        ),
-    );
+    // Best effort dogfooding: never fails or delays registration.
+    trackDogfood(ctx, "app.registered", { app_id: app.id });
   }
   const service = env.FLIGHTDECK_WORKER_NAME.trim() || "flightdeck";
   return json({ app, binding: serviceBinding(service, app.id) }, created ? 201 : 200);

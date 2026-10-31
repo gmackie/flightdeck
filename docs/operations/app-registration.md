@@ -132,4 +132,5 @@ otherwise), which keeps cross-site form posts from riding the Access cookie.
   that does not belong to the app returns 404.
 - Deleting a key revokes it immediately.
 - A newly registered app emits a best-effort `app.registered` event under
-  `app_flightdeck`. Registration never fails because of it.
+  `app_flightdeck`. Registration never fails because of it; a failure logs only
+  the event name.
