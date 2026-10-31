@@ -1,0 +1,1250 @@
+{
+  "schema": "flightdeck.lifecycle-fixture/v1",
+  "name": "service-regional-rollouts",
+  "description": "A live service with two deployments. The first rolls out to three regions at once (success, failure, rollback) and is rolled back; the second succeeds in two regions.",
+  "covers": ["service_delivery", "concurrent", "terminal:rolled_back", "terminal:failed"],
+  "asOf": "2026-05-01T09:00:00.000Z",
+  "records": [
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "5z716g8owttk762e3pfq",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "service",
+          "id": "waywa6kryo3j3djcsnxt"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:00:00.000Z",
+        "attributes": {
+          "tier": "customer_facing"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "q1zdbnsrhtnw2bkta4wq",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "service",
+          "id": "waywa6kryo3j3djcsnxt"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:00:00.000Z",
+        "stage": {
+          "name": "scaffolding",
+          "instanceId": "rjwwdz230hx1fmnkcpdq"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-03T09:00:01.000Z",
+      "event": {
+        "eventId": "w128ownvl6x3xnrbq2yt",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "service",
+          "id": "waywa6kryo3j3djcsnxt"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-03T09:00:00.000Z",
+        "stage": {
+          "name": "scaffolding",
+          "instanceId": "rjwwdz230hx1fmnkcpdq"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-03T09:00:01.000Z",
+      "event": {
+        "eventId": "zx5h6xb4fq7cyic4pnr4",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "service",
+          "id": "waywa6kryo3j3djcsnxt"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-03T09:00:00.000Z",
+        "stage": {
+          "name": "provisioning",
+          "instanceId": "65jsku4dzy78j689k0gq"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-05T09:00:01.000Z",
+      "event": {
+        "eventId": "km18v908w6ikuexilcj1",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "service",
+          "id": "waywa6kryo3j3djcsnxt"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-05T09:00:00.000Z",
+        "stage": {
+          "name": "provisioning",
+          "instanceId": "65jsku4dzy78j689k0gq"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-05T09:00:01.000Z",
+      "event": {
+        "eventId": "lh1x0od1zu9ey2n5gdqn",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "service",
+          "id": "waywa6kryo3j3djcsnxt"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-05T09:00:00.000Z",
+        "stage": {
+          "name": "live",
+          "instanceId": "uu0cwsde4etgneczxqc7"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:00:01.000Z",
+      "event": {
+        "eventId": "antam5k2w952094roype",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "deployment",
+          "id": "41qlnqpqpj4ead7sj2sb"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-12T09:00:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "service",
+            "id": "waywa6kryo3j3djcsnxt"
+          }
+        ]
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:00:01.000Z",
+      "event": {
+        "eventId": "5x4iuafrvt6pu3n8l0s3",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "deployment",
+          "id": "41qlnqpqpj4ead7sj2sb"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-12T09:00:00.000Z",
+        "stage": {
+          "name": "build",
+          "instanceId": "lqu4k2bkxvcvanfcrsbf"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:10:01.000Z",
+      "event": {
+        "eventId": "wxpl9fjz5sgml8v96u1j",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "deployment",
+          "id": "41qlnqpqpj4ead7sj2sb"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-12T09:10:00.000Z",
+        "stage": {
+          "name": "build",
+          "instanceId": "lqu4k2bkxvcvanfcrsbf"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:10:01.000Z",
+      "event": {
+        "eventId": "5bbdd8gnwlmdv5f3o015",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "deployment",
+          "id": "41qlnqpqpj4ead7sj2sb"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-12T09:10:00.000Z",
+        "stage": {
+          "name": "verify",
+          "instanceId": "3dhcqchykpxg1mo9sleo"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:30:01.000Z",
+      "event": {
+        "eventId": "wox7uydg6rvsvjo2u2g7",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "deployment",
+          "id": "41qlnqpqpj4ead7sj2sb"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-12T09:30:00.000Z",
+        "stage": {
+          "name": "verify",
+          "instanceId": "3dhcqchykpxg1mo9sleo"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:30:01.000Z",
+      "event": {
+        "eventId": "t67yk6egsz20qeri51sm",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "deployment",
+          "id": "41qlnqpqpj4ead7sj2sb"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-12T09:30:00.000Z",
+        "stage": {
+          "name": "rolling_out",
+          "instanceId": "1pq3k99bmbxubfk5f411"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:31:01.000Z",
+      "event": {
+        "eventId": "upq5h6n8j9e16bjq25p5",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "msi230049vix0dgbuw4e"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-12T09:31:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "deployment",
+            "id": "41qlnqpqpj4ead7sj2sb"
+          }
+        ],
+        "attributes": {
+          "region": "us-east"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:31:01.000Z",
+      "event": {
+        "eventId": "o8yau91j29rn3vnpfz2t",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "msi230049vix0dgbuw4e"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-12T09:31:00.000Z",
+        "stage": {
+          "name": "queued",
+          "instanceId": "7qyddog96r35shk3379n"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:32:01.000Z",
+      "event": {
+        "eventId": "guh256knnchzmxr3rv31",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "8y6u1ai1v8nnuhavaish"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-12T09:32:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "deployment",
+            "id": "41qlnqpqpj4ead7sj2sb"
+          }
+        ],
+        "attributes": {
+          "region": "eu-west"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:32:01.000Z",
+      "event": {
+        "eventId": "vpg9wit7pxypc55tgobh",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "8y6u1ai1v8nnuhavaish"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-12T09:32:00.000Z",
+        "stage": {
+          "name": "queued",
+          "instanceId": "3hwjalhrpwgh92nh9zxo"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:33:01.000Z",
+      "event": {
+        "eventId": "4whgm265fehb2eczfav7",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "zlf8bcdwqn7s2o4qnnbp"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-12T09:33:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "deployment",
+            "id": "41qlnqpqpj4ead7sj2sb"
+          }
+        ],
+        "attributes": {
+          "region": "ap-south"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:33:01.000Z",
+      "event": {
+        "eventId": "4gc91373vebnrxeslrvc",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "zlf8bcdwqn7s2o4qnnbp"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-12T09:33:00.000Z",
+        "stage": {
+          "name": "queued",
+          "instanceId": "5yw92lsgc7dm9dxxe9k0"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:36:01.000Z",
+      "event": {
+        "eventId": "whvbh98d4c0v1lqiique",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "msi230049vix0dgbuw4e"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-12T09:36:00.000Z",
+        "stage": {
+          "name": "queued",
+          "instanceId": "7qyddog96r35shk3379n"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:36:01.000Z",
+      "event": {
+        "eventId": "luhpjjkvy3luu4woz2np",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "msi230049vix0dgbuw4e"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-12T09:36:00.000Z",
+        "stage": {
+          "name": "canary",
+          "instanceId": "sju17w6tg14nlq7o09ti"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:37:01.000Z",
+      "event": {
+        "eventId": "zqhaijh4vctwq8huxkl7",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "8y6u1ai1v8nnuhavaish"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-12T09:37:00.000Z",
+        "stage": {
+          "name": "queued",
+          "instanceId": "3hwjalhrpwgh92nh9zxo"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:37:01.000Z",
+      "event": {
+        "eventId": "q5c54d7llstp2uxloklj",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "8y6u1ai1v8nnuhavaish"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-12T09:37:00.000Z",
+        "stage": {
+          "name": "canary",
+          "instanceId": "nk3h2fcpkjs6lvclal0f"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:38:01.000Z",
+      "event": {
+        "eventId": "fc6r061r1gdpex3r8twj",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "zlf8bcdwqn7s2o4qnnbp"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-12T09:38:00.000Z",
+        "stage": {
+          "name": "queued",
+          "instanceId": "5yw92lsgc7dm9dxxe9k0"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:38:01.000Z",
+      "event": {
+        "eventId": "90uii4ooe7p94owh008g",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "zlf8bcdwqn7s2o4qnnbp"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-12T09:38:00.000Z",
+        "stage": {
+          "name": "canary",
+          "instanceId": "0oz7q780bcuqp43whs9f"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:57:01.000Z",
+      "event": {
+        "eventId": "5se1e8a48q77qmmh5nqg",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "8y6u1ai1v8nnuhavaish"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-12T09:57:00.000Z",
+        "stage": {
+          "name": "canary",
+          "instanceId": "nk3h2fcpkjs6lvclal0f"
+        },
+        "outcome": "terminated"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T09:57:01.000Z",
+      "event": {
+        "eventId": "xrcrzbggh6ahrz6xzbqg",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "8y6u1ai1v8nnuhavaish"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-12T09:57:00.000Z",
+        "outcome": "failed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T10:06:01.000Z",
+      "event": {
+        "eventId": "bhgyzqrw3hef7a1hff77",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "msi230049vix0dgbuw4e"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-12T10:06:00.000Z",
+        "stage": {
+          "name": "canary",
+          "instanceId": "sju17w6tg14nlq7o09ti"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T10:06:01.000Z",
+      "event": {
+        "eventId": "lgicu56dj23sbs8wy7je",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "msi230049vix0dgbuw4e"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-12T10:06:00.000Z",
+        "stage": {
+          "name": "ramping",
+          "instanceId": "0oofg55svd18vu5bpf5h"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T10:08:01.000Z",
+      "event": {
+        "eventId": "frexssvhkjaj2b2lfxn8",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "zlf8bcdwqn7s2o4qnnbp"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-12T10:08:00.000Z",
+        "stage": {
+          "name": "canary",
+          "instanceId": "0oz7q780bcuqp43whs9f"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T10:08:01.000Z",
+      "event": {
+        "eventId": "njo7cddiflonh48hd1ri",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "zlf8bcdwqn7s2o4qnnbp"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-12T10:08:00.000Z",
+        "stage": {
+          "name": "ramping",
+          "instanceId": "unybzrp8yoaklcleaecl"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T10:48:01.000Z",
+      "event": {
+        "eventId": "8wvu15klyejwlpt3p83z",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "zlf8bcdwqn7s2o4qnnbp"
+        },
+        "version": 7,
+        "occurredAt": "2026-03-12T10:48:00.000Z",
+        "stage": {
+          "name": "ramping",
+          "instanceId": "unybzrp8yoaklcleaecl"
+        },
+        "outcome": "terminated"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T10:48:01.000Z",
+      "event": {
+        "eventId": "5l4uplymr6d0mgmxp981",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "zlf8bcdwqn7s2o4qnnbp"
+        },
+        "version": 8,
+        "occurredAt": "2026-03-12T10:48:00.000Z",
+        "outcome": "rolled_back"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T11:06:01.000Z",
+      "event": {
+        "eventId": "wx9c6gdimwfqymx7bc7d",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "msi230049vix0dgbuw4e"
+        },
+        "version": 7,
+        "occurredAt": "2026-03-12T11:06:00.000Z",
+        "stage": {
+          "name": "ramping",
+          "instanceId": "0oofg55svd18vu5bpf5h"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T11:06:01.000Z",
+      "event": {
+        "eventId": "b64lkdyres4bvkdr4w4h",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "msi230049vix0dgbuw4e"
+        },
+        "version": 8,
+        "occurredAt": "2026-03-12T11:06:00.000Z",
+        "outcome": "succeeded"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T11:07:01.000Z",
+      "event": {
+        "eventId": "ykia2w8wje11xtpo1umh",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "deployment",
+          "id": "41qlnqpqpj4ead7sj2sb"
+        },
+        "version": 7,
+        "occurredAt": "2026-03-12T11:07:00.000Z",
+        "stage": {
+          "name": "rolling_out",
+          "instanceId": "1pq3k99bmbxubfk5f411"
+        },
+        "outcome": "terminated"
+      }
+    },
+    {
+      "receivedAt": "2026-03-12T11:07:01.000Z",
+      "event": {
+        "eventId": "ndedjdmq9sxa2fazwvcz",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "deployment",
+          "id": "41qlnqpqpj4ead7sj2sb"
+        },
+        "version": 8,
+        "occurredAt": "2026-03-12T11:07:00.000Z",
+        "outcome": "rolled_back"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:00:01.000Z",
+      "event": {
+        "eventId": "ew1k73n2klcx891p4sae",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "deployment",
+          "id": "7lva0jcxnf01plt6nbtq"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-22T09:00:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "service",
+            "id": "waywa6kryo3j3djcsnxt"
+          }
+        ]
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:00:01.000Z",
+      "event": {
+        "eventId": "xy3zbes1mkdzqg02pkzc",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "deployment",
+          "id": "7lva0jcxnf01plt6nbtq"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-22T09:00:00.000Z",
+        "stage": {
+          "name": "build",
+          "instanceId": "vqr93p6s64pt1aew3f0f"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:10:01.000Z",
+      "event": {
+        "eventId": "kn3hy9k19kx01u708duk",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "deployment",
+          "id": "7lva0jcxnf01plt6nbtq"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-22T09:10:00.000Z",
+        "stage": {
+          "name": "build",
+          "instanceId": "vqr93p6s64pt1aew3f0f"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:10:01.000Z",
+      "event": {
+        "eventId": "nyhvzgonl2ycdn2s0599",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "deployment",
+          "id": "7lva0jcxnf01plt6nbtq"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-22T09:10:00.000Z",
+        "stage": {
+          "name": "verify",
+          "instanceId": "9xtunkxp5sau3ymk1mhq"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:30:01.000Z",
+      "event": {
+        "eventId": "bvqe5jbgmmyga9bdsm2e",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "deployment",
+          "id": "7lva0jcxnf01plt6nbtq"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-22T09:30:00.000Z",
+        "stage": {
+          "name": "verify",
+          "instanceId": "9xtunkxp5sau3ymk1mhq"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:30:01.000Z",
+      "event": {
+        "eventId": "ul81je8obr5pvwv3f9u5",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "deployment",
+          "id": "7lva0jcxnf01plt6nbtq"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-22T09:30:00.000Z",
+        "stage": {
+          "name": "rolling_out",
+          "instanceId": "b4bzgmh1t7t9p4zrkqb0"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:31:01.000Z",
+      "event": {
+        "eventId": "wwe7339he9gbo9qjn8lh",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "vsqi4dhgpdv8zt6e2gwo"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-22T09:31:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "deployment",
+            "id": "7lva0jcxnf01plt6nbtq"
+          }
+        ],
+        "attributes": {
+          "region": "us-east"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:31:01.000Z",
+      "event": {
+        "eventId": "ihqy5xr18206oe8q2mxq",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "vsqi4dhgpdv8zt6e2gwo"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-22T09:31:00.000Z",
+        "stage": {
+          "name": "queued",
+          "instanceId": "bzwbsv56xaabmiup4biq"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:32:01.000Z",
+      "event": {
+        "eventId": "j9h4mhbl58ce8e35lve3",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "cmybdl1u50tk6agout8i"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-22T09:32:00.000Z",
+        "relations": [
+          {
+            "type": "child_of",
+            "kind": "deployment",
+            "id": "7lva0jcxnf01plt6nbtq"
+          }
+        ],
+        "attributes": {
+          "region": "eu-west"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:32:01.000Z",
+      "event": {
+        "eventId": "r3w32tcmc850z7f1f16q",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "cmybdl1u50tk6agout8i"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-22T09:32:00.000Z",
+        "stage": {
+          "name": "queued",
+          "instanceId": "uq4er0irltojpeuhspi3"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:36:01.000Z",
+      "event": {
+        "eventId": "725843y3gmr5qly31v39",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "vsqi4dhgpdv8zt6e2gwo"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-22T09:36:00.000Z",
+        "stage": {
+          "name": "queued",
+          "instanceId": "bzwbsv56xaabmiup4biq"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:36:01.000Z",
+      "event": {
+        "eventId": "uaz3r8pf7se0fqvg332g",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "vsqi4dhgpdv8zt6e2gwo"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-22T09:36:00.000Z",
+        "stage": {
+          "name": "canary",
+          "instanceId": "hzwvle82gk9ftj79ki5b"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:37:01.000Z",
+      "event": {
+        "eventId": "ntos1m2x1hy59hulgpbx",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "cmybdl1u50tk6agout8i"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-22T09:37:00.000Z",
+        "stage": {
+          "name": "queued",
+          "instanceId": "uq4er0irltojpeuhspi3"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T09:37:01.000Z",
+      "event": {
+        "eventId": "eqpe4501tib503uh2i2j",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "cmybdl1u50tk6agout8i"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-22T09:37:00.000Z",
+        "stage": {
+          "name": "canary",
+          "instanceId": "rz7qh8drkcpshvaumwaj"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T10:06:01.000Z",
+      "event": {
+        "eventId": "bpa2ut7czh6bep0wu1bg",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "vsqi4dhgpdv8zt6e2gwo"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-22T10:06:00.000Z",
+        "stage": {
+          "name": "canary",
+          "instanceId": "hzwvle82gk9ftj79ki5b"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T10:06:01.000Z",
+      "event": {
+        "eventId": "rk4mg8j38srndc1cjaie",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "vsqi4dhgpdv8zt6e2gwo"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-22T10:06:00.000Z",
+        "stage": {
+          "name": "ramping",
+          "instanceId": "hwtt88rqegy1ndteopzi"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T10:07:01.000Z",
+      "event": {
+        "eventId": "4vm3qoa5mnnddx6dsf2d",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "cmybdl1u50tk6agout8i"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-22T10:07:00.000Z",
+        "stage": {
+          "name": "canary",
+          "instanceId": "rz7qh8drkcpshvaumwaj"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T10:07:01.000Z",
+      "event": {
+        "eventId": "4tq0lk7l1fbp9ph21wxe",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "cmybdl1u50tk6agout8i"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-22T10:07:00.000Z",
+        "stage": {
+          "name": "ramping",
+          "instanceId": "xkqyzg1bfl7kvhfg92gj"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T11:06:01.000Z",
+      "event": {
+        "eventId": "040ql1b860fuc3i1wb4h",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "vsqi4dhgpdv8zt6e2gwo"
+        },
+        "version": 7,
+        "occurredAt": "2026-03-22T11:06:00.000Z",
+        "stage": {
+          "name": "ramping",
+          "instanceId": "hwtt88rqegy1ndteopzi"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T11:06:01.000Z",
+      "event": {
+        "eventId": "rx6b69aq6uhfvw1225sc",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "vsqi4dhgpdv8zt6e2gwo"
+        },
+        "version": 8,
+        "occurredAt": "2026-03-22T11:06:00.000Z",
+        "outcome": "succeeded"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T11:07:01.000Z",
+      "event": {
+        "eventId": "mtui5jv8ipjvfz3idobs",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "cmybdl1u50tk6agout8i"
+        },
+        "version": 7,
+        "occurredAt": "2026-03-22T11:07:00.000Z",
+        "stage": {
+          "name": "ramping",
+          "instanceId": "xkqyzg1bfl7kvhfg92gj"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T11:07:01.000Z",
+      "event": {
+        "eventId": "mqt6as07266xduoqembd",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "regional_rollout",
+          "id": "cmybdl1u50tk6agout8i"
+        },
+        "version": 8,
+        "occurredAt": "2026-03-22T11:07:00.000Z",
+        "outcome": "succeeded"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T11:08:01.000Z",
+      "event": {
+        "eventId": "40ly8yr9qety24ed6zua",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "deployment",
+          "id": "7lva0jcxnf01plt6nbtq"
+        },
+        "version": 7,
+        "occurredAt": "2026-03-22T11:08:00.000Z",
+        "stage": {
+          "name": "rolling_out",
+          "instanceId": "b4bzgmh1t7t9p4zrkqb0"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-22T11:08:01.000Z",
+      "event": {
+        "eventId": "0px3u9rozroxtr8n8i2b",
+        "appId": "app_platform",
+        "process": "service_delivery",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "deployment",
+          "id": "7lva0jcxnf01plt6nbtq"
+        },
+        "version": 8,
+        "occurredAt": "2026-03-22T11:08:00.000Z",
+        "outcome": "succeeded"
+      }
+    }
+  ],
+  "expected": {
+    "totals": {
+      "appliedEvents": 60
+    },
+    "entities": [
+      {
+        "id": "41qlnqpqpj4ead7sj2sb",
+        "status": "closed",
+        "outcome": "rolled_back"
+      },
+      {
+        "id": "7lva0jcxnf01plt6nbtq",
+        "status": "closed",
+        "outcome": "succeeded"
+      },
+      {
+        "id": "waywa6kryo3j3djcsnxt",
+        "status": "open",
+        "outcome": null
+      }
+    ],
+    "apps": {
+      "app_platform": {
+        "processes": ["service_delivery"],
+        "entities": {
+          "service": {
+            "total": 1,
+            "status": {
+              "open": 1,
+              "paused": 0,
+              "closed": 0
+            }
+          },
+          "deployment": {
+            "total": 2,
+            "outcomes": {
+              "rolled_back": 1,
+              "succeeded": 1
+            },
+            "peakConcurrentPerParent": 1
+          },
+          "regional_rollout": {
+            "total": 5,
+            "outcomes": {
+              "failed": 1,
+              "rolled_back": 1,
+              "succeeded": 3
+            },
+            "peakConcurrentPerParent": 3
+          }
+        },
+        "stages": {
+          "service/live": {
+            "entered": 1,
+            "open": 1,
+            "openDwell": {
+              "count": 1,
+              "sumMs": 4924800000,
+              "maxMs": 4924800000
+            }
+          }
+        }
+      }
+    }
+  }
+}

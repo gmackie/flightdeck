@@ -1,0 +1,213 @@
+{
+  "schema": "flightdeck.lifecycle-fixture/v1",
+  "name": "incident-long-dwell-open",
+  "description": "Two tickets still open at the as-of time: one has dwelled 45 days in investigating, the other 40 days and is currently paused for the last 30.",
+  "covers": ["incident_response", "long_dwell", "paused", "open_at_horizon"],
+  "asOf": "2026-05-31T09:00:00.000Z",
+  "records": [
+    {
+      "receivedAt": "2026-04-15T09:00:01.000Z",
+      "event": {
+        "eventId": "qk34og5i3oke325uz9tc",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "ticket",
+          "id": "fmvmik5df3i55gu7ck3x"
+        },
+        "version": 1,
+        "occurredAt": "2026-04-15T09:00:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-04-15T09:00:01.000Z",
+      "event": {
+        "eventId": "cwvh5z2565z7s4smonjp",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "fmvmik5df3i55gu7ck3x"
+        },
+        "version": 2,
+        "occurredAt": "2026-04-15T09:00:00.000Z",
+        "stage": {
+          "name": "triage",
+          "instanceId": "5iprlgaidngsjg0bra2v"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-04-16T09:00:01.000Z",
+      "event": {
+        "eventId": "ycmphrgpp2d1gqppchl0",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "ticket",
+          "id": "fmvmik5df3i55gu7ck3x"
+        },
+        "version": 3,
+        "occurredAt": "2026-04-16T09:00:00.000Z",
+        "stage": {
+          "name": "triage",
+          "instanceId": "5iprlgaidngsjg0bra2v"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-04-16T09:00:01.000Z",
+      "event": {
+        "eventId": "yol7jf2salvf3p595ufx",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "fmvmik5df3i55gu7ck3x"
+        },
+        "version": 4,
+        "occurredAt": "2026-04-16T09:00:00.000Z",
+        "stage": {
+          "name": "investigating",
+          "instanceId": "se44mx5fejpo81z1xi8l"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-04-20T09:00:01.000Z",
+      "event": {
+        "eventId": "3snbjaylecmbfg7fcsn5",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "ticket",
+          "id": "mxgiiz7qhpzb675fxiod"
+        },
+        "version": 1,
+        "occurredAt": "2026-04-20T09:00:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-04-20T09:00:01.000Z",
+      "event": {
+        "eventId": "f4tugl4wlk2z6533stp0",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "mxgiiz7qhpzb675fxiod"
+        },
+        "version": 2,
+        "occurredAt": "2026-04-20T09:00:00.000Z",
+        "stage": {
+          "name": "triage",
+          "instanceId": "hrl1gi91fa9pmnusc4se"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-04-21T09:00:01.000Z",
+      "event": {
+        "eventId": "9eaoiaffr9wbe2m460sb",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "ticket",
+          "id": "mxgiiz7qhpzb675fxiod"
+        },
+        "version": 3,
+        "occurredAt": "2026-04-21T09:00:00.000Z",
+        "stage": {
+          "name": "triage",
+          "instanceId": "hrl1gi91fa9pmnusc4se"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-04-21T09:00:01.000Z",
+      "event": {
+        "eventId": "6wm37os3z7pswo05clhb",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "mxgiiz7qhpzb675fxiod"
+        },
+        "version": 4,
+        "occurredAt": "2026-04-21T09:00:00.000Z",
+        "stage": {
+          "name": "investigating",
+          "instanceId": "w8guv0y30s5u69ntmtp1"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-05-01T09:00:01.000Z",
+      "event": {
+        "eventId": "6sp2ef4us8310pabkfq2",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.paused",
+        "entity": {
+          "kind": "ticket",
+          "id": "mxgiiz7qhpzb675fxiod"
+        },
+        "version": 5,
+        "occurredAt": "2026-05-01T09:00:00.000Z"
+      }
+    }
+  ],
+  "expected": {
+    "totals": {
+      "appliedEvents": 9
+    },
+    "entities": [
+      {
+        "id": "fmvmik5df3i55gu7ck3x",
+        "status": "open"
+      },
+      {
+        "id": "mxgiiz7qhpzb675fxiod",
+        "status": "paused",
+        "pausedMs": 0,
+        "pausedSince": 1777626000000
+      }
+    ],
+    "apps": {
+      "app_support": {
+        "entities": {
+          "ticket": {
+            "total": 2,
+            "status": {
+              "open": 1,
+              "paused": 1,
+              "closed": 0
+            },
+            "pausedMsTotal": 2592000000
+          }
+        },
+        "stages": {
+          "ticket/investigating": {
+            "entered": 2,
+            "open": 2,
+            "openDwell": {
+              "count": 2,
+              "sumMs": 7344000000,
+              "maxMs": 3888000000
+            }
+          }
+        }
+      }
+    }
+  }
+}

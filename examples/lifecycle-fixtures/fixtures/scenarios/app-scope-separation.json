@@ -1,0 +1,238 @@
+{
+  "schema": "flightdeck.lifecycle-fixture/v1",
+  "name": "app-scope-separation",
+  "description": "Two apps reuse the same eventIds and entity id. Dedupe and entity identity are per app, so nothing collides and each app's numbers stand alone.",
+  "covers": ["app_scope", "duplicate_event_id"],
+  "asOf": "2026-04-01T09:00:00.000Z",
+  "records": [
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "0cfo4vtwhppw4onyui9s",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "yyvi5trbhd3ha5jc4bpy"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:00:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "3j6vb0s39zdcx5jeiu0n",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "yyvi5trbhd3ha5jc4bpy"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:00:00.000Z",
+        "stage": {
+          "name": "pending_approval",
+          "instanceId": "dfivh2b2jwi7jsazrtzq"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "0cfo4vtwhppw4onyui9s",
+        "appId": "app_hiring2",
+        "process": "recruiting",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "yyvi5trbhd3ha5jc4bpy"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:00:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "3j6vb0s39zdcx5jeiu0n",
+        "appId": "app_hiring2",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "yyvi5trbhd3ha5jc4bpy"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:00:00.000Z",
+        "stage": {
+          "name": "pending_approval",
+          "instanceId": "dfivh2b2jwi7jsazrtzq"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-04T09:00:01.000Z",
+      "event": {
+        "eventId": "w7vqrfgc55lkeswtzhg8",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "yyvi5trbhd3ha5jc4bpy"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-04T09:00:00.000Z",
+        "stage": {
+          "name": "pending_approval",
+          "instanceId": "dfivh2b2jwi7jsazrtzq"
+        },
+        "outcome": "advanced"
+      }
+    },
+    {
+      "receivedAt": "2026-03-04T09:00:01.000Z",
+      "event": {
+        "eventId": "mg2r5glc4riifjj5wyhm",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "yyvi5trbhd3ha5jc4bpy"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-04T09:00:00.000Z",
+        "stage": {
+          "name": "approved",
+          "instanceId": "bvvjnm1gbw6sdhifjzd0"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-04T09:00:01.000Z",
+      "event": {
+        "eventId": "w7vqrfgc55lkeswtzhg8",
+        "appId": "app_hiring2",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "yyvi5trbhd3ha5jc4bpy"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-04T09:00:00.000Z",
+        "stage": {
+          "name": "pending_approval",
+          "instanceId": "dfivh2b2jwi7jsazrtzq"
+        },
+        "outcome": "terminated"
+      }
+    },
+    {
+      "receivedAt": "2026-03-04T09:00:01.000Z",
+      "event": {
+        "eventId": "mg2r5glc4riifjj5wyhm",
+        "appId": "app_hiring2",
+        "process": "recruiting",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "yyvi5trbhd3ha5jc4bpy"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-04T09:00:00.000Z",
+        "outcome": "rejected"
+      }
+    },
+    {
+      "receivedAt": "2026-03-05T09:00:01.000Z",
+      "event": {
+        "eventId": "884vngt8bdyhvllbjmmj",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "stage.exited",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "yyvi5trbhd3ha5jc4bpy"
+        },
+        "version": 5,
+        "occurredAt": "2026-03-05T09:00:00.000Z",
+        "stage": {
+          "name": "approved",
+          "instanceId": "bvvjnm1gbw6sdhifjzd0"
+        },
+        "outcome": "completed"
+      }
+    },
+    {
+      "receivedAt": "2026-03-05T09:00:01.000Z",
+      "event": {
+        "eventId": "apizy1tib34ami9jkmkd",
+        "appId": "app_talent",
+        "process": "recruiting",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "headcount_need",
+          "id": "yyvi5trbhd3ha5jc4bpy"
+        },
+        "version": 6,
+        "occurredAt": "2026-03-05T09:00:00.000Z",
+        "outcome": "filled"
+      }
+    }
+  ],
+  "expected": {
+    "totals": {
+      "duplicateDeliveries": 0,
+      "duplicateConflicts": 0,
+      "invalid": {
+        "count": 0
+      }
+    },
+    "entities": [
+      {
+        "appId": "app_talent",
+        "id": "yyvi5trbhd3ha5jc4bpy",
+        "status": "closed",
+        "outcome": "filled"
+      },
+      {
+        "appId": "app_hiring2",
+        "id": "yyvi5trbhd3ha5jc4bpy",
+        "status": "closed",
+        "outcome": "rejected"
+      }
+    ],
+    "apps": {
+      "app_talent": {
+        "entities": {
+          "headcount_need": {
+            "total": 1,
+            "outcomes": {
+              "filled": 1
+            }
+          }
+        }
+      },
+      "app_hiring2": {
+        "entities": {
+          "headcount_need": {
+            "total": 1,
+            "outcomes": {
+              "rejected": 1
+            }
+          }
+        }
+      }
+    },
+    "scope": {
+      "eventIdsSharedAcrossApps": 4,
+      "entityIdsSharedAcrossApps": 1,
+      "isolated": true
+    }
+  }
+}
