@@ -99,9 +99,13 @@ describe("/api/apps", () => {
     );
   });
 
-  it("still registers when the dogfood event fails", async () => {
+  it("still registers when the dogfood event fails, and warns", async () => {
     vi.spyOn(sinks, "events").mockRejectedValue(new Error("down"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect((await api("/api/apps", { json: { name: "resilient" } })).status).toBe(201);
+    await vi.waitFor(() =>
+      expect(warn).toHaveBeenCalledWith("app.registered dogfood event failed", "app_resilient"),
+    );
   });
 
   it("lists apps with the fixed { apps: [{ id, name, created_at }] } contract", async () => {

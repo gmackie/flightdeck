@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { open, unlink } from "node:fs/promises";
 import { main } from "./cli";
 
 process.exitCode = await main(process.argv.slice(2), {
@@ -14,7 +14,17 @@ process.exitCode = await main(process.argv.slice(2), {
     ),
   stdout: (text) => process.stdout.write(text),
   stderr: (text) => process.stderr.write(text),
-  writeSecretFile: (path, contents) => writeFile(path, contents, { mode: 0o600, flag: "wx" }),
+  openSecretFile: async (path) => {
+    const handle = await open(path, "wx", 0o600);
+    return {
+      write: (contents) => handle.writeFile(contents),
+      close: () => handle.close(),
+      discard: async () => {
+        await handle.close().catch(() => {});
+        await unlink(path).catch(() => {});
+      },
+    };
+  },
   randomBytes: (size) => randomBytes(size),
   now: Date.now,
 });

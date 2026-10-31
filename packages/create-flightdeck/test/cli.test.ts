@@ -15,11 +15,22 @@ const DAY = 24 * 60 * 60 * 1000;
 const reply = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-function setup(
-  opts: { env?: Record<string, string>; response?: Response; exec?: Deps["exec"] } = {},
-) {
+type Setup = {
+  env?: Record<string, string>;
+  response?: Response;
+  exec?: Deps["exec"];
+  open?: () => Promise<void>;
+  write?: () => Promise<void>;
+};
+
+function setup(opts: Setup = {}) {
   let out = "";
   let err = "";
+  const file = {
+    write: vi.fn(opts.write ?? (async () => {})),
+    close: vi.fn(async () => {}),
+    discard: vi.fn(async () => {}),
+  };
   const deps = {
     env: { FLIGHTDECK_URL: URL_, ...opts.env },
     fetch: vi.fn(async () => opts.response ?? reply(200, {})),
@@ -30,7 +41,10 @@ function setup(
     stderr: (t: string) => {
       err += t;
     },
-    writeSecretFile: vi.fn(async () => {}),
+    openSecretFile: vi.fn(async () => {
+      await opts.open?.();
+      return file;
+    }),
     randomBytes: vi.fn(() => BYTES),
     now: () => NOW,
   } satisfies Deps;
@@ -39,7 +53,7 @@ function setup(
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
     return { url, init, headers: init.headers as Record<string, string>, body };
   };
-  return { deps, call, out: () => out, err: () => err };
+  return { deps, file, call, out: () => out, err: () => err };
 }
 
 const SERVICE_TOKEN = {
@@ -189,7 +203,10 @@ describe("apps key", () => {
       0,
     );
     expect(t.call().body.expires_at).toBe(NOW + 30 * DAY);
-    expect(t.deps.writeSecretFile).toHaveBeenCalledWith("key.txt", `${KEY}\n`);
+    expect(t.deps.openSecretFile).toHaveBeenCalledWith("key.txt");
+    expect(t.file.write).toHaveBeenCalledWith(`${KEY}\n`);
+    expect(t.file.close).toHaveBeenCalled();
+    expect(t.file.discard).not.toHaveBeenCalled();
     expect(t.out()).toBe("");
     expect(t.err()).not.toContain(KEY);
     expect(t.err()).toContain("key.txt");
@@ -199,7 +216,40 @@ describe("apps key", () => {
     const t = setup({ response: reply(404, { error: "Unknown app" }) });
     expect(await main(["apps", "key", "app_missing"], t.deps)).toBe(1);
     expect(t.out() + t.err()).not.toContain(KEY);
-    expect(t.deps.writeSecretFile).not.toHaveBeenCalled();
+  });
+
+  it("opens --out before registering, so an unusable path never creates a key", async () => {
+    const t = setup({
+      response: reply(201, {}),
+      open: async () => {
+        throw Object.assign(new Error("EEXIST: file already exists"), { code: "EEXIST" });
+      },
+    });
+    expect(await main(["apps", "key", "app_bob", "--out", "key.txt"], t.deps)).toBe(1);
+    expect(t.deps.fetch).not.toHaveBeenCalled();
+    expect(t.err()).toContain("key.txt");
+    expect(t.err()).not.toContain(KEY);
+  });
+
+  it("removes the --out file when the server rejects the key", async () => {
+    const t = setup({ response: reply(404, { error: "Unknown app" }) });
+    expect(await main(["apps", "key", "app_missing", "--out", "key.txt"], t.deps)).toBe(1);
+    expect(t.file.write).not.toHaveBeenCalled();
+    expect(t.file.discard).toHaveBeenCalled();
+  });
+
+  it("tells you how to revoke a registered key it could not write", async () => {
+    const t = setup({
+      response: reply(201, {}),
+      write: async () => {
+        throw new Error("ENOSPC: no space left on device");
+      },
+    });
+    expect(await main(["apps", "key", "app_bob", "--out", "key.txt"], t.deps)).toBe(1);
+    expect(t.err()).toContain(`create-flightdeck apps revoke-key app_bob ${DIGEST}`);
+    expect(t.err()).toContain("ENOSPC");
+    expect(t.out() + t.err()).not.toContain(KEY);
+    expect(t.file.discard).toHaveBeenCalled();
   });
 
   it("validates --days", async () => {

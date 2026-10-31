@@ -32,6 +32,8 @@ async function verifyAccessToken(token: string, opts: AccessOpts): Promise<JWTPa
     const { payload } = await jwtVerify(token, opts.keys ?? teamKeys(teamDomain), {
       issuer: teamDomain,
       algorithms: ["RS256"],
+      // Access always sets both; a token without them would never expire.
+      requiredClaims: ["exp", "iat"],
       ...(opts.audience ? { audience: opts.audience } : {}),
     });
     return payload;

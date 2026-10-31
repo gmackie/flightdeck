@@ -103,15 +103,18 @@ npx create-flightdeck apps revoke-key app_bob <sha256-hex>
 
 `apps key` generates 32 random bytes locally and encodes them as base64url. It
 sends only the key's SHA-256 digest and expiry, then prints the raw key once to
-stdout. With `--out`, it writes the key to a new file with mode 0600 instead and
-refuses to overwrite an existing file. If the API rejects the digest, the key is
-never shown. Store the key as a secret immediately, e.g.
+stdout. With `--out`, it creates the file exclusively with mode 0600 before
+registering anything, so an existing or unwritable path fails without creating a
+key. If the API rejects the digest, the file is removed and the key is never
+shown. If the key is registered but the write fails, the CLI prints its digest
+and the exact `revoke-key` command, and exits non-zero. Store the key as a secret immediately, e.g.
 `create-flightdeck apps key app_bob | wrangler secret put BOB_FLIGHTDECK_TOKEN`.
 
 ## API
 
 Every route requires the Access JWT in `Cf-Access-Jwt-Assertion`, which Access
-adds at the edge. Responses are JSON with `Cache-Control: no-store`, and errors
+adds at the edge. It must be RS256, from the team's issuer, for `ACCESS_AUD`,
+and carry `exp` and `iat`. Responses are JSON with `Cache-Control: no-store`, and errors
 are `{ "error": "..." }`. Request bodies must be `application/json` (415
 otherwise), which keeps cross-site form posts from riding the Access cookie.
 

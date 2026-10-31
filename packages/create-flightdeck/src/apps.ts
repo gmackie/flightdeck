@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Request } from "./client";
-import { CliError, type Deps } from "./deps";
+import { CliError, type Deps, type SecretFile } from "./deps";
 
 type App = { id: string; name: string; created_at: number };
 type Binding = { binding: string; service: string; entrypoint: string; props: { appId: string } };
@@ -59,16 +59,42 @@ export async function addKey(
   if (!Number.isInteger(opts.days) || opts.days < 1 || opts.days > MAX_KEY_DAYS) {
     throw new CliError(`--days must be a whole number from 1 to ${MAX_KEY_DAYS}.`);
   }
+  // Claim the output file first: a key the server accepted but nobody holds is a live credential.
+  let file: SecretFile | undefined;
+  if (opts.out) {
+    try {
+      file = await deps.openSecretFile(opts.out);
+    } catch (error) {
+      throw new CliError(`Cannot create ${opts.out}: ${message(error)}. No key was created.`);
+    }
+  }
   const key = Buffer.from(deps.randomBytes(32)).toString("base64url");
   const token_hash = createHash("sha256").update(key).digest("hex");
   const expires_at = deps.now() + opts.days * DAY;
-  await request("POST", `/api/apps/${encodeURIComponent(opts.appId)}/server-keys`, {
-    token_hash,
-    expires_at,
-  });
+  const revoke = `create-flightdeck apps revoke-key ${opts.appId} ${token_hash}`;
+  try {
+    await request("POST", `/api/apps/${encodeURIComponent(opts.appId)}/server-keys`, {
+      token_hash,
+      expires_at,
+    });
+  } catch (error) {
+    await file?.discard();
+    throw error;
+  }
   const expires = new Date(expires_at).toISOString();
-  if (opts.out) {
-    await deps.writeSecretFile(opts.out, `${key}\n`);
+  if (file) {
+    try {
+      await file.write(`${key}\n`);
+      await file.close();
+    } catch (error) {
+      await file.discard();
+      throw new CliError(
+        [
+          `Registered a key for ${opts.appId} (digest ${token_hash}) but could not write ${opts.out}: ${message(error)}`,
+          `Nobody holds this key. Revoke it with: ${revoke}`,
+        ].join("\n"),
+      );
+    }
   }
   if (opts.json) {
     const out = opts.out ? { file: opts.out } : { key };
@@ -81,7 +107,7 @@ export async function addKey(
   const notes = [
     `Key for ${opts.appId}, digest ${token_hash}, expires ${expires}.`,
     "Store it as a secret now (e.g. wrangler secret put); it is not shown again and cannot be recovered.",
-    `Revoke it with: create-flightdeck apps revoke-key ${opts.appId} ${token_hash}`,
+    `Revoke it with: ${revoke}`,
   ];
   if (opts.out) notes.unshift(`Wrote the server ingest key to ${opts.out} (mode 0600).`);
   deps.stderr(`${notes.join("\n")}\n`);
@@ -96,3 +122,5 @@ export async function revokeKey(
   await request("DELETE", `/api/apps/${encodeURIComponent(opts.appId)}/server-keys/${opts.hash}`);
   deps.stderr(`Revoked ${opts.hash} for ${opts.appId}.\n`);
 }
+
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));

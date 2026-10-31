@@ -6,10 +6,17 @@ export type Deps = {
   exec: (command: string, args: string[]) => Promise<string>;
   stdout: (text: string) => void;
   stderr: (text: string) => void;
-  /** Creates `path` with mode 0600 and fails if it already exists. */
-  writeSecretFile: (path: string, contents: string) => Promise<void>;
+  /** Creates `path` exclusively with mode 0600; rejects if it already exists. */
+  openSecretFile: (path: string) => Promise<SecretFile>;
   randomBytes: (size: number) => Uint8Array;
   now: () => number;
+};
+
+/** An exclusively created secret file; `discard` closes and removes it. */
+export type SecretFile = {
+  write: (contents: string) => Promise<void>;
+  close: () => Promise<void>;
+  discard: () => Promise<void>;
 };
 
 /** An expected failure: printed as-is, without a stack trace. */

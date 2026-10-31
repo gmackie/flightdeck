@@ -75,14 +75,15 @@ async function registerApp(request: Request, env: Env, ctx: ExecutionContext): P
   const created = insert.meta.changes > 0;
   if (created) {
     forgetApp(app.id);
-    // Best effort dogfooding: never fail or delay registration on analytics.
+    // Best effort dogfooding: never fail or delay registration on analytics. Log only the
+    // app id; the error could carry sink internals.
     ctx.waitUntil(
       ctx.exports
         .Ingest({ props: { appId: SELF_APP_ID } })
         .track({ name: "app.registered", props: { app_id: app.id } })
         .then(
           () => undefined,
-          () => undefined,
+          () => console.warn("app.registered dogfood event failed", app.id),
         ),
     );
   }
