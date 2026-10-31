@@ -105,7 +105,7 @@ export function parseInput<S extends v.GenericSchema>(schema: S, input: unknown)
   throw new SnapshotRejected("invalid", `${path}: ${why}`);
 }
 
-export type RejectReason = "invalid" | "cycle" | "generation";
+export type RejectReason = "invalid" | "cycle" | "generation" | "unauthorized";
 
 /** A write the read model refuses; `reason` is safe to log, `detail` carries no input values. */
 export class SnapshotRejected extends Error {

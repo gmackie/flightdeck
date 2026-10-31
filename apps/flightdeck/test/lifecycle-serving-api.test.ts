@@ -180,6 +180,13 @@ describe("envelope and freshness", () => {
       },
       sample_count: 1,
       suppressed: false,
+      suppression: {
+        policy: "not_applicable",
+        min_cohort: null,
+        unit: null,
+        withheld: false,
+        sample_count_of: "returned_rows",
+      },
       page: { limit: 25, next_cursor: null },
     });
     expect(body.data).toEqual([
@@ -294,6 +301,7 @@ describe("case detail", () => {
     const { status, body } = await get(`/api/apps/${APP}/lifecycle/cases/d_open`);
     expect(status).toBe(200);
     expect(body.sample_count).toBe(1);
+    expect(body.suppression).toMatchObject({ policy: "not_applicable", sample_count_of: "case" });
     expect(body.data).toMatchObject({
       case_id: "d_open",
       status: "open",
@@ -348,7 +356,20 @@ describe("aggregates", () => {
       `/api/apps/${APP}/lifecycle/summaries/stages?process_key=deploy&version=1&${WINDOW}`,
     );
     expect(status).toBe(200);
-    expect(body.cohort).toMatchObject({ process_key: "deploy", version: 1, min_cohort: 5 });
+    expect(body.cohort).toEqual({
+      process_key: "deploy",
+      version: 1,
+      status: null,
+      started_after: new Date(T0).toISOString(),
+      started_before: new Date(T0 + DAY).toISOString(),
+    });
+    expect(body.suppression).toEqual({
+      policy: "min_cohort",
+      min_cohort: 5,
+      unit: "distinct_cases",
+      withheld: true,
+      sample_count_of: "released_groups",
+    });
     const build = body.data.find((g: Json) => g.stage_key === "build" && g.state === "active");
     expect(build).toEqual({
       stage_key: "build",
@@ -387,7 +408,7 @@ describe("aggregates", () => {
       { authorize: allowAll(), minCohort: 1 },
     );
     // The floor is two, so a single failure or open case is still withheld.
-    expect(lowered.body.cohort.min_cohort).toBe(2);
+    expect(lowered.body.suppression).toMatchObject({ min_cohort: 2, withheld: true });
     expect(lowered.body.data).toHaveLength(1);
   });
 
@@ -432,6 +453,11 @@ describe("aggregates", () => {
     const path = `/api/apps/${app}/lifecycle/summaries/outcomes?process_key=deploy&version=1&${WINDOW}`;
     expect((await get(path)).body.sample_count).toBe(5);
     await r.tombstoneCase(app, "c0", prov(1, 200));
+    // A replay of the deleted case's snapshot does not bring it back into any answer.
+    expect(await r.upsertCase(app, snap("c0", { started_at: T0 }), prov(1, 900))).toBe(
+      "tombstoned",
+    );
+    expect((await get(`/api/apps/${app}/lifecycle/cases/c0`)).status).toBe(404);
     const after = await get(path);
     expect(after.body).toMatchObject({ data: [], sample_count: 0, suppressed: true });
     const list = await get(`/api/apps/${app}/lifecycle/cases`);
