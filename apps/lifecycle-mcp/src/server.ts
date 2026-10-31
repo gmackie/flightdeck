@@ -4,11 +4,13 @@ import {
   ProtocolErrorCode,
   ResourceNotFoundError,
   ResourceTemplate,
+  type StandardSchemaWithJSON,
   type ToolAnnotations,
 } from "@modelcontextprotocol/server";
 import { LIMITS } from "./bounds";
 import { METRICS, WORKFLOW_DEFINITION_SPEC } from "./glossary";
 import { projectDefinition } from "./privacy";
+import { PROMPT_ARGS, PROMPT_META, PROMPT_TEXT, type PromptName } from "./prompts";
 import { inputs, outputs, type ToolName } from "./schemas";
 import { SourceUnavailableError } from "./source";
 import { definitionUri, runTool, SERVER_VERSION, type ToolContext } from "./tools";
@@ -24,7 +26,7 @@ export const READ_ONLY: ToolAnnotations = {
 const INSTRUCTIONS = `Read-only lifecycle and workflow intelligence for Flightdeck apps you hold a grant for.
 Results are observed process patterns over bounded cohorts, not causal conclusions: say "observed" and do not claim a stage or version caused an outcome.
 Groups smaller than the minimum cohort are withheld; do not try to infer them. Check provenance.freshness and provenance.synthetic before relying on numbers.
-There are no write, export, SQL or raw-event tools.`;
+There are no write, export, SQL or raw-event tools. For a question, start with build_evidence_pack or one of the prompts; you interpret the evidence, the server does not.`;
 
 const DESCRIPTIONS: Record<ToolName, { title: string; description: string }> = {
   list_workflow_definitions: {
@@ -70,6 +72,21 @@ const DESCRIPTIONS: Record<ToolName, { title: string; description: string }> = {
     title: "Get data freshness",
     description: "Watermark, lag and status of the lifecycle read model for an app, per workflow.",
   },
+  get_data_quality: {
+    title: "Get data quality",
+    description:
+      "Censoring (open cases), re-entries, skipped stages, undeclared stages and missing dimensions of a cohort.",
+  },
+  compare_case_mix: {
+    title: "Compare case mix",
+    description:
+      "Shares of each declared dimension value in a baseline and a candidate cohort, flagging imbalance (a confounder check).",
+  },
+  build_evidence_pack: {
+    title: "Build analysis evidence pack",
+    description:
+      "One bounded pack of provenance-stamped evidence (freshness, data quality, dwell, funnel, variants, case mix), metric definitions, confounders, censoring notes and unsupported claims for a question. The server does not interpret it.",
+  },
 };
 
 /** A fresh server per request (stateless), bound to one verified principal. */
@@ -77,8 +94,12 @@ export function createLifecycleServer(ctx: ToolContext): McpServer {
   const server = new McpServer(
     { name: "flightdeck-lifecycle", version: SERVER_VERSION },
     {
-      // Static surface: no list-changed notifications, no subscriptions, no prompts, no tasks.
-      capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
+      // Static surface: no list-changed notifications, no subscriptions, no tasks.
+      capabilities: {
+        tools: { listChanged: false },
+        resources: { listChanged: false },
+        prompts: { listChanged: false },
+      },
       instructions: INSTRUCTIONS,
       maxToolInputElements: LIMITS.maxToolInputElements,
     },
@@ -95,6 +116,23 @@ export function createLifecycleServer(ctx: ToolContext): McpServer {
       },
       // biome-ignore lint/suspicious/noExplicitAny: each schema/handler pair is typed in tools.ts.
       (args: any) => runTool(name, ctx, args),
+    );
+  }
+
+  for (const name of Object.keys(PROMPT_META) as PromptName[]) {
+    server.registerPrompt(
+      name,
+      { ...PROMPT_META[name], argsSchema: PROMPT_ARGS[name] as StandardSchemaWithJSON },
+      // biome-ignore lint/suspicious/noExplicitAny: each args schema/text pair is typed in prompts.ts.
+      (args: any) => ({
+        description: PROMPT_META[name].description,
+        messages: [
+          {
+            role: "user",
+            content: { type: "text", text: (PROMPT_TEXT[name] as (a: unknown) => string)(args) },
+          },
+        ],
+      }),
     );
   }
 

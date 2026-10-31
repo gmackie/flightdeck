@@ -16,13 +16,16 @@ const TOOLS = [
   "list_bottlenecks",
   "describe_metric",
   "get_data_freshness",
+  "get_data_quality",
+  "compare_case_mix",
+  "build_evidence_pack",
 ];
 
 /** Every method a source exposes; only these may ever be called. */
 const READ_METHODS = Object.keys(PLANNED_ROUTES);
 
 describe("tool surface", () => {
-  it("exposes exactly the nine read-only tools with strict schemas", async () => {
+  it("exposes exactly the twelve read-only tools with strict schemas", async () => {
     const client = await connect();
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual(TOOLS);
@@ -47,11 +50,12 @@ describe("tool surface", () => {
     ]);
   });
 
-  it("advertises only tools and resources: no prompts, tasks, logging or subscriptions", async () => {
+  it("advertises only tools, resources and prompts: no tasks, logging or subscriptions", async () => {
     const client = await connect();
     expect(client.getServerCapabilities()).toEqual({
       tools: { listChanged: false },
       resources: { listChanged: false },
+      prompts: { listChanged: false },
     });
   });
 });
@@ -70,9 +74,8 @@ describe("unsupported operations", () => {
     expect(sql.isError).toBe(true);
   });
 
-  it("refuses prompts, completions, tasks, logging and subscriptions on the server side", async () => {
+  it("refuses completions, tasks, logging and subscriptions on the server side", async () => {
     for (const [method, params] of [
-      ["prompts/list", {}],
       [
         "completion/complete",
         { ref: { type: "ref/prompt", name: "x" }, argument: { name: "a", value: "" } },
@@ -159,6 +162,9 @@ describe("no writes", () => {
       ["list_bottlenecks", rollout],
       ["describe_metric", { metric: "cycle_time" }],
       ["get_data_freshness", { app_id: RELEASE }],
+      ["get_data_quality", rollout],
+      ["compare_case_mix", { ...rollout, baseline: { version: 1 }, candidate: { version: 2 } }],
+      ["build_evidence_pack", { ...rollout, question: "health" }],
     ] as const) {
       const res = await call(client, name, args);
       expect(res.isError, `${name}: ${res.text}`).toBe(false);

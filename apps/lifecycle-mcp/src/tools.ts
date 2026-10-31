@@ -2,7 +2,7 @@ import type { CallToolResult } from "@modelcontextprotocol/server";
 import type { z } from "zod";
 import type { Authorizer } from "./authorize";
 import { BoundsError, decodeCursor, encodeCursor, LIMITS, resolveWindow } from "./bounds";
-import { CASE_CAVEATS, METRICS, OBSERVATIONAL_CAVEATS } from "./glossary";
+import { CASE_CAVEATS, METRICS, type MetricId, OBSERVATIONAL_CAVEATS } from "./glossary";
 import {
   type PublicDefinition,
   projectCase,
@@ -13,7 +13,7 @@ import {
   suppressFunnel,
   suppressVariants,
 } from "./privacy";
-import type { inputs, outputs, ToolName } from "./schemas";
+import { type inputs, outputs, type ToolName } from "./schemas";
 import {
   type AppScope,
   type Capability,
@@ -571,6 +571,190 @@ const handlers: { [K in ToolName]: Handler<K> } = {
       interpretation: interpretation(ctx, "freshness", METRICS.data_freshness.caveats),
     };
   },
+  async get_data_quality(ctx, args) {
+    const scope = await scopeFor(ctx, args.app_id, "process:read");
+    const def = await definitionFor(ctx, scope, args.workflow_key, args.version ?? null);
+    const q = cohortQuery(ctx, [def], { ...args, group_by: undefined });
+    const res = await call(() =>
+      ctx.source.getDataQuality(scope, {
+        workflowKey: def.workflow_key,
+        version: def.version,
+        ...q,
+      }),
+    );
+    const k = ctx.minCohort;
+    const release = (n: unknown) => {
+      const value = typeof n === "number" && Number.isInteger(n) && n > 0 ? n : 0;
+      return value === 0 || value >= k ? value : null;
+    };
+    const cohortN = release(res.data.cohort_n);
+    const check = (name: string, n: unknown, warnAbove: number, note: string) => {
+      const released = cohortN === null ? null : release(n);
+      const share = released !== null && cohortN ? round4(released / cohortN) : null;
+      return {
+        check: name,
+        n: released,
+        share,
+        severity: share !== null && share > warnAbove ? ("warning" as const) : ("info" as const),
+        note,
+      };
+    };
+    const freshness = res.meta.freshness.status;
+    const checks = [
+      check(
+        "open_cases_censored",
+        res.data.open_n,
+        0.2,
+        "Cases still open at the watermark. Dwell, cycle time and outcomes exclude or understate them.",
+      ),
+      check(
+        "stage_reentries",
+        res.data.reentry_n,
+        0.3,
+        "Cases that re-entered a stage (rework or loops). Each attempt counts as its own interval.",
+      ),
+      check(
+        "skipped_stages",
+        res.data.skipped_n,
+        0.1,
+        "Cases that skipped a stage; reach is not monotone.",
+      ),
+      check(
+        "undeclared_stages",
+        res.data.undeclared_stage_n,
+        0,
+        "Cases with intervals in stages the definition does not declare; those intervals are dropped.",
+      ),
+      ...def.dimensions.map((dim) =>
+        check(
+          `missing_dimension:${dim.key}`,
+          res.data.missing_dimension_n?.[dim.key] ?? 0,
+          0.05,
+          `Cases without a declared ${dim.key} value; breakdowns by ${dim.key} omit them.`,
+        ),
+      ),
+      {
+        check: "data_freshness",
+        n: null,
+        share: null,
+        severity: freshness === "fresh" ? ("info" as const) : ("warning" as const),
+        note: `The read model is ${freshness}; see provenance.freshness.`,
+      },
+    ];
+    return {
+      app_id: args.app_id,
+      data: {
+        workflow_key: def.workflow_key,
+        version: def.version,
+        window: { from: iso(q.from), to: iso(q.to) },
+        cohort_n: cohortN,
+        checks,
+      },
+      privacy: {
+        min_cohort: k,
+        any_suppressed:
+          cohortN === null || checks.some((c) => c.n === null && c.check !== "data_freshness"),
+      },
+      provenance: provenance(
+        ctx,
+        res.meta,
+        "get_data_quality",
+        describeQuery(def.workflow_key, def.version, q),
+      ),
+      interpretation: interpretation(ctx, "observed_process_pattern", [
+        "Data-quality checks describe the recorded data, not the process itself.",
+      ]),
+    };
+  },
+
+  async compare_case_mix(ctx, args) {
+    const scope = await scopeFor(ctx, args.app_id, "process:read");
+    const cohorts: {
+      role: "baseline" | "candidate";
+      def: PublicDefinition;
+      q: ReturnType<typeof cohortQuery>;
+    }[] = [];
+    for (const role of ["baseline", "candidate"] as const) {
+      const spec = args[role];
+      const def = await definitionFor(ctx, scope, args.workflow_key, spec.version ?? null);
+      cohorts.push({ role, def, q: cohortQuery(ctx, [def], spec) });
+    }
+    const declared = (key: string) =>
+      cohorts.every((c) => c.def.dimensions.some((dim) => dim.key === key));
+    const dims =
+      args.dimensions ??
+      cohorts[0]?.def.dimensions
+        .map((dim) => dim.key)
+        .filter(declared)
+        .slice(0, 5) ??
+      [];
+    if (!dims.every(declared) || new Set(dims).size !== dims.length) {
+      throw new ToolError(
+        "invalid_argument",
+        "dimensions must be distinct dimensions both cohorts declare",
+      );
+    }
+    let meta: SourceMeta | null = null;
+    const mixes: Awaited<ReturnType<typeof caseMix>>[] = [];
+    for (const c of cohorts) {
+      const mix = await caseMix(ctx, scope, c.def, c.q, dims);
+      meta ??= mix.meta;
+      mixes.push(mix);
+    }
+    const [base, cand] = mixes;
+    const dimensions = dims.map((key) => {
+      const values = cohorts[0]?.def.dimensions.find((dim) => dim.key === key)?.values ?? [];
+      const rows = values.map((value) => {
+        const b = base?.shares.get(key)?.get(value) ?? null;
+        const c = cand?.shares.get(key)?.get(value) ?? null;
+        return {
+          value,
+          baseline_share: b,
+          candidate_share: c,
+          delta: b !== null && c !== null ? round4(c - b) : null,
+        };
+      });
+      const deltas = rows.flatMap((row) => (row.delta === null ? [] : [Math.abs(row.delta)]));
+      const max = deltas.length ? Math.max(...deltas) : null;
+      return {
+        dimension: key,
+        values: rows,
+        max_abs_delta: max,
+        balanced: max === null ? null : max < CASE_MIX_TOLERANCE,
+      };
+    });
+    const refs = cohorts.map((c, i) => ({
+      role: c.role,
+      version: c.def.version,
+      window: { from: iso(c.q.from), to: iso(c.q.to) },
+      n: mixes[i]?.n ?? null,
+    }));
+    return {
+      app_id: args.app_id,
+      data: { workflow_key: args.workflow_key, cohorts: refs, dimensions },
+      privacy: {
+        min_cohort: ctx.minCohort,
+        any_suppressed:
+          refs.some((r) => r.n === null) ||
+          dimensions.some((d) =>
+            d.values.some((v) => v.baseline_share === null || v.candidate_share === null),
+          ),
+      },
+      provenance: provenance(ctx, meta, "compare_case_mix", {
+        workflow_key: args.workflow_key,
+        cohorts: refs.map((r) => ({ role: r.role, version: r.version, ...r.window })),
+        dimensions: dims,
+      }),
+      interpretation: interpretation(ctx, "observed_process_pattern", [
+        `Dimensions whose shares differ by ${CASE_MIX_TOLERANCE} or more are flagged as not balanced; stratify or filter before comparing outcomes.`,
+        "Balanced declared dimensions do not rule out undeclared confounders.",
+      ]),
+    };
+  },
+
+  async build_evidence_pack(ctx, args) {
+    return evidencePack(ctx, args);
+  },
 };
 
 type Bottleneck = Out<"list_bottlenecks">["data"]["bottlenecks"][number];
@@ -610,6 +794,380 @@ function rankBottlenecks(rows: ReleasedDwell[], def: PublicDefinition): Bottlene
     })
     .sort((a, b) => b.score - a.score || a.stage_key.localeCompare(b.stage_key))
     .map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
+const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
+
+/** Share differences at or above this flag a dimension as not balanced between cohorts. */
+const CASE_MIX_TOLERANCE = 0.1;
+
+/** Released shares of each declared value, from per-group cohort sizes (suppression applied). */
+async function caseMix(
+  ctx: ToolContext,
+  scope: AppScope,
+  def: PublicDefinition,
+  q: { from: number; to: number },
+  dims: string[],
+) {
+  const first = [...def.stages].sort((a, b) => a.order - b.order)[0]?.key;
+  if (!first) throw new ToolError("not_found", "The workflow declares no stages");
+  const query = { workflowKey: def.workflow_key, version: def.version, from: q.from, to: q.to };
+  const total = await call(() =>
+    ctx.source.getFunnel(scope, { ...query, groupBy: null, filters: {}, stages: [first] }),
+  );
+  const [overall] = suppressFunnel(total.data, [first], null, null, ctx.minCohort);
+  const n = overall && !overall.suppressed ? overall.cohort_n : null;
+  const shares = new Map<string, Map<string, number | null>>();
+  for (const dim of dims) {
+    const allowed = new Set(def.dimensions.find((d) => d.key === dim)?.values ?? []);
+    const res = await call(() =>
+      ctx.source.getFunnel(scope, { ...query, groupBy: dim, filters: {}, stages: [first] }),
+    );
+    const groups = suppressFunnel(res.data, [first], dim, allowed, ctx.minCohort);
+    const byValue = new Map<string, number | null>();
+    for (const value of allowed) {
+      const group = groups.find((g) => g.group === value);
+      // A value with no cases has share 0; a withheld group's share stays unknown.
+      byValue.set(
+        value,
+        n === null || !n ? null : !group ? 0 : group.suppressed ? null : round4(group.cohort_n / n),
+      );
+    }
+    shares.set(dim, byValue);
+  }
+  return { n, shares, meta: total.meta };
+}
+
+type PackArgs = Args<"build_evidence_pack">;
+type Pack = Out<"build_evidence_pack">["data"];
+type Evidence = Pack["evidence"][number];
+
+const PACK_METRICS: Record<PackArgs["question"], MetricId[]> = {
+  bottleneck: [
+    "bottleneck_signal",
+    "stage_dwell",
+    "open_in_stage",
+    "funnel_reach_rate",
+    "data_freshness",
+    "small_cohort_suppression",
+  ],
+  health: [
+    "stage_dwell",
+    "open_in_stage",
+    "funnel_reach_rate",
+    "step_conversion",
+    "bottleneck_signal",
+    "data_freshness",
+    "small_cohort_suppression",
+  ],
+  dwell_change: ["stage_dwell", "open_in_stage", "data_freshness", "small_cohort_suppression"],
+  intervention: [
+    "stage_dwell",
+    "funnel_reach_rate",
+    "step_conversion",
+    "data_freshness",
+    "small_cohort_suppression",
+  ],
+  variants: [
+    "variant_share",
+    "cycle_time",
+    "completion_rate",
+    "data_freshness",
+    "small_cohort_suppression",
+  ],
+};
+
+const UNSUPPORTED: Record<PackArgs["question"], string[]> = {
+  bottleneck: [
+    "That the top-ranked stage causes the overall delay, or that shortening it would shorten the process by the same amount.",
+    "Who or which team is responsible: the data has no actors and must not be used to assess individuals.",
+  ],
+  health: [
+    "That the process is healthy or unhealthy in absolute terms: no target or benchmark is part of the data.",
+    "Who or which team is responsible: the data has no actors and must not be used to assess individuals.",
+  ],
+  dwell_change: [
+    "That any single change caused the dwell difference between the cohorts.",
+    "That the difference will persist: the cohorts are observational samples of two periods.",
+  ],
+  intervention: [
+    "That the intervention caused the before/after difference: there is no randomization or control group.",
+    "That the effect size is the intervention's effect, rather than case mix, seasonality or concurrent changes.",
+  ],
+  variants: [
+    "That a path variant or version causes faster or slower cycle times: cases choose or are routed to paths for reasons not in the data.",
+    "That cases on a rare path (pooled as other) behave like any listed variant.",
+  ],
+};
+
+const STATIC_CONFOUNDERS = [
+  "Seasonality and workload: cohorts from different periods can differ in volume and urgency.",
+  "Concurrent changes: tooling, staffing or policy changes in the same windows are not in the data.",
+  "Data completeness: late or corrected events after the watermark can still change these numbers.",
+];
+
+const ANALYSIS_INSTRUCTIONS = `Interpret this pack yourself; the server performs no analysis beyond the aggregates shown.
+Cite evidence by id with its sample_n, as_of and watermark. Report withheld (suppressed) values as withheld and never estimate them.
+Before comparing cohorts, check case mix and data quality; name every confounder and censoring issue that could explain a difference.
+Describe findings as observed associations. For each claim in unsupported_claims, say explicitly that the evidence does not support it.
+End with the additional measurements that would strengthen or refute the observation.`;
+
+/** Composes existing tools into one bounded, provenance-stamped evidence pack. */
+async function evidencePack(ctx: ToolContext, args: PackArgs): Promise<Out<"build_evidence_pack">> {
+  const { app_id, workflow_key, question } = args;
+  const paired =
+    question === "dwell_change" || question === "intervention" || question === "variants";
+  if (paired && !args.candidate) {
+    throw new ToolError(
+      "invalid_argument",
+      "This question compares two cohorts: give baseline and candidate",
+    );
+  }
+  if (!paired && args.candidate) {
+    throw new ToolError("invalid_argument", "This question uses one cohort: give only baseline");
+  }
+  // Fail fast with one uniform denial before composing anything.
+  await scopeFor(ctx, app_id, "process:read");
+  const base = { app_id, workflow_key, ...(args.baseline ?? {}) };
+  const cand = args.candidate ? { app_id, workflow_key, ...args.candidate } : null;
+
+  const evidence: Evidence[] = [];
+  // Each composed result is re-validated against the tool's own strict output schema.
+  const add = async <K extends ToolName>(
+    role: Evidence["role"],
+    tool: K,
+    kind: Evidence["kind"],
+    args: Args<K>,
+  ) => {
+    const out = outputs[tool].parse(await (handlers[tool] as Handler<K>)(ctx, args)) as Envelope & {
+      data: Record<string, unknown>;
+      privacy?: { any_suppressed: boolean };
+    };
+    const id = `e${evidence.length + 1}`;
+    evidence.push({
+      id,
+      role,
+      tool,
+      kind,
+      sample_n: sampleSize(tool, out.data),
+      any_suppressed: out.privacy?.any_suppressed ?? false,
+      as_of: out.provenance.as_of,
+      watermark: out.provenance.freshness.watermark,
+      data: out.data,
+    });
+    return { id, data: out.data };
+  };
+
+  await add("context", "get_data_freshness", "freshness", { app_id });
+  const dqBase = await add("baseline", "get_data_quality", "data_quality", base);
+  const dqCand = cand ? await add("candidate", "get_data_quality", "data_quality", cand) : null;
+  const derived: Pack["derived"] = [];
+
+  if (question === "bottleneck" || question === "health") {
+    await add("baseline", "list_bottlenecks", "observed_process_pattern", base);
+    await add("baseline", "get_stage_dwell", "observed_process_pattern", base);
+    await add("baseline", "get_funnel", "observed_process_pattern", base);
+  } else if (cand && (question === "dwell_change" || question === "intervention")) {
+    const b = await add("baseline", "get_stage_dwell", "observed_process_pattern", base);
+    const c = await add("candidate", "get_stage_dwell", "observed_process_pattern", cand);
+    derived.push(...dwellDeltas(b, c));
+    if (question === "intervention") {
+      const fb = await add("baseline", "get_funnel", "observed_process_pattern", base);
+      const fc = await add("candidate", "get_funnel", "observed_process_pattern", cand);
+      derived.push(...reachDeltas(fb, fc, derived.length));
+    }
+  } else if (cand) {
+    await add("comparison", "compare_workflow_variants", "observed_process_pattern", {
+      app_id,
+      workflow_key,
+      baseline_version: base.version,
+      candidate_version: cand.version,
+      from: base.from,
+      to: base.to,
+    });
+  }
+
+  let mix: { data: Record<string, unknown> } | null = null;
+  if (cand) {
+    mix = await add("comparison", "compare_case_mix", "case_mix", {
+      app_id,
+      workflow_key,
+      baseline: args.baseline ?? {},
+      candidate: args.candidate ?? {},
+    });
+  }
+
+  const cohorts: Pack["scope"]["cohorts"] = [dqBase, dqCand].flatMap((dq, i) =>
+    dq
+      ? [
+          {
+            role: i === 0 ? ("baseline" as const) : ("candidate" as const),
+            version: Number(dq.data.version),
+            window: dq.data.window as { from: string; to: string },
+            n: (dq.data.cohort_n as number | null) ?? null,
+          },
+        ]
+      : [],
+  );
+
+  const confounders = [...STATIC_CONFOUNDERS];
+  for (const dim of (mix?.data.dimensions as
+    | { dimension: string; balanced: boolean | null; max_abs_delta: number | null }[]
+    | undefined) ?? []) {
+    if (dim.balanced === false) {
+      confounders.unshift(
+        `Case mix: ${dim.dimension} shares differ by up to ${dim.max_abs_delta} between cohorts; stratify by ${dim.dimension} (group_by or filters) before attributing a difference.`,
+      );
+    }
+  }
+  if (cohorts.length === 2 && cohorts[0]?.version !== cohorts[1]?.version) {
+    confounders.push(
+      "Definition change: the cohorts use different workflow versions; compare end-to-end metrics only.",
+    );
+  }
+
+  const censoring = [
+    "Dwell percentiles use completed intervals only; long-running open cases are not yet counted.",
+  ];
+  for (const dq of [dqBase, dqCand]) {
+    const open = (dq?.data.checks as { check: string; share: number | null }[] | undefined)?.find(
+      (c) => c.check === "open_cases_censored",
+    );
+    if (open?.share) {
+      censoring.push(
+        `${dq?.id}: ${Math.round(open.share * 1000) / 10}% of the cohort was still open at the watermark, so durations are biased low and outcomes incomplete.`,
+      );
+    }
+  }
+
+  return {
+    app_id,
+    data: {
+      pack_version: "lifecycle-evidence-pack@1",
+      question,
+      scope: { app_id, workflow_key, cohorts },
+      evidence,
+      derived,
+      metric_definitions: PACK_METRICS[question].map((id) => ({
+        ...METRICS[id],
+        caveats: [...METRICS[id].caveats],
+        used_by: [...METRICS[id].used_by],
+      })),
+      confounders_to_check: confounders,
+      censoring,
+      unsupported_claims: [
+        ...UNSUPPORTED[question],
+        "Anything about withheld (suppressed) groups.",
+      ],
+      analysis_instructions: ANALYSIS_INSTRUCTIONS,
+    },
+    privacy: { min_cohort: ctx.minCohort, any_suppressed: evidence.some((e) => e.any_suppressed) },
+    provenance: provenance(ctx, null, "build_evidence_pack", {
+      question,
+      workflow_key,
+      evidence: evidence.map((e) => `${e.id}:${e.tool}:${e.role}`),
+    }),
+    interpretation: interpretation(ctx, "observed_process_pattern", OBSERVATIONAL_CAVEATS),
+  };
+}
+
+function sampleSize(tool: ToolName, data: Record<string, unknown>): number | null {
+  const released = (rows: unknown, field: string) =>
+    Array.isArray(rows)
+      ? rows.reduce<number | null>((max, row) => {
+          const value = (row as Record<string, unknown>)[field];
+          return typeof value === "number" ? Math.max(max ?? 0, value) : max;
+        }, null)
+      : null;
+  switch (tool) {
+    case "get_data_quality":
+      return (data.cohort_n as number | null) ?? null;
+    case "get_stage_dwell":
+      return released(data.stages, "n");
+    case "get_funnel":
+      return released(data.groups, "cohort_n");
+    case "list_bottlenecks":
+      return released(
+        (data.bottlenecks as { observed: unknown }[] | undefined)?.map((b) => b.observed),
+        "n",
+      );
+    case "compare_workflow_variants":
+    case "compare_case_mix": {
+      const cohorts = data.cohorts as Record<string, unknown>[] | undefined;
+      const field = tool === "compare_case_mix" ? "n" : "total_n";
+      const sizes = (cohorts ?? [])
+        .map((c) => c[field])
+        .filter((n): n is number => typeof n === "number");
+      return sizes.length ? sizes.reduce((a, b) => a + b, 0) : null;
+    }
+    default:
+      return null;
+  }
+}
+
+type DwellRows = {
+  stage_key: string;
+  suppressed: boolean;
+  p50_ms?: number | null;
+  p90_ms?: number | null;
+}[];
+
+function dwellDeltas(
+  b: { id: string; data: Record<string, unknown> },
+  c: { id: string; data: Record<string, unknown> },
+) {
+  const out: Pack["derived"] = [];
+  const before = new Map((b.data.stages as DwellRows).map((row) => [row.stage_key, row]));
+  for (const after of c.data.stages as DwellRows) {
+    const prior = before.get(after.stage_key);
+    if (!prior || prior.suppressed || after.suppressed) continue;
+    for (const field of ["p50_ms", "p90_ms"] as const) {
+      const x = prior[field];
+      const y = after[field];
+      out.push({
+        id: `d${out.length + 1}`,
+        from: [b.id, c.id],
+        metric: `stage_dwell_${field.replace("_ms", "")}_delta`,
+        stage_key: after.stage_key,
+        value: typeof x === "number" && typeof y === "number" ? y - x : null,
+        unit: "milliseconds",
+      });
+    }
+  }
+  return out;
+}
+
+type FunnelGroups = {
+  suppressed: boolean;
+  steps?: { stage_key: string; suppressed: boolean; reach_rate?: number | null }[];
+}[];
+
+function reachDeltas(
+  b: { id: string; data: Record<string, unknown> },
+  c: { id: string; data: Record<string, unknown> },
+  offset: number,
+) {
+  const steps = (data: Record<string, unknown>) => {
+    const [group] = data.groups as FunnelGroups;
+    return group && !group.suppressed ? (group.steps ?? []) : [];
+  };
+  const before = new Map(steps(b.data).map((step) => [step.stage_key, step]));
+  return steps(c.data).flatMap((after, i) => {
+    const prior = before.get(after.stage_key);
+    if (!prior || prior.suppressed || after.suppressed) return [];
+    const x = prior.reach_rate;
+    const y = after.reach_rate;
+    return [
+      {
+        id: `d${offset + i + 1}`,
+        from: [b.id, c.id],
+        metric: "funnel_reach_rate_delta",
+        stage_key: after.stage_key,
+        value: typeof x === "number" && typeof y === "number" ? round4(y - x) : null,
+        unit: "ratio",
+      },
+    ];
+  });
 }
 
 /** Runs one tool and shapes the MCP result; failures become `isError` results with a code. */

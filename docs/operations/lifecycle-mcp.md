@@ -17,10 +17,10 @@ and its only real data path, the `read-api` source, fails closed until the Works
   and the v1 `@modelcontextprotocol/sdk` are not used.
 - Endpoint: `POST /mcp` only. `legacy: "reject"` answers 2025-era `initialize` traffic with `-32022`.
   `GET`/`DELETE` return 405.
-- Capabilities: `tools` and `resources`, with `listChanged: false`. There are no prompts,
-  completions, logging, resource subscriptions, `subscriptions/listen` streams or MCP Tasks. A
-  method allowlist on the trusted `Mcp-Method` header refuses everything else before dispatch.
-  A task-augmented `tools/call` runs synchronously and creates no task.
+- Capabilities: `tools`, `resources` and `prompts`, all with `listChanged: false`. There are no
+  completions, logging, resource subscriptions, `subscriptions/listen` streams or MCP Tasks. A method
+  allowlist on the trusted `Mcp-Method` header refuses everything else before dispatch. A
+  task-augmented `tools/call` runs synchronously and creates no task.
 
 ## Tools
 
@@ -39,6 +39,9 @@ rejected, and an output field the server did not add on purpose fails validation
 | `list_bottlenecks` | `process:read` | Stages ranked by an observed waiting signal |
 | `describe_metric` | authenticated | Definition, computation and caveats of a metric |
 | `get_data_freshness` | `lifecycle:read` | Watermark, lag and status per workflow |
+| `get_data_quality` | `process:read` | Censoring (open cases), re-entries, skipped and undeclared stages, missing dimensions |
+| `compare_case_mix` | `process:read` | Declared-dimension shares of two cohorts, flagging imbalance (a confounder check) |
+| `build_evidence_pack` | `process:read` | A generic analysis evidence pack for one question (see below) |
 
 Resources: `lifecycle://glossary/metrics`, `lifecycle://spec/workflow-definition` and the template
 `lifecycle://apps/{app_id}/workflows/{workflow_key}/definition`. The template lists and reads only
@@ -48,6 +51,80 @@ Every result carries `provenance` (source, `synthetic` flag, source version, `as
 the normalized query) and `interpretation` (`causal: false` plus caveats). Aggregates are labelled
 observed process patterns. Comparisons always state that differences are not caused by the version
 alone, and bottlenecks are `evidence: "observed_association"`.
+
+## AI-assisted analysis
+
+The server prepares evidence. The client's agent interprets it, and **the server never calls a
+model**.
+
+### Prompts
+
+The prompts are `investigate_bottleneck`, `explain_dwell_change`, `compare_process_variants`,
+`evaluate_intervention` and `process_health_review`.
+
+- A prompt returns instructions only and reads no data.
+- Arguments are validated slugs, dates and versions, so free text cannot be injected and no personal
+  data passes through.
+- Each prompt tells the agent to:
+  - start with `build_evidence_pack`;
+  - cite evidence ids, sample sizes, `as_of` and watermark;
+  - check freshness, data quality, censoring and case mix;
+  - never estimate withheld values;
+  - state plainly which causal claims the evidence does not support;
+  - not attribute anything to individuals.
+
+### Analysis evidence pack (`lifecycle-evidence-pack@1`)
+
+`build_evidence_pack` takes `question` (`bottleneck`, `health`, `dwell_change`, `intervention` or
+`variants`), a `baseline` cohort and, for paired questions, a `candidate` cohort. It composes the
+existing tools in-process, so authorization, bounds and suppression are identical. It re-validates
+every piece against that tool's strict output schema.
+
+```text
+{ pack_version, question,
+  scope: { app_id, workflow_key, cohorts: [{ role, version, window, n }] },
+  evidence: [{ id, role, tool, kind, sample_n, any_suppressed, as_of, watermark, data }],
+  derived: [{ id, from: [evidence ids], metric, stage_key, value, unit }],   // e.g. p50/p90 deltas
+  metric_definitions: [glossary entries], confounders_to_check: [...], censoring: [...],
+  unsupported_claims: [...], analysis_instructions }
+```
+
+The shape is local to this server. A separately commissioned, generic evidence/analysis package can
+adopt or map it later; this PR does not depend on that package or touch its files.
+
+### Design only: MCP Apps UI (not implemented)
+
+MCP Apps is an optional extension. The intended surface is a read-only nested segmented-bar view: one
+row per workflow version or segment, one segment per stage sized by p50 dwell, and withheld groups
+drawn as hatched "withheld" segments with no numbers. Drill-down would go from a stage, to its
+dimension breakdown, to case timelines.
+
+- **Resource:** `ui://lifecycle/segmented-bars`, a self-contained HTML bundle served as a resource.
+  It would have no external network access and a strict CSP. It would render only `structuredContent`
+  that the host passes in.
+- **Linkage:** `get_stage_dwell`, `get_funnel` and `build_evidence_pack` would reference the UI
+  resource in tool `_meta`. Drill-downs would call the same read-only tools through the host, so the
+  grant checks are unchanged. Clients without Apps support keep the plain structured results.
+- **Not done** because the wire format (the `_meta` key, the resource MIME profile, and host↔iframe
+  messaging) has not been verified against `@modelcontextprotocol/ext-apps` and a real host, and an
+  unreviewed iframe bundle would add a cross-origin surface. Verify those first, then add it behind
+  capability detection.
+
+### Design only: Tasks extension (not implemented)
+
+The `io.modelcontextprotocol/tasks` extension would be used only for genuinely asynchronous, heavy
+queries. An example is a wide-window evidence pack once the real read API needs seconds-to-minutes
+scans. It would not be used for the current bounded tools, which answer synchronously.
+
+- **Capability detection:** offer task-augmented execution only when the client declares the
+  extension. Otherwise answer synchronously or with `result_too_large`.
+- **Lifecycle:** polling with status, a TTL bounded by the source's freshness, and cancellation that
+  aborts the upstream read. A task result carries the same provenance and suppression as a direct
+  call, and it is bound to the principal and app scope that created it.
+- **Not done:** `@modelcontextprotocol/server` 2.4.0 exposes no server-side API for the tasks
+  extension in the 2026-07-28 era, and this server must not use the deprecated 2025 task API. A
+  stateless Worker would also need durable task state (a Durable Object), which is out of scope for a
+  read-only slice.
 
 ## Security model
 

@@ -26,7 +26,7 @@ const NO_STORE = { "Cache-Control": "no-store" };
 /**
  * The only request methods this server answers. The SDK rejects a body whose method disagrees
  * with the `Mcp-Method` header, so the header can be trusted. Everything else, notably
- * `subscriptions/listen` (a long-lived stream) and `tasks/*`, is refused before dispatch.
+ * `subscriptions/listen` (a long-lived stream), `completion/complete` and `tasks/*`, is refused before dispatch.
  */
 const ALLOWED_METHODS = new Set([
   "server/discover",
@@ -36,6 +36,8 @@ const ALLOWED_METHODS = new Set([
   "resources/list",
   "resources/templates/list",
   "resources/read",
+  "prompts/list",
+  "prompts/get",
 ]);
 
 const methodNotFound = () =>

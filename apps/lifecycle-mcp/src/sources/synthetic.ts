@@ -3,6 +3,7 @@ import type {
   AppFreshness,
   AppScope,
   CaseSummary,
+  DataQuality,
   DwellGroup,
   FunnelGroup,
   Grant,
@@ -228,6 +229,29 @@ export class SyntheticLifecycleSource implements LifecycleReadSource {
       completed_n: cases.filter((c) => c.status === "closed").length,
       median_cycle_ms: medianCycle(cases),
       variants,
+    });
+  }
+
+  async getDataQuality(scope: AppScope, q: AggregateQuery): Promise<Sourced<DataQuality>> {
+    const def = this.definitions(scope.appId).find(
+      (d) => d.workflow_key === q.workflowKey && d.version === q.version,
+    );
+    const stages = new Set(def?.stages.map((stage) => stage.key));
+    const cases = this.cohort(scope.appId, q);
+    const missing: Record<string, number> = {};
+    for (const dim of def?.dimensions ?? []) {
+      missing[dim.key] = cases.filter(
+        (c) => !dim.values.includes(c.dimensions[dim.key] ?? ""),
+      ).length;
+    }
+    return this.sourced({
+      cohort_n: cases.length,
+      open_n: cases.filter((c) => c.status === "open").length,
+      reentry_n: cases.filter((c) => c.intervals.some((i) => i.attempt > 1)).length,
+      skipped_n: cases.filter((c) => c.intervals.some((i) => i.state === "skipped")).length,
+      undeclared_stage_n: cases.filter((c) => c.intervals.some((i) => !stages.has(i.stage_key)))
+        .length,
+      missing_dimension_n: missing,
     });
   }
 

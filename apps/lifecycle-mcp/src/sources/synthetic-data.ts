@@ -197,6 +197,11 @@ function supportCase(rng: Rng, dims: Record<string, string>, start: number) {
   const outcome = ((): string | null => {
     if (!walk.visit("new", dwell(rng, 0.5, 0.5))) return null;
     if (!walk.visit("triage", dwell(rng, triageHours, 0.7))) return null;
+    // A long tail of tickets stalls on the requester for weeks, so recent cohorts stay open.
+    if (rng() < 0.2) {
+      if (!walk.visit("in_progress", dwell(rng, 4, 0.5))) return null;
+      if (!walk.visit("waiting_on_requester", dwell(rng, 21 * 24, 0.5))) return null;
+    }
     for (let loop = 0; ; loop++) {
       if (!walk.visit("in_progress", dwell(rng, 10, 0.8))) return null;
       if (loop >= 2 || rng() >= 0.35) break;

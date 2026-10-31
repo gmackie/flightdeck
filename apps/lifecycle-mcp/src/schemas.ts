@@ -39,6 +39,21 @@ const windowFields = {
   ),
 };
 
+const cohortSpec = z
+  .strictObject({
+    version: Version.optional().describe("Workflow version; default the latest."),
+    ...windowFields,
+  })
+  .describe("One cohort: cases of one workflow version that started in [from, to).");
+
+export const QUESTIONS = [
+  "bottleneck",
+  "dwell_change",
+  "variants",
+  "intervention",
+  "health",
+] as const;
+
 export const inputs = {
   list_workflow_definitions: z.strictObject({
     app_id: AppId,
@@ -100,6 +115,36 @@ export const inputs = {
       .describe("Metric id; the lifecycle://glossary/metrics resource lists all."),
   }),
   get_data_freshness: z.strictObject({ app_id: AppId }),
+  get_data_quality: z.strictObject({
+    app_id: AppId,
+    workflow_key: WorkflowKey,
+    version: Version.optional(),
+    ...windowFields,
+    filters: Filters.optional(),
+  }),
+  compare_case_mix: z.strictObject({
+    app_id: AppId,
+    workflow_key: WorkflowKey,
+    baseline: cohortSpec,
+    candidate: cohortSpec,
+    dimensions: z
+      .array(slug)
+      .min(1)
+      .max(5)
+      .optional()
+      .describe("Declared dimensions to compare. Default: all declared, at most 5."),
+  }),
+  build_evidence_pack: z.strictObject({
+    app_id: AppId,
+    workflow_key: WorkflowKey,
+    question: z
+      .enum(QUESTIONS)
+      .describe(
+        "bottleneck | health: one cohort. dwell_change | intervention: baseline vs candidate (before/after). variants: baseline vs candidate version.",
+      ),
+    baseline: cohortSpec.optional(),
+    candidate: cohortSpec.optional(),
+  }),
 };
 
 const iso = z.string();
@@ -239,6 +284,23 @@ const variantCohort = z.union([
   withheld.extend({ version: z.number() }),
 ]);
 
+const cohortRef = z.strictObject({
+  role: z.enum(["baseline", "candidate"]),
+  version: z.number(),
+  window,
+  n: z.number().nullable(),
+});
+
+const metricDescription = z.strictObject({
+  id: z.string(),
+  label: z.string(),
+  unit: z.string(),
+  definition: z.string(),
+  computation: z.string(),
+  caveats: z.array(z.string()),
+  used_by: z.array(z.string()),
+});
+
 export const outputs = {
   list_workflow_definitions: envelope(z.strictObject({ definitions: z.array(definition) })),
   get_case_summary: envelope(z.strictObject({ case: caseSummary })),
@@ -342,6 +404,83 @@ export const outputs = {
       watermark: isoOrNull,
       lag_ms: z.number().nullable(),
       workflows: z.array(z.strictObject({ workflow_key: z.string(), last_event_at: isoOrNull })),
+    }),
+  ),
+  get_data_quality: envelope(
+    z.strictObject({
+      workflow_key: z.string(),
+      version: z.number(),
+      window,
+      cohort_n: z.number().nullable(),
+      checks: z.array(
+        z.strictObject({
+          check: z.string(),
+          n: z.number().nullable(),
+          share: z.number().nullable(),
+          severity: z.enum(["info", "warning"]),
+          note: z.string(),
+        }),
+      ),
+    }),
+  ),
+  compare_case_mix: envelope(
+    z.strictObject({
+      workflow_key: z.string(),
+      cohorts: z.array(cohortRef),
+      dimensions: z.array(
+        z.strictObject({
+          dimension: z.string(),
+          values: z.array(
+            z.strictObject({
+              value: z.string(),
+              baseline_share: z.number().nullable(),
+              candidate_share: z.number().nullable(),
+              delta: z.number().nullable(),
+            }),
+          ),
+          max_abs_delta: z.number().nullable(),
+          balanced: z.boolean().nullable(),
+        }),
+      ),
+    }),
+  ),
+  build_evidence_pack: envelope(
+    z.strictObject({
+      pack_version: z.literal("lifecycle-evidence-pack@1"),
+      question: z.enum(QUESTIONS),
+      scope: z.strictObject({
+        app_id: z.string(),
+        workflow_key: z.string(),
+        cohorts: z.array(cohortRef),
+      }),
+      evidence: z.array(
+        z.strictObject({
+          id: z.string(),
+          role: z.enum(["baseline", "candidate", "comparison", "context"]),
+          tool: z.string(),
+          kind: z.enum(["observed_process_pattern", "data_quality", "case_mix", "freshness"]),
+          sample_n: z.number().nullable(),
+          any_suppressed: z.boolean(),
+          as_of: iso,
+          watermark: isoOrNull,
+          data: z.record(z.string(), z.unknown()),
+        }),
+      ),
+      derived: z.array(
+        z.strictObject({
+          id: z.string(),
+          from: z.array(z.string()),
+          metric: z.string(),
+          stage_key: z.string().nullable(),
+          value: z.number().nullable(),
+          unit: z.string(),
+        }),
+      ),
+      metric_definitions: z.array(metricDescription),
+      confounders_to_check: z.array(z.string()),
+      censoring: z.array(z.string()),
+      unsupported_claims: z.array(z.string()),
+      analysis_instructions: z.string(),
     }),
   ),
 };

@@ -144,6 +144,21 @@ export type VariantStats = {
   variants: VariantRow[];
 };
 
+/** Distinct-case counts behind the data-quality checks of one cohort. */
+export type DataQuality = {
+  cohort_n: number;
+  /** Still open at the watermark: right-censored for durations and outcomes. */
+  open_n: number;
+  /** Cases that entered some stage more than once. */
+  reentry_n: number;
+  /** Cases with at least one skipped interval. */
+  skipped_n: number;
+  /** Cases with intervals in stages the definition does not declare. */
+  undeclared_stage_n: number;
+  /** Per declared dimension, cases without a declared value. */
+  missing_dimension_n: Record<string, number>;
+};
+
 export type AppFreshness = Freshness & {
   workflows: { workflow_key: string; last_event_at: number | null }[];
 };
@@ -177,6 +192,7 @@ export interface LifecycleReadSource {
     scope: AppScope,
     q: AggregateQuery & { limit: number },
   ): Promise<Sourced<VariantStats>>;
+  getDataQuality(scope: AppScope, q: AggregateQuery): Promise<Sourced<DataQuality>>;
   getFreshness(scope: AppScope): Promise<Sourced<AppFreshness>>;
 }
 

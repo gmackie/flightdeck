@@ -2,6 +2,7 @@ import {
   type AppFreshness,
   type AppScope,
   type CaseSummary,
+  type DataQuality,
   type DwellGroup,
   type FunnelGroup,
   type Grant,
@@ -34,6 +35,7 @@ export const PLANNED_ROUTES = {
   getStageDwell: "GET /api/apps/:app/lifecycle/summaries/stages",
   getFunnel: "not in PR #36 yet: needs a stage-reach summary",
   getVariantStats: "not in PR #36 yet: needs a path-variant summary",
+  getDataQuality: "not in PR #36 yet: needs a cohort data-quality summary",
   getFreshness: "data_freshness of any envelope",
 } as const satisfies Record<Exclude<keyof LifecycleReadSource, "kind">, string>;
 
@@ -69,6 +71,9 @@ export class ReadApiLifecycleSource implements LifecycleReadSource {
     this.unavailable();
   }
   async getVariantStats(_scope: AppScope): Promise<Sourced<VariantStats>> {
+    this.unavailable();
+  }
+  async getDataQuality(_scope: AppScope): Promise<Sourced<DataQuality>> {
     this.unavailable();
   }
   async getFreshness(_scope: AppScope): Promise<Sourced<AppFreshness>> {

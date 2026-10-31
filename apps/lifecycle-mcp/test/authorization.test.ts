@@ -12,6 +12,9 @@ const APP_TOOLS: [string, Record<string, unknown>][] = [
   ["compare_workflow_variants", { workflow_key: "support-ticket" }],
   ["list_bottlenecks", { workflow_key: "support-ticket" }],
   ["get_data_freshness", {}],
+  ["get_data_quality", { workflow_key: "support-ticket" }],
+  ["compare_case_mix", { workflow_key: "support-ticket", baseline: {}, candidate: {} }],
+  ["build_evidence_pack", { workflow_key: "support-ticket", question: "health" }],
 ];
 
 /** Records the app of every data call the server makes. */
