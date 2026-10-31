@@ -495,4 +495,20 @@ describe("privacy", () => {
     track("good");
     expect((await flush()).map((e) => e.name)).toEqual(["good"]);
   });
+
+  it("applies redactProps before beforeSend sees the event", async () => {
+    const seen: (Record<string, unknown> | null | undefined)[] = [];
+    init({
+      trackPages: false,
+      redactProps: ["email"],
+      beforeSend: (event) => {
+        seen.push(event.props);
+        return event;
+      },
+    });
+    track("a", { email: "a@b.c", plan: "pro" });
+    track("b", { email: "a@b.c" });
+    await flush();
+    expect(seen).toEqual([{ plan: "pro" }, undefined]);
+  });
 });

@@ -9,8 +9,10 @@
     "typecheck": "tsc -p .",
     "size": "node scripts/size.mjs"
   },
+  "dependencies": {
+    "@flightdeckhq/schema": "workspace:*"
+  },
   "devDependencies": {
-    "@flightdeckhq/schema": "workspace:*",
     "esbuild": "^0.28.2",
     "happy-dom": "^21.0.4"
   }

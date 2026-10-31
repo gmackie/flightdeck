@@ -15,6 +15,17 @@ export type FlightdeckOptions = PrivacyOptions & {
   maxBodyBytes?: number;
 };
 
+/**
+ * Options, or a function that builds them from the request's `env` (called per request, e.g. to
+ * read a `hashUserId` salt from a secret).
+ */
+export type FlightdeckOptionsInput<E = never> = FlightdeckOptions | ((env: E) => FlightdeckOptions);
+
+/** Resolves a per-request options function against `env`. */
+function resolve<E>(options: FlightdeckOptionsInput<E> | undefined, env: E): FlightdeckOptions {
+  return (typeof options === "function" ? options(env) : options) ?? {};
+}
+
 const DEFAULT_PATH = "/_fd/e";
 const DEFAULT_BINDING = "FLIGHTDECK";
 const DEFAULT_MAX_BODY = 64 * 1024;
@@ -24,10 +35,8 @@ const CONTENT_TYPES = new Set(["text/plain", "application/json"]);
  * Returns the Flightdeck service binding from `env`, for server-side `track`/`identify` calls.
  * With `beforeSend` or `hashUserId` set, returns a wrapper that applies them to every event.
  */
-export function flightdeck(
-  env: object,
-  options: Pick<FlightdeckOptions, "binding" | keyof PrivacyOptions> = {},
-): IngestRpc {
+export function flightdeck<E extends object>(env: E, input?: FlightdeckOptionsInput<E>): IngestRpc {
+  const options = resolve(input, env);
   const name = options.binding ?? DEFAULT_BINDING;
   const binding = (env as Record<string, IngestRpc | undefined>)[name];
   if (!binding) throw new Error(`Flightdeck: env.${name} service binding is missing`);
@@ -62,11 +71,12 @@ async function readLimited(
 }
 
 /** Handles the browser endpoint. Returns null when the request is not for Flightdeck. */
-export async function handleFlightdeck(
+export async function handleFlightdeck<E extends object>(
   request: Request,
-  env: object,
-  options: FlightdeckOptions = {},
+  env: E,
+  input?: FlightdeckOptionsInput<E>,
 ): Promise<Response | null> {
+  const options = resolve(input, env);
   const url = new URL(request.url);
   if (url.pathname !== (options.path ?? DEFAULT_PATH)) return null;
   if (request.method !== "POST")
@@ -131,12 +141,16 @@ export async function handleFlightdeck(
  * Not supported: a `class extends WorkerEntrypoint` default export, which the runtime
  * instantiates itself. Call `handleFlightdeck` at the top of its `fetch` method instead.
  *
+ * `options` may be a function of `env`, called for each request; use it when options depend
+ * on bindings or secrets (a `hashUserId` salt). Pass the same value to `flightdeck(env, options)`
+ * so server events get the same treatment.
+ *
  * Behind a proxy that rewrites the URL (so the Worker sees a different host than the page),
  * the page's origin differs from the request's and must be listed in `allowedOrigins`.
  */
 export function withFlightdeck<E extends object>(
   handler: ExportedHandler<E>,
-  options?: FlightdeckOptions,
+  options?: FlightdeckOptionsInput<E>,
 ): ExportedHandler<E> {
   const wrapped: ExportedHandler<E> = Object.create(handler);
   wrapped.fetch = async (request, env, ctx) => {

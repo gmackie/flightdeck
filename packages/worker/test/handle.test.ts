@@ -298,7 +298,7 @@ const sha256 = async (s: string) =>
     (b) => b.toString(16).padStart(2, "0"),
   ).join("");
 
-/** The batch passed to the `n`th ingest call. */
+/** The first argument of the `n`th call (the batch, for ingest). */
 const sentBatch = (ingest: { mock: { calls: unknown[][] } }, n = 0) =>
   ingest.mock.calls[n]?.[0] as { events: ClientEventInput[] };
 
@@ -392,6 +392,7 @@ describe("privacy options", () => {
     expect(env.FLIGHTDECK.track).toHaveBeenCalledWith({
       kind: "track",
       name: "issue.created",
+      ts: expect.any(Number),
       userId: await sha256("u1"),
       path: "/x",
     });
@@ -400,6 +401,7 @@ describe("privacy options", () => {
     expect(env.FLIGHTDECK.identify).toHaveBeenCalledWith({
       kind: "identify",
       name: "identify",
+      ts: expect.any(Number),
       userId: await sha256("u1"),
       sessionId: "s".repeat(32),
       path: "/x",
@@ -421,5 +423,118 @@ describe("privacy options", () => {
     await handler.fetch?.(post(batch) as never, env, {} as ExecutionContext);
     const sent = sentBatch(env.ingest);
     expect(sent.events[0]?.userId).toBe(await sha256("jane@example.com"));
+  });
+});
+
+describe("privacy options: edge cases", () => {
+  it("keeps the order of the remaining events when some are dropped", async () => {
+    const env = fakeEnv();
+    const events = ["a", "drop", "b", "drop", "c"].map((name, i) => ({
+      kind: "track",
+      name,
+      ts: i,
+    }));
+    const beforeSend = (e: ClientEventInput) => (e.name === "drop" ? null : e);
+    await handleFlightdeck(post(JSON.stringify({ events })), env, { beforeSend });
+    expect(sentBatch(env.ingest).events.map((e) => e.name)).toEqual(["a", "b", "c"]);
+  });
+
+  it("only hashes non-empty string userIds, leaving the rest for ingest to reject", async () => {
+    const env = fakeEnv();
+    const events = [
+      { kind: "track", name: "a", ts: 1, userId: "" },
+      { kind: "track", name: "b", ts: 2, userId: 42 },
+      { kind: "track", name: "c", ts: 3, userId: "u1" },
+    ];
+    await handleFlightdeck(post(JSON.stringify({ events })), env, { hashUserId: true });
+    expect(sentBatch(env.ingest).events.map((e) => e.userId)).toEqual(["", 42, await sha256("u1")]);
+  });
+
+  it("drops userId and warns once when the salt is missing or empty, never hashing a coerced salt", async () => {
+    vi.resetModules();
+    const fresh = await import("../src");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const env = fakeEnv();
+    const batch = JSON.stringify({ events: [{ kind: "track", name: "a", ts: 1, userId: "u1" }] });
+    for (const salt of [undefined, "", 7]) {
+      const hashUserId = { salt } as unknown as { salt: string };
+      await fresh.handleFlightdeck(post(batch), env, { hashUserId });
+    }
+    for (let n = 0; n < 3; n++) {
+      expect(sentBatch(env.ingest, n).events[0]).toEqual({ kind: "track", name: "a", ts: 1 });
+    }
+    await fresh.flightdeck(env, { hashUserId: { salt: "" } }).identify({ userId: "u1" });
+    expect(sentBatch(env.FLIGHTDECK.identify)).not.toHaveProperty("userId");
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(/salt/);
+    warn.mockRestore();
+  });
+
+  it("drops server track and identify when beforeSend throws", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const env = fakeEnv();
+    const fd = flightdeck(env, {
+      beforeSend: () => {
+        throw new Error("boom");
+      },
+    });
+    expect(await fd.track({ name: "a" })).toEqual({ accepted: 0, rejected: 0 });
+    expect(await fd.identify({ userId: "u1" })).toEqual({ accepted: 0, rejected: 0 });
+    expect(env.FLIGHTDECK.track).not.toHaveBeenCalled();
+    expect(env.FLIGHTDECK.identify).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledTimes(2);
+    errors.mockRestore();
+  });
+
+  it("stamps ts on server events before beforeSend sees them, keeping a caller's ts", async () => {
+    const env = fakeEnv();
+    const seen: ClientEventInput[] = [];
+    const fd = flightdeck(env, {
+      beforeSend: (e) => {
+        seen.push(e);
+        return e;
+      },
+    });
+    const before = Date.now();
+    await fd.track({ name: "a" });
+    await fd.track({ name: "b", ts: 5 });
+    expect(seen[0]?.ts).toBeGreaterThanOrEqual(before);
+    expect(seen[1]?.ts).toBe(5);
+  });
+});
+
+describe("options resolved per request from env", () => {
+  type SaltEnv = ReturnType<typeof fakeEnv> & { SALT: string };
+  const saltEnv = (salt: string): SaltEnv => ({ ...fakeEnv(), SALT: salt });
+  const options = (env: SaltEnv) => ({ hashUserId: { salt: env.SALT } });
+  const batch = JSON.stringify({ events: [{ kind: "track", name: "a", ts: 1, userId: "u1" }] });
+
+  it("withFlightdeck and handleFlightdeck call the options function with each request's env", async () => {
+    const handler = withFlightdeck<SaltEnv>({ fetch: async () => new Response("app") }, options);
+    const one = saltEnv("s1");
+    const two = saltEnv("s2");
+    await handler.fetch?.(post(batch) as never, one, {} as ExecutionContext);
+    await handleFlightdeck(post(batch), two, options);
+    expect(sentBatch(one.ingest).events[0]?.userId).toBe(await sha256("s1u1"));
+    expect(sentBatch(two.ingest).events[0]?.userId).toBe(await sha256("s2u1"));
+  });
+
+  it("flightdeck resolves the options function too", async () => {
+    const env = saltEnv("s3");
+    await flightdeck(env, options).track({ name: "a", userId: "u1" });
+    expect(sentBatch(env.FLIGHTDECK.track)).toMatchObject({ userId: await sha256("s3u1") });
+  });
+
+  it("an options function can set path and binding", async () => {
+    const ingest = vi.fn(ok);
+    const env = { FD: { ingest, track: vi.fn(ok), identify: vi.fn(ok) } };
+    const req = new Request(`${ORIGIN}/collect`, {
+      method: "POST",
+      body: batch,
+      headers: { Origin: ORIGIN, "Content-Type": "text/plain" },
+    });
+    const res = await handleFlightdeck(req, env, () => ({ path: "/collect", binding: "FD" }));
+    expect(res?.status).toBe(204);
+    expect(ingest).toHaveBeenCalledOnce();
   });
 });
