@@ -13,6 +13,8 @@ import { verifyAccessUser } from "../access";
 import { type AppRecord, getApp } from "../apps";
 import { appShard, sessionStub } from "../do/shards";
 import { DOGFOOD_APP_ID } from "../dogfood";
+import { LifecycleProjector } from "../lifecycle-projection/projector";
+import { appendLifecycle, forwardOutbox } from "../lifecycle-projection/store";
 import { getDefinitions, registerDefinition } from "../processes";
 import { sinks } from "../sinks";
 import {
@@ -87,7 +89,12 @@ export class Ingest extends WorkerEntrypoint<Env, IngestProps> implements Ingest
 
   private async lifecycle(input: unknown): Promise<LifecycleIngestResult> {
     const appId = await this.lifecycleApp();
-    return ingestLifecycle(appId, input, "binding", lifecycleDeps(this.env, appId));
+    return ingestLifecycle(
+      appId,
+      input,
+      "binding",
+      lifecycleDeps(this.env, appId, (work) => this.ctx.waitUntil(work)),
+    );
   }
 
   /** The bound app, once it is registered and granted `lifecycle.write`. */
@@ -135,8 +142,23 @@ export function deps(env: Env, ctx: ExecutionContext, app: AppRecord): IngestDep
   };
 }
 
-export const lifecycleDeps = (env: Env, appId: string): LifecycleDeps => ({
+/**
+ * The commit point is the D1 evidence log (appendLifecycle). Basin forwarding is then attempted
+ * at once and retried from the outbox; projection runs after the response when `defer` is given,
+ * and on the scheduled drain otherwise.
+ */
+export const lifecycleDeps = (
+  env: Env,
+  appId: string,
+  defer?: (work: Promise<unknown>) => void,
+): LifecycleDeps => ({
   now: Date.now,
-  send: (rows) => sinks.lifecycle(env, rows),
+  send: async (rows) => {
+    const now = Date.now();
+    await appendLifecycle(env.DB, appId, rows, now);
+    const eventIds = rows.map((r) => r.event_id);
+    await forwardOutbox(env, now, { appId, eventIds }).catch(() => undefined);
+    defer?.(new LifecycleProjector(env.DB).drain(appId).catch(() => undefined));
+  },
   definitions: (keys) => getDefinitions(env.DB, appId, keys),
 });

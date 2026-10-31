@@ -13,7 +13,11 @@ const MAX_DEFINITION_BYTES = 128 * 1024;
  * `lifecycle.write` scope for an app an operator granted `lifecycle.write`. There is no browser,
  * cookie or Access path: the credential alone names the app.
  */
-export async function lifecycleIngest(request: Request, env: Env): Promise<Response> {
+export async function lifecycleIngest(
+  request: Request,
+  env: Env,
+  ctx?: ExecutionContext,
+): Promise<Response> {
   if (request.method !== "POST")
     return new Response(null, { status: 405, headers: { Allow: "POST" } });
   try {
@@ -24,7 +28,12 @@ export async function lifecycleIngest(request: Request, env: Env): Promise<Respo
     if (!key.scopes.has("lifecycle.write") || !key.lifecycleGranted) return reply(403, "Forbidden");
     const body = await readJsonBody(request, MAX_BYTES, "Invalid lifecycle batch");
     if (body instanceof Response) return body;
-    const result = await ingestLifecycle(app.id, body.value, "http", lifecycleDeps(env, app.id));
+    const result = await ingestLifecycle(
+      app.id,
+      body.value,
+      "http",
+      lifecycleDeps(env, app.id, ctx && ((work) => ctx.waitUntil(work))),
+    );
     return Response.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof LifecycleRejected) {

@@ -1,5 +1,6 @@
 import type { AccessPrincipal } from "../access";
 import { fail, json } from "../api/http";
+import { projectionDiagnostics } from "../lifecycle-projection/diagnostics";
 import {
   aggregateWindow,
   BadQuery,
@@ -25,19 +26,9 @@ import {
 import type { ProjectionState } from "./repository";
 
 /**
- * Read-only lifecycle serving API over the derived read model (migration 0020).
- *
- * NOT ROUTED: nothing calls `lifecycleServingRoutes` yet. Integration hook, once the app-scoped
- * RBAC module (FLIG-18) lands: from the `/api/*` dispatcher, after `authenticate()`, call
- *
- *   const served = await lifecycleServingRoutes(request, env, principal, {
- *     authorize: ({ principal, appId, capability }) =>
- *       authorizeLifecycleRead(env, principal, appId, capability),
- *   });
- *   if (served) return served;
- *
- * Without an `authorize` option every request is denied, so wiring the routes alone exposes
- * nothing.
+ * Read-only lifecycle serving API over the derived read model (migration 0020), routed from the
+ * `/api/*` dispatcher with `authorizeLifecycleRead` (FLIG-18) as the authorizer. Without an
+ * `authorize` option every request is denied, so the routes alone expose nothing.
  */
 
 export type LifecycleCapability = "lifecycle:read" | "process:read";
@@ -65,7 +56,7 @@ export const DEFAULT_MIN_COHORT = 5;
 export const DEFAULT_STALE_AFTER_MS = 15 * 60_000;
 
 export const LIFECYCLE_SERVING_ROUTE =
-  /^\/api\/apps\/([\w-]{3,64})\/lifecycle\/(processes|cases|cases\/([A-Za-z0-9_-]{1,64})|summaries\/stages|summaries\/outcomes)$/;
+  /^\/api\/apps\/([\w-]{3,64})\/lifecycle\/(processes|cases|cases\/([A-Za-z0-9_-]{1,64})|summaries\/stages|summaries\/outcomes|diagnostics)$/;
 
 type Freshness = {
   /** `unavailable` until a projection has been committed for the app. */
@@ -74,6 +65,8 @@ type Freshness = {
   lag_ms: number | null;
   generation: number | null;
   source_watermark: number | null;
+  /** Cases with accepted events not yet reflected (queued or retrying). */
+  pending_cases: number;
 };
 
 type Envelope = {
@@ -129,6 +122,7 @@ export async function lifecycleServingRoutes(
   try {
     if (endpoint === "processes") return await processes(ctx);
     if (endpoint === "cases") return await cases(ctx);
+    if (endpoint === "diagnostics") return await diagnostics(ctx);
     if (match[3]) return await detail(ctx, match[3]);
     return await summary(ctx, endpoint === "summaries/stages" ? "stages" : "outcomes");
   } catch (error) {
@@ -148,13 +142,22 @@ type Ctx = {
 };
 
 async function freshness(ctx: Ctx): Promise<{ as_of: number | null; data_freshness: Freshness }> {
-  const state = await ctx.db
-    .prepare(
-      `SELECT status, active_generation, source_watermark, as_of
-       FROM lifecycle_projection_state WHERE app_id = ?`,
-    )
-    .bind(ctx.appId)
-    .first<Pick<ProjectionState, "status" | "active_generation" | "source_watermark" | "as_of">>();
+  const [state, queued] = await Promise.all([
+    ctx.db
+      .prepare(
+        `SELECT status, active_generation, source_watermark, as_of
+         FROM lifecycle_projection_state WHERE app_id = ?`,
+      )
+      .bind(ctx.appId)
+      .first<
+        Pick<ProjectionState, "status" | "active_generation" | "source_watermark" | "as_of">
+      >(),
+    ctx.db
+      .prepare("SELECT count(*) AS n FROM lifecycle_projection_queue WHERE app_id = ?")
+      .bind(ctx.appId)
+      .first<{ n: number }>(),
+  ]);
+  const pending_cases = queued?.n ?? 0;
   if (!state || state.active_generation === 0 || state.as_of === null) {
     return {
       as_of: null,
@@ -164,6 +167,7 @@ async function freshness(ctx: Ctx): Promise<{ as_of: number | null; data_freshne
         lag_ms: null,
         generation: null,
         source_watermark: null,
+        pending_cases,
       },
     };
   }
@@ -176,6 +180,7 @@ async function freshness(ctx: Ctx): Promise<{ as_of: number | null; data_freshne
       lag_ms: lag,
       generation: state.active_generation,
       source_watermark: state.source_watermark,
+      pending_cases,
     },
   };
 }
@@ -324,6 +329,16 @@ async function summary(ctx: Ctx, kind: "stages" | "outcomes"): Promise<Response>
     suppressed: result.suppressed,
     data: result.groups,
   });
+}
+
+/** Projection health for operators: counts and codes only, never ids or payloads. */
+async function diagnostics(ctx: Ctx): Promise<Response> {
+  onlyParams(ctx.params, []);
+  const [fresh, report] = await Promise.all([
+    freshness(ctx),
+    projectionDiagnostics(ctx.db, ctx.appId),
+  ]);
+  return respond(ctx, fresh, { cohort: {}, sample_count: 0, suppressed: false, data: report });
 }
 
 function statusParam(params: URLSearchParams): "open" | "closed" | null {

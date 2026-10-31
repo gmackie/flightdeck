@@ -6,17 +6,8 @@
 -- projector's bounded working copy: accepting a lifecycle batch commits it here, in one D1
 -- transaction with its projection work, and forwards it to Basin from the outbox columns.
 -- Rows hold the validated LifecycleRecord only: opaque ids and low-cardinality codes, never
--- personal data (the ingest schema rejects personal-data keys before anything is stored).
-
--- Registered process definitions (ProcessDefinitionV1), immutable per (process, version).
-CREATE TABLE lifecycle_process_registry (
-  app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
-  process_id TEXT NOT NULL,
-  version INTEGER NOT NULL,
-  definition_json TEXT NOT NULL,
-  registered_at INTEGER NOT NULL,
-  PRIMARY KEY (app_id, process_id, version)
-) WITHOUT ROWID;
+-- personal data (the ingest schema rejects personal-data keys before anything is stored), and
+-- every row conforms to a registered process version (process_definitions, 0006).
 
 -- Accepted lifecycle events. seq is the app-independent commit order: an app's watermark is the
 -- highest seq its projection reflects. (app_id, event_id, fingerprint) dedupes exact retries; a

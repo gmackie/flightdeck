@@ -91,6 +91,19 @@ const post = (body: unknown, key: string | null = KEYS.lifecycle, init: RequestI
 const stub = () => vi.spyOn(sinks, "lifecycle").mockResolvedValue();
 const sent = (spy: ReturnType<typeof stub>, call = 0): LifecycleRecord[] =>
   spy.mock.calls[call]?.[1] ?? [];
+const logRows = async (eventId: string) =>
+  (
+    await env.DB.prepare(
+      `SELECT forwarded_at, forward_attempts, forward_error FROM lifecycle_event_log
+       WHERE event_id = ?`,
+    )
+      .bind(eventId)
+      .all<{
+        forwarded_at: number | null;
+        forward_attempts: number;
+        forward_error: string | null;
+      }>()
+  ).results;
 const issues = async (res: Response) =>
   ((await res.json()) as { issues: { index: number | null; code: string }[] }).issues;
 
@@ -240,12 +253,16 @@ describe("POST /v1/lifecycle/events ingestion", () => {
     ]);
   });
 
-  it("accepts a retried batch again: dedup is downstream on (app_id, event_id)", async () => {
+  it("accepts a retried batch again and dedupes it in the evidence log on (app_id, event_id)", async () => {
     const send = stub();
     const batch = { events: [event()] };
     expect((await post(batch)).status).toBe(200);
     expect((await post(batch)).status).toBe(200);
-    expect(sent(send, 0)[0]?.event_id).toBe(sent(send, 1)[0]?.event_id);
+    const stored = await logRows(batch.events[0]?.eventId as string);
+    expect(stored).toHaveLength(1);
+    // Forwarded to Basin once: the retry found the row already sent.
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(stored[0]?.forwarded_at).not.toBeNull();
   });
 
   it("enforces batch, event and body limits", async () => {
@@ -280,15 +297,31 @@ describe("POST /v1/lifecycle/events ingestion", () => {
     expect(lifecycle).toHaveBeenCalledTimes(1);
   });
 
-  it("answers 503 with a long Retry-After while the stream is not bound", async () => {
+  it("accepts into the evidence log while the stream is not bound; Basin stays pending", async () => {
     // No stub: the test Worker has no LIFECYCLE_EVENTS binding, as in an unprovisioned deploy.
-    const res = await post({ events: [event()] });
-    expect(res.status).toBe(503);
-    expect(res.headers.get("Retry-After")).toBe("60");
+    const e = event();
+    const res = await post({ events: [e] });
+    expect(res.status).toBe(200);
+    const [row] = await logRows(e.eventId);
+    expect(row).toMatchObject({ forwarded_at: null, forward_attempts: 0, forward_error: null });
   });
 
-  it("reports sink failures as retryable without echoing internals", async () => {
+  it("keeps an accepted event in the outbox for retry when the stream send fails", async () => {
     vi.spyOn(sinks, "lifecycle").mockRejectedValue(new Error(`boom ${KEYS.lifecycle}`));
+    const e = event();
+    const res = await post({ events: [e] });
+    expect(res.status).toBe(200);
+    const [row] = await logRows(e.eventId);
+    expect(row).toMatchObject({
+      forwarded_at: null,
+      forward_attempts: 1,
+      forward_error: "send_failed",
+    });
+  });
+
+  it("reports evidence-log failures as retryable without echoing internals", async () => {
+    stub();
+    vi.spyOn(env.DB, "batch").mockRejectedValue(new Error(`boom ${KEYS.lifecycle}`));
     const res = await post({ events: [event()] });
     expect(res.status).toBe(503);
     expect(res.headers.get("Retry-After")).toBe("5");
@@ -381,9 +414,7 @@ describe("Ingest.trackLifecycle / ingestLifecycleBatch", () => {
     expect(message).not.toContain("3.25");
   });
 
-  it("throws a retryable error while the stream is not bound", async () => {
-    expect(await rpcError(() => rpc("app_lc_rpc").trackLifecycle(event()))).toMatch(
-      /^lifecycle unavailable/,
-    );
+  it("accepts while the stream is not bound: the evidence log is the commit point", async () => {
+    expect(await rpc("app_lc_rpc").trackLifecycle(event())).toEqual({ accepted: 1 });
   });
 });

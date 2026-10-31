@@ -16,6 +16,8 @@
     ]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionDO", "AppDO"] }],
+  // Retries lifecycle projection and Basin forwarding (src/lifecycle-projection/schedule.ts).
+  "triggers": { "crons": ["*/5 * * * *"] },
   "d1_databases": [
     {
       "binding": "DB",
