@@ -32,3 +32,46 @@ binding.
 The `app_flightdeck` row has no `access_aud`, so its Access identities are checked
 against `ACCESS_AUD`. That rejects JWTs minted for other Access applications in the
 team. When `ACCESS_AUD` is empty, the audience isn't checked, as before.
+
+Server-side, the live and trends APIs record a `query.run` event with only
+`{ endpoint, range }` (no user data), fire and forget under `ctx.waitUntil`.
+
+## Live view
+
+`GET /api/apps/:id/live?hours=N` (N from 1 to 24, default 2) returns the snapshots of the
+last N hour shards (AppDOs), newest first: totals by kind, top counters, transitions,
+unique sessions and per-minute event counts. Every `/api/apps/:id/*` read checks that the
+app is registered first, and shard names come from the verified id and the server clock
+only.
+
+- **Active sessions** are distinct sessions whose latest event (by event time) is within
+  the last 5 minutes. In the first 5 minutes of an hour the window spans two shards, so
+  the API unions their session ids rather than adding counts.
+- **Events per minute** is the mean of the last 5 complete minutes.
+- **Page views this hour** counts `page` events since the top of the UTC hour.
+
+`GET /api/apps/:id/live/ws` hands an Access-checked, same-origin WebSocket upgrade to the
+current hour's AppDO, which holds it with the Hibernation API. Each ingest broadcasts a
+compact delta (increments plus absolute session counts), coalesced to at most one message
+per second. The DO closes its sockets with code 4000 once its hour is flushed, and the
+client also reconnects a moment after each hour turns. The client sends `ping` every
+30 seconds (answered by an auto-response, without waking the DO), reconnects with
+exponential backoff, and polls the snapshot every 10 seconds while the socket is down
+(every 60 seconds while it is up, to correct drift).
+
+## Trends and the warm tier
+
+Each AppDO flushes its hour into D1 (`hourly_rollups`, `hourly_sessions`; migration 0004)
+by alarm 10 minutes after the hour ends. Events that arrive later re-arm a flush a minute
+out. A flush deletes and rewrites the app-hour in one batch, so re-flushing is idempotent.
+An hour keeps at most 1,000 names; the rest fold into one `$other` row per kind.
+
+This deviates from the design, where a cron runs Basin SQL over closed hours. Backfilling
+or repairing rollups from the Iceberg tables with Basin SQL is a follow-up.
+
+`GET /api/apps/:id/trends?range=24h|7d|30d&breakdown=kind|name|page&kind=...` reads D1
+for older hours and the AppDOs for the previous and current hour (they stay authoritative
+until they expire). Buckets are UTC hours for `24h` and UTC days otherwise. The top five
+series are returned individually, the rest as `$other`. `breakdown=page` is page views by
+path; `breakdown=name` without a `kind` skips page views. `totals.sessions` sums each
+hour's unique sessions, so a session spanning hours counts once per hour.
