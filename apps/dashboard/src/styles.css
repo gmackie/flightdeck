@@ -196,3 +196,99 @@ code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
 }
+
+.fd-card-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.fd-card-flush .fd-card-title {
+  margin: 0;
+  padding: 1rem 1.25rem 0.75rem;
+}
+
+.fd-card-title h2 {
+  margin: 0;
+}
+
+.fd-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 1.25rem;
+}
+
+.fd-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.fd-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fd-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fd-table-empty {
+  margin: 0;
+  padding: 0 1.25rem 1.25rem;
+}
+
+.fd-connection .fd-dot {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}
+
+.fd-connection[data-status="open"] .fd-dot {
+  animation: fd-pulse 2s ease-in-out infinite;
+}
+
+.fd-pulse {
+  animation: fd-pulse 2s ease-in-out infinite;
+}
+
+@keyframes fd-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fd-pulse,
+  .fd-connection[data-status="open"] .fd-dot {
+    animation: none;
+  }
+}
+
+.fd-chart-loading {
+  display: grid;
+  place-items: center;
+}
+
+.fd-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin-top: 1rem;
+}
+
+.fd-legend > div {
+  cursor: pointer;
+}

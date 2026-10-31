@@ -193,7 +193,7 @@ describe("ingestBatch", () => {
       ["2026-10-30T13", 1],
     ]);
     expect(calls.counts[1]?.[2]).toEqual([
-      { kind: "page", name: "/users/:id", path: "/users/:id", session_id: sid("a") },
+      { kind: "page", name: "/users/:id", path: "/users/:id", session_id: sid("a"), ts: lastHour },
     ]);
   });
 
@@ -260,6 +260,26 @@ describe("ingestBatch", () => {
     );
     expect(res).toEqual({ accepted: 0, rejected: 3 });
     expect(calls).toEqual({ events: [], sessions: [], counts: [] });
+  });
+
+  it("rejects custom names starting with $, which Flightdeck reserves", async () => {
+    const { deps, calls } = fakeDeps();
+    const res = await ingestBatch(
+      "app_1",
+      {
+        events: [
+          page({ kind: "track", name: "$other", path: null }),
+          page({ kind: "click", name: "$start", path: null }),
+          page({ kind: "track", name: "signup$", path: null }),
+          // Page names are paths, so the rule does not apply to them.
+          page({ name: "$weird", path: "/$weird" }),
+        ],
+      },
+      "browser",
+      deps,
+    );
+    expect(res).toEqual({ accepted: 2, rejected: 2 });
+    expect(calls.events[0]?.map((r) => r.name)).toEqual(["signup$", "/$weird"]);
   });
 
   it("rejects events whose serialized props exceed the size cap", async () => {

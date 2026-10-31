@@ -69,7 +69,7 @@ export class SessionDO extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(Date.now() + IDLE_MS);
     await Promise.all(
       [...byHour].map(([hour, transitions]) =>
-        appShard(this.env, appId, hour).recordTransitions(hour, [...transitions.values()]),
+        appShard(this.env, appId, hour).recordTransitions(appId, hour, [...transitions.values()]),
       ),
     );
   }
@@ -87,7 +87,7 @@ export class SessionDO extends DurableObject<Env> {
       const exit = state.steps.at(-1);
       if (exit) {
         const hour = hourKey(state.lastTs);
-        await appShard(this.env, state.appId, hour).recordTransitions(hour, [
+        await appShard(this.env, state.appId, hour).recordTransitions(state.appId, hour, [
           { source: exit, target: EXIT, count: 1 },
         ]);
       }
