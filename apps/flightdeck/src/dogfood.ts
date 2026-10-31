@@ -20,14 +20,15 @@ export async function dogfood(request: Request, ctx: ExecutionContext): Promise<
   return res ?? new Response("Not found", { status: 404 });
 }
 
-/** Records a server-side app_flightdeck event after the response; failures are only logged. */
+/** Records a server-side app_flightdeck event after the response; failures log only the name. */
 export function trackDogfood(ctx: ExecutionContext, name: string, props?: Props): void {
   ctx.waitUntil(
     ingest(ctx)
       .track({ name, ...(props ? { props } : {}) })
       .then(
         () => {},
-        (error: unknown) => console.error("Flightdeck dogfood event failed", error),
+        // Log the event name only: the error could carry sink internals.
+        () => console.error("Flightdeck dogfood event failed", name),
       ),
   );
 }

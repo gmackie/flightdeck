@@ -33,6 +33,7 @@ it("rejects another Access application's token for dogfood identities", async ()
       .setSubject("user-1")
       .setIssuer(TEAM)
       .setAudience(aud)
+      .setIssuedAt()
       .setExpirationTime("5m")
       .sign(pair.privateKey);
   const audience = accessAudience({ ACCESS_AUD: "aud-dash" }, app("app_flightdeck"));

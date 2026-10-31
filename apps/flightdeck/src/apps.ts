@@ -22,3 +22,8 @@ export async function getApp(
 export function clearAppCache(): void {
   cache.clear();
 }
+
+/** Drops one id so a just-registered app is not hidden behind a cached miss in this isolate. */
+export function forgetApp(id: string): void {
+  cache.delete(id);
+}

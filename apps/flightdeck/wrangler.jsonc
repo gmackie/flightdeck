@@ -30,6 +30,12 @@
   ],
   // Cloudflare Access must protect every hostname that serves the dashboard and /api/*,
   // including the workers.dev one; otherwise disable workers_dev and use a custom domain.
-  // ACCESS_AUD is the dashboard's Access application audience (AUD tag).
-  "vars": { "ACCESS_TEAM_DOMAIN": "", "ACCESS_AUD": "", "FLIGHTDECK_DEV": "0" }
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "",
+    // The dashboard's Access application audience (AUD tag); /api/* requires it.
+    "ACCESS_AUD": "",
+    // This Worker's name, echoed in the service bindings /api/apps hands out.
+    "FLIGHTDECK_WORKER_NAME": "flightdeck",
+    "FLIGHTDECK_DEV": "0"
+  }
 }
