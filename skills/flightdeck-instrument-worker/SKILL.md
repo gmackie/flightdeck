@@ -12,16 +12,16 @@ Work in a worktree (`worktrunk-worktrees` skill). You own the worker entry, wran
 ## 1. Preconditions
 
 - Find the deployable Worker: the `wrangler.*` whose `main` serves the app, and every env/stage config (top-level `env.*` blocks, `wrangler.<stage>.*` files, or generated configs). See [references/wrangler-bindings.md](references/wrangler-bindings.md).
-- SDK: `npm view @flightdeckhq/worker version` must succeed, or the coordinator (FLIG-13) must have given you a tarball or workspace path to install from. Otherwise stop and report. Never vendor copies of the SDK.
-- Install: `pnpm add @flightdeckhq/worker` (or `pnpm add <tarball-or-path>` as the coordinator says) in the Worker's package.
+- Install the SDK from npm in the Worker's package: `pnpm add @flightdeckhq/worker` (or the repo's package manager). It ships compiled ESM with types; it uses the repo's own Workers types, so nothing else is needed.
+- Until 0.1.0 is published, `npm view @flightdeckhq/worker version` returns 404. If it does, stop and report on FLIG-14 (the npm release). Never vendor copies of the SDK or install it from a Flightdeck checkout.
 
 ## 2. Register the app
 
 Use the appIds in your brief if the coordinator already registered the app. Otherwise run the registration CLI ([references/registration.md](references/registration.md) covers installing it, `FLIGHTDECK_URL` and Cloudflare Access auth):
 
 ```bash
-create-flightdeck apps add <name> --stage production --json
-create-flightdeck apps add <name> --stage staging --json
+npx create-flightdeck apps add <name> --stage production --json
+npx create-flightdeck apps add <name> --stage staging --json
 ```
 
 Each returns `{ app: { id, name, created_at }, binding: { binding: "FLIGHTDECK", service: "flightdeck", entrypoint: "Ingest", props: { appId } } }`. Ids are `app_<slug>` for production and `app_<slug>_<stage>` otherwise. Production gets its own appId; staging, beta, PR previews and one-boxes all bind the **staging** appId. Record both ids for the status table.

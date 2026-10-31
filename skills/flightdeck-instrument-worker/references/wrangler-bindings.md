@@ -5,7 +5,7 @@ The binding is a service binding to the `Ingest` entrypoint of the `flightdeck` 
 | Stage | appId |
 |---|---|
 | production | `app_<slug>` |
-| staging, beta, preview, PR previews, one-box | `app_<slug>_staging` (the id `create-flightdeck apps add <name> --stage staging` returned) |
+| staging, beta, preview, PR previews, one-box | `app_<slug>_staging` (the id `npx create-flightdeck apps add <name> --stage staging` returned) |
 | local dev (top-level config, no env) | the staging appId |
 
 ## wrangler.jsonc

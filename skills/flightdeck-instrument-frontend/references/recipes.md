@@ -64,12 +64,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
-Until Flightdeck publishes compiled builds, the package ships TypeScript sources, so add it to `next.config`:
-
-```ts
-const nextConfig = { transpilePackages: ["@flightdeckhq/browser"] };
-```
-
 App router navigations use `history.pushState`/`replaceState`; page views are automatic. Server components can carry `data-flightdeck` attributes directly; they need no client boundary.
 
 ## Vite SPA (React or otherwise)
