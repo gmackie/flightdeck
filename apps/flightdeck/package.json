@@ -3,12 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "build:dashboard": "pnpm --filter @flightdeckhq/dashboard build",
+    "dev": "pnpm build:dashboard && wrangler dev",
+    "deploy": "pnpm build:dashboard && wrangler deploy",
     "typecheck": "wrangler types --strict-vars false && tsc -p ."
   },
   "dependencies": {
     "@flightdeckhq/schema": "workspace:*",
+    "@flightdeckhq/worker": "workspace:*",
     "jose": "^6.2.14",
     "ulid": "^3.0.2",
     "valibot": "^1.5.0"
