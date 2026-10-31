@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, type JWTVerifyGetKey, jwtVerify } from "jose";
+import { createRemoteJWKSet, type JWTPayload, type JWTVerifyGetKey, jwtVerify } from "jose";
 
 const remoteKeys = new Map<string, JWTVerifyGetKey>();
 
@@ -20,11 +20,13 @@ function teamKeys(teamDomain: string): JWTVerifyGetKey {
   return keys;
 }
 
-/** The Access user id (`sub`) when the token is valid for this team and audience, else null. */
-export async function verifyAccessUser(
-  token: string,
-  opts: { teamDomain: string; audience?: string | null; keys?: JWTVerifyGetKey },
-): Promise<string | null> {
+/** An authenticated Access caller: a person (`email`) or a service token (`common_name`). */
+export type AccessPrincipal = { sub: string; email?: string; serviceToken: boolean };
+
+type AccessOpts = { teamDomain: string; audience?: string | null; keys?: JWTVerifyGetKey };
+
+/** The token's claims when it is valid for this team and audience, else null. */
+async function verifyAccessToken(token: string, opts: AccessOpts): Promise<JWTPayload | null> {
   const teamDomain = normalizeTeamDomain(opts.teamDomain);
   try {
     const { payload } = await jwtVerify(token, opts.keys ?? teamKeys(teamDomain), {
@@ -32,8 +34,31 @@ export async function verifyAccessUser(
       algorithms: ["RS256"],
       ...(opts.audience ? { audience: opts.audience } : {}),
     });
-    return typeof payload.sub === "string" && payload.sub ? payload.sub : null;
+    return payload;
   } catch {
     return null;
   }
+}
+
+/** The Access user id (`sub`) when the token is valid for this team and audience, else null. */
+export async function verifyAccessUser(token: string, opts: AccessOpts): Promise<string | null> {
+  const payload = await verifyAccessToken(token, opts);
+  return typeof payload?.sub === "string" && payload.sub ? payload.sub : null;
+}
+
+/** Users carry `sub` + `email`; service tokens carry `common_name` (the client id) and an empty `sub`. */
+export async function verifyAccessPrincipal(
+  token: string,
+  opts: AccessOpts & { audience: string },
+): Promise<AccessPrincipal | null> {
+  const payload = await verifyAccessToken(token, opts);
+  if (!payload) return null;
+  const { sub, email, common_name: commonName } = payload;
+  if (typeof sub === "string" && sub && typeof email === "string" && email) {
+    return { sub, email, serviceToken: false };
+  }
+  if (typeof commonName === "string" && commonName) {
+    return { sub: commonName, serviceToken: true };
+  }
+  return null;
 }
