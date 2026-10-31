@@ -15,6 +15,7 @@ import { appShard, sessionStub } from "../do/shards";
 import { DOGFOOD_APP_ID } from "../dogfood";
 import { LifecycleProjector } from "../lifecycle-projection/projector";
 import { appendLifecycle, forwardOutbox } from "../lifecycle-projection/store";
+import { limits } from "../limits";
 import { getDefinitions, registerDefinition } from "../processes";
 import { sinks } from "../sinks";
 import {
@@ -22,6 +23,7 @@ import {
   type LifecycleDeps,
   LifecycleForbidden,
   LifecycleRejected,
+  LifecycleThrottled,
 } from "./lifecycle";
 import { lifecycleGranted } from "./server-auth";
 import { type IngestDeps, IngestError, ingestBatch } from "./service";
@@ -104,6 +106,7 @@ export class Ingest extends WorkerEntrypoint<Env, IngestProps> implements Ingest
     const app = await getApp(this.env.DB, appId);
     if (!app) throw new IngestError(`unknown app ${appId}`);
     if (!(await lifecycleGranted(this.env.DB, appId))) throw new LifecycleForbidden();
+    if (!(await limits.lifecycle(this.env, appId))) throw new LifecycleThrottled();
     return appId;
   }
 }
