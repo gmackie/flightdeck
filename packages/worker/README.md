@@ -46,8 +46,10 @@ failing open, so send them from an outbox:
 ```ts
 import { flightdeckLifecycle, isPermanentLifecycleError } from "@flightdeckhq/worker";
 
+const lifecycle = flightdeckLifecycle(env);
+await lifecycle.registerProcess(definition); // a ProcessDefinitionV1; idempotent per version
 try {
-  await flightdeckLifecycle(env).ingestLifecycleBatch({ events }); // accepted or rejected whole
+  await lifecycle.ingestLifecycleBatch({ events }); // accepted or rejected whole
 } catch (error) {
   if (isPermanentLifecycleError(error)) quarantine(events); // else retry later, same event ids
 }

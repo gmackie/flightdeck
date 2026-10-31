@@ -29,6 +29,7 @@ describe("isPermanentLifecycleError", () => {
       "lifecycle forbidden: lifecycle.write is not granted",
       "Network connection lost.",
       "lifecycle rejected (future_occurred_at) at events[0]: occurredAt is ahead of the server clock",
+      "lifecycle rejected (unknown_process) at events[0]: process deploy@2 is not registered",
     ]) {
       expect(isPermanentLifecycleError(new Error(message)), message).toBe(false);
     }

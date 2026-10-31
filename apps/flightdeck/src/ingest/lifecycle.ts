@@ -1,10 +1,12 @@
 import {
+  checkAgainstDefinition,
   LIFECYCLE_SCHEMA_VERSION,
   LifecycleBatch,
   type LifecycleChannel,
   LifecycleEventV1,
   type LifecycleIngestResult,
   type LifecycleRecord,
+  type ProcessDefinitionV1,
   prohibitedKeys,
 } from "@flightdeckhq/schema";
 import * as v from "valibot";
@@ -24,14 +26,19 @@ export type LifecycleIssueCode =
   | "event_too_large"
   | "invalid_event"
   | "future_occurred_at"
-  | "duplicate_event_id";
+  | "duplicate_event_id"
+  | "unknown_process"
+  | "nonconforming_event"
+  | "invalid_definition"
+  | "definition_conflict";
 
 /** `index` is the event's position in the batch, or null for envelope issues. Never echoes values. */
 export type LifecycleIssue = { index: number | null; code: LifecycleIssueCode; message: string };
 
 /**
- * Retrying the same batch fails the same way: fix or quarantine the events. The exception is
- * `future_occurred_at` (producer clock skew), which succeeds once Flightdeck's clock catches up.
+ * Retrying the same batch fails the same way: fix or quarantine the events. The exceptions are
+ * `future_occurred_at` (producer clock skew), which succeeds once Flightdeck's clock catches up,
+ * and `unknown_process`, which succeeds once the producer registers the process version.
  */
 export class LifecycleRejected extends Error {
   constructor(readonly issues: LifecycleIssue[]) {
@@ -62,6 +69,8 @@ export interface LifecycleDeps {
   now(): number;
   /** The commit point: once this resolves the whole batch is accepted. */
   send(rows: LifecycleRecord[]): Promise<void>;
+  /** Registered definitions among `processId@version` keys for the app. */
+  definitions(keys: string[]): Promise<Map<string, ProcessDefinitionV1>>;
 }
 
 const encoder = new TextEncoder();
@@ -84,7 +93,7 @@ export async function ingestLifecycle(
   }
   const receivedAt = deps.now();
   const issues: LifecycleIssue[] = [];
-  const events: LifecycleEventV1[] = [];
+  const events: { index: number; event: LifecycleEventV1 }[] = [];
   const seen = new Set<string>();
   envelope.output.events.forEach((raw, index) => {
     const result = checkEvent(raw, receivedAt);
@@ -97,11 +106,26 @@ export async function ingestLifecycle(
       return;
     }
     seen.add(result.eventId);
-    events.push(result);
+    events.push({ index, event: result });
   });
   if (issues.length) throw new LifecycleRejected(issues.slice(0, MAX_ISSUES));
 
-  const rows = events.map((e) => toRecord(appId, e, receivedAt, channel));
+  // Every event must conform to its registered process version (stages, dimensions, objects).
+  const key = (e: LifecycleEventV1) => `${e.processId}@${e.processVersion}`;
+  const definitions = await deps.definitions(events.map(({ event }) => key(event)));
+  for (const { index, event } of events) {
+    const definition = definitions.get(key(event));
+    if (!definition) {
+      const message = `process ${key(event)} is not registered`;
+      issues.push({ index, code: "unknown_process", message });
+      continue;
+    }
+    const problem = checkAgainstDefinition(event, definition)[0];
+    if (problem) issues.push({ index, code: "nonconforming_event", message: safeText(problem) });
+  }
+  if (issues.length) throw new LifecycleRejected(issues.slice(0, MAX_ISSUES));
+
+  const rows = events.map(({ event }) => toRecord(appId, event, receivedAt, channel));
   await deps.send(rows);
   return { accepted: rows.length };
 }
@@ -158,6 +182,8 @@ function describe(issue: v.BaseIssue<unknown> | undefined): string {
 
 /** Keys and paths may come from the producer: keep them short and printable. */
 const safe = (text: string | undefined) => (text ?? "").replace(/[^\w.[\]-]/g, "?").slice(0, 64);
+/** Definition problems name keys (stages, dimensions, types), never values. */
+const safeText = (text: string) => text.replace(/[^\w .@[\]-]/g, "?").slice(0, MAX_MESSAGE);
 
 function toRecord(
   appId: string,

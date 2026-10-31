@@ -8,6 +8,8 @@ export type {
   LifecycleEventInput,
   LifecycleIngestResult,
   LifecycleRpc,
+  ProcessDefinitionV1,
+  ProcessRegistration,
 } from "@flightdeckhq/schema";
 export { flightdeckLifecycle, isPermanentLifecycleError } from "./lifecycle.js";
 export type { PrivacyOptions } from "./privacy.js";
