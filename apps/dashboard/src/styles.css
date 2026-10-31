@@ -1,0 +1,198 @@
+/* Kumo's precompiled stylesheet: no Tailwind build needed. */
+@import "@cloudflare/kumo/styles/standalone";
+
+/* Layout for the dashboard shell. Colors come from Kumo's tokens, so light and dark both work. */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-kumo-canvas);
+  color: var(--text-color-kumo-default);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.fd-shell {
+  min-height: 100%;
+}
+
+.fd-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  color: var(--text-color-kumo-strong);
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.fd-brand:focus-visible {
+  outline: 2px solid var(--color-kumo-focus);
+  outline-offset: 2px;
+}
+
+.fd-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fd-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 3.5rem;
+  padding: 0 1.5rem 0 0.75rem;
+  border-bottom: 1px solid var(--color-kumo-line);
+  background: var(--color-kumo-base);
+}
+
+.fd-app-switcher {
+  margin-left: auto;
+}
+
+.fd-app-select {
+  min-width: 14rem;
+}
+
+.fd-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 1.75rem 1.5rem 3rem;
+  box-sizing: border-box;
+}
+
+.fd-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.fd-page-header h1 {
+  margin: 0 0 0.25rem;
+}
+
+.fd-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fd-card {
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+.fd-card-flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+.fd-centered {
+  display: grid;
+  place-items: center;
+  min-height: 18rem;
+}
+
+.fd-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem;
+}
+
+.fd-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.fd-stat p {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.fd-segmented {
+  display: inline-flex;
+  gap: 0.125rem;
+  padding: 0.125rem;
+  border: 1px solid var(--color-kumo-line);
+  border-radius: 0.5rem;
+  background: var(--color-kumo-base);
+}
+
+.fd-app-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.fd-cell-actions {
+  text-align: right;
+}
+
+.fd-dialog {
+  padding: 1.5rem;
+}
+
+.fd-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.fd-dialog-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.fd-dialog-body {
+  margin: 0 0 1rem;
+  color: var(--text-color-kumo-subtle);
+  line-height: 1.5;
+}
+
+.fd-figure {
+  margin: 0;
+}
+
+.fd-code {
+  margin: 0;
+  padding: 0.875rem 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--color-kumo-line);
+  border-radius: 0.5rem;
+  background: var(--color-kumo-recessed);
+  font:
+    0.8125rem / 1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
