@@ -100,11 +100,12 @@ async function fanOut(appId: string, rows: StoredEvent[], deps: IngestDeps): Pro
   }
 }
 
-const toCounterRow = ({ kind, name, path, session_id }: StoredEvent): CounterRow => ({
+const toCounterRow = ({ kind, name, path, session_id, ts }: StoredEvent): CounterRow => ({
   kind,
   name,
   path,
   session_id,
+  ts,
 });
 
 function summarize(issue: v.BaseIssue<unknown> | undefined): string {

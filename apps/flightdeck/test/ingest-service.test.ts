@@ -193,7 +193,7 @@ describe("ingestBatch", () => {
       ["2026-10-30T13", 1],
     ]);
     expect(calls.counts[1]?.[2]).toEqual([
-      { kind: "page", name: "/users/:id", path: "/users/:id", session_id: sid("a") },
+      { kind: "page", name: "/users/:id", path: "/users/:id", session_id: sid("a"), ts: lastHour },
     ]);
   });
 
