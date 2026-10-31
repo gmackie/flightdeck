@@ -538,3 +538,27 @@ describe("options resolved per request from env", () => {
     expect(ingest).toHaveBeenCalledOnce();
   });
 });
+
+describe("an options function that throws", () => {
+  const throwing = () => {
+    throw new Error("FLIGHTDECK_USER_SALT is not set");
+  };
+
+  it("never breaks other requests through withFlightdeck", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const env = fakeEnv();
+    const handler = withFlightdeck({ fetch: async () => new Response("app") }, throwing);
+    const ctx = {} as ExecutionContext;
+    const page = await handler.fetch?.(new Request(`${ORIGIN}/`) as never, env, ctx);
+    expect(await page?.text()).toBe("app");
+    const fd = await handler.fetch?.(post('{"events":[]}') as never, env, ctx);
+    expect(fd?.status).toBe(500);
+    expect(env.ingest).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
+  it("makes flightdeck() throw, for the caller's fail-open handling", () => {
+    expect(() => flightdeck(fakeEnv(), throwing)).toThrow(/FLIGHTDECK_USER_SALT/);
+  });
+});

@@ -76,8 +76,17 @@ export async function handleFlightdeck<E extends object>(
   env: E,
   input?: FlightdeckOptionsInput<E>,
 ): Promise<Response | null> {
-  const options = resolve(input, env);
   const url = new URL(request.url);
+  let options: FlightdeckOptions;
+  try {
+    options = resolve(input, env);
+  } catch (err) {
+    // A failing options function must not break the app. Without options the endpoint path is
+    // unknown, so only the default path answers, and its events are dropped.
+    if (url.pathname !== DEFAULT_PATH) return null;
+    console.error("Flightdeck: options function threw; events dropped", err);
+    return new Response(null, { status: 500 });
+  }
   if (url.pathname !== (options.path ?? DEFAULT_PATH)) return null;
   if (request.method !== "POST")
     return new Response(null, { status: 405, headers: { Allow: "POST" } });
