@@ -1,4 +1,4 @@
-# Lifecycle serving read model (not live)
+# Lifecycle serving read model (integrated, not deployed)
 
 Status: **library only.** The tables, repository and route handler exist and are tested against
 D1, but nothing writes to them and nothing routes to them. No projector, ingestion source or
@@ -60,19 +60,15 @@ Unknown or repeated parameters are 400s. Aggregate groups with fewer than `minCo
 floor 2) distinct cases are withheld and `suppressed` is set; `sample_count` counts only released
 cases. Open intervals are censored: counted, never included in dwell.
 
-## Integration hook
+## Routing and projection
 
-Authorization is injected and **denies by default**. Once the RBAC module (FLIG-18) lands, the
-`/api/*` dispatcher wires it after `authenticate()`:
+The `/api/*` dispatcher (`src/api/index.ts`) calls `lifecycleServingRoutes` after
+`authenticate()`, with `authorizeLifecycleRead` (FLIG-18) as the authorizer, before the reserved
+lifecycle namespace (`policy`, `projection`). The handler authorizes before validating anything,
+fails closed (503) if the checker throws, and refuses a scope for a different app. Unknown and
+ungranted apps get the same 403. `diagnostics` (`lifecycle:read`) reports projection health as
+counts and codes, and `data_freshness.pending_cases` counts cases with accepted events not yet
+reflected.
 
-```ts
-const served = await lifecycleServingRoutes(request, env, principal, {
-  authorize: ({ principal, appId, capability }) =>
-    authorizeLifecycleRead(env, principal, appId, capability),
-});
-if (served) return served;
-```
-
-The handler authorizes before validating anything, fails closed (503) if the checker throws,
-and refuses a scope for a different app. A projector from the lifecycle reducer is the other
-missing piece.
+The projector (`src/lifecycle-projection`) fills these tables from accepted lifecycle events;
+see [lifecycle-projection.md](lifecycle-projection.md).

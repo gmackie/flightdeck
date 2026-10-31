@@ -134,9 +134,9 @@ Use the same Cloudflare account and D1 database as the rest of Flightdeck.
    { "binding": "LIFECYCLE_EVENTS", "stream": "<id printed in step 2>" }
    ```
 
-   Never commit a made-up id. Until the binding exists, lifecycle writes answer **503** with
-   `Retry-After: 60` (RPC: `lifecycle unavailable`) and nothing else changes, so producers with
-   an outbox keep their events.
+   Never commit a made-up id. Until the binding exists, accepted lifecycle events wait in
+   Flightdeck's D1 evidence log and are forwarded to the stream once it is bound (see
+   [lifecycle-projection.md](lifecycle-projection.md#basin-outbox)).
 
 4. **Grant the app** (the app must already be registered):
 
@@ -178,8 +178,8 @@ await lifecycle.trackLifecycle(event); // one event
 ```
 
 These do not fail open, unlike `track`. A thrown error means nothing was stored. Errors
-starting with `lifecycle rejected (<code>)` are permanent. `lifecycle forbidden` (no grant),
-`lifecycle unavailable` (stream not bound) and transport errors are retryable.
+starting with `lifecycle rejected (<code>)` are permanent. `lifecycle forbidden` (no grant)
+and transport errors are retryable.
 `isPermanentLifecycleError` tells them apart.
 
 ### HTTP (trusted servers)
@@ -199,7 +199,7 @@ Content-Type: application/json
 | 401 | Missing, unknown, expired or revoked key. | Stop; rotate the key. |
 | 403 | Key lacks `lifecycle.write`, or the app lacks the grant. | Stop; fix provisioning. Retry later without losing events. |
 | 413 / 415 | Body over 256 KiB, or not `application/json`. | Send smaller batches / fix the client. |
-| 503 + `Retry-After` | Stream not bound (60 s) or sink unavailable (5 s). | Retry with backoff and the same event ids. |
+| 503 + `Retry-After` | Evidence log (D1) unavailable (5 s). | Retry with backoff and the same event ids. |
 
 Issue codes: `invalid_envelope`, `unsupported_schema_version`, `prohibited_key`,
 `event_too_large` (8 KiB serialized), `invalid_event`, `future_occurred_at`,
@@ -220,10 +220,12 @@ Order a case's events by `(occurred_at, source_sequence)`.
 
 ## Delivery and dedup
 
-- **At least once.** A 200 or resolved RPC means the batch reached the stream. A timeout or 503
-  can follow a successful write, so retries can store a row twice.
-- **Dedup key `(app_id, event_id)`.** Readers keep one row per key (prefer the earliest
-  `received_at`). Producers must never reuse an event id for a different fact, and must resend
+- **At least once.** A 200 or resolved RPC means the batch is committed to Flightdeck's D1
+  evidence log, which then forwards it to the stream (an outbox, retried until it succeeds). A
+  timeout or 503 can follow a successful write, so retries can deliver a row twice.
+- **Dedup key `(app_id, event_id)`.** The evidence log stores an exact retry once; a reused id
+  with a different payload is kept and reported as a conflict. Basin readers keep one row per key
+  (prefer the earliest `received_at`). Producers must never reuse an event id for a different fact, and must resend
   the same id for the same fact. Retrying a batch is safe.
 - **All or nothing.** One invalid event rejects its batch, so a checkpoint never silently skips
   an event.
@@ -250,8 +252,8 @@ values to quarantine.
 Basin structured streams can **accept a record and then drop it** if it does not match the
 stream schema, so a 200 is not proof the row reached Iceberg. Flightdeck checks every row
 against `pipelines/lifecycle_events.schema.json` before sending (`streamProblems` in
-`src/sinks.ts`) and fails the batch with a retryable 503 rather than sending a row Basin would
-drop. Tests pin the record type to the schema file. If you change one, change both, and
+`src/sinks.ts`) and leaves the rows pending in the outbox (`forward_error = 'send_failed'`,
+retried with backoff) rather than sending a row Basin would drop. Tests pin the record type to the schema file. If you change one, change both, and
 update the provisioned stream (or create a new one) in the same release.
 
 Still monitor it:
@@ -262,8 +264,8 @@ Still monitor it:
 - Reconcile counts: per hour, compare producers' accepted counts (or the outbox's `sent_at`
   rows) with `SELECT count(DISTINCT event_id) FROM flightdeck.lifecycle_events` over
   `received_at`, allowing for the sink's 60 s roll interval.
-- Worker logs carry no payloads. A 503 burst after a deploy suggests a schema mismatch or a
-  missing binding.
+- Worker logs carry no payloads. A growing `event_log.unforwarded` count in
+  `/api/apps/:app/lifecycle/diagnostics` suggests a schema mismatch or a missing binding.
 
 ## Validate a deployment
 
