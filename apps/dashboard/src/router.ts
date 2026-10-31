@@ -1,8 +1,23 @@
 import { useSyncExternalStore } from "react";
 
-export type PageId = "live" | "trends" | "journeys" | "funnels" | "retention" | "apps";
+export type PageId =
+  | "live"
+  | "trends"
+  | "workflows"
+  | "journeys"
+  | "funnels"
+  | "retention"
+  | "apps";
 
-export const PAGES: PageId[] = ["live", "trends", "journeys", "funnels", "retention", "apps"];
+export const PAGES: PageId[] = [
+  "live",
+  "trends",
+  "workflows",
+  "journeys",
+  "funnels",
+  "retention",
+  "apps",
+];
 
 /** The selected app lives in `?app=`, so links and reloads keep it. */
 export const APP_PARAM = "app";

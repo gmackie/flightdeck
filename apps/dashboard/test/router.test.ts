@@ -6,6 +6,7 @@ beforeEach(() => history.replaceState(null, "", "/"));
 it("maps paths to pages", () => {
   expect(pageFrom("/")).toBe("live");
   expect(pageFrom("/trends")).toBe("trends");
+  expect(pageFrom("/workflows")).toBe("workflows");
   expect(pageFrom("/apps/")).toBe("apps");
   expect(pageFrom("/nope")).toBeNull();
 });
