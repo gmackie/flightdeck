@@ -37,6 +37,24 @@ export default withFlightdeck<Env>({
 - `flightdeck(env, options?)` returns the binding with `track(event)` and `identify({ userId })`.
 - Options: `binding`, `path`, `allowedOrigins`, `maxBodyBytes`, and the privacy hooks `beforeSend` and `hashUserId`. Pass a function of `env` to build them per request.
 
+## Lifecycle events
+
+For object-centric lifecycle analytics (a deploy, an application or an incident moving through
+stages), Flightdeck must grant the app `lifecycle.write` first. These calls throw instead of
+failing open, so send them from an outbox:
+
+```ts
+import { flightdeckLifecycle, isPermanentLifecycleError } from "@flightdeckhq/worker";
+
+try {
+  await flightdeckLifecycle(env).ingestLifecycleBatch({ events }); // accepted or rejected whole
+} catch (error) {
+  if (isPermanentLifecycleError(error)) quarantine(events); // else retry later, same event ids
+}
+```
+
+See [lifecycle ingestion](https://github.com/gmackie/flightdeck/tree/main/docs/operations/lifecycle-ingestion.md) and the [outbox example](https://github.com/gmackie/flightdeck/tree/main/examples/lifecycle-outbox).
+
 The package ships ESM and type declarations. It uses your project's Workers types (`wrangler types` or `@cloudflare/workers-types`) and has no other runtime dependency than `@flightdeckhq/schema`.
 
 ## Docs
