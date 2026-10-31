@@ -2,6 +2,7 @@ import type { SessionRecord, StoredEvent } from "@flightdeckhq/schema";
 import { describe, expect, it } from "vitest";
 import events from "../pipelines/events.schema.json";
 import sessions from "../pipelines/sessions.schema.json";
+import { streamRow } from "../src/sinks";
 import { row, sid, T0 } from "./fixtures";
 
 type Field = { name: string; type: string; required: boolean; unit?: string; items?: Field };
@@ -95,4 +96,11 @@ describe.each([
       expect(typeof sample[f.name], f.name).toBe("number");
     }
   });
+});
+
+it("omits nullable top-level stream fields without changing JSON props", () => {
+  const wire = streamRow({ ...event, props: { coupon: null } });
+  expect(wire).not.toHaveProperty("session_id");
+  expect(wire.props).toEqual({ coupon: null });
+  expect(wire.event_id).toBe(event.event_id);
 });

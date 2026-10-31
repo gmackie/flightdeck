@@ -1,3 +1,4 @@
+import { createExecutionContext } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { hourKey } from "@flightdeckhq/schema";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -134,6 +135,7 @@ it("hides dev routes unless FLIGHTDECK_DEV is 1", async () => {
   const res = await worker.fetch(
     new Request(`http://flightdeck.test/__dev/apps/app_e2e_dev/hours/${hourKey(Date.now())}`),
     { ...env, FLIGHTDECK_DEV: "0" },
+    createExecutionContext(),
   );
   expect(res.status).toBe(404);
 });

@@ -43,7 +43,7 @@ function serverEvent(value: unknown, fixed: { kind: string; name?: string }): un
   return { ts: Date.now(), ...value, ...fixed };
 }
 
-function deps(env: Env, ctx: ExecutionContext, app: AppRecord): IngestDeps {
+export function deps(env: Env, ctx: ExecutionContext, app: AppRecord): IngestDeps {
   const teamDomain = env.ACCESS_TEAM_DOMAIN.trim();
   return {
     now: Date.now,
