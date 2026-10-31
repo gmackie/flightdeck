@@ -71,16 +71,26 @@ export async function toSnapshot(
     return { snapshot: null, diagnostics };
   }
 
+  // The outcome of the episode-ending evidence: an explicit case termination at the end time,
+  // else a classified terminal stage entered then (its key is the outcome), else the class.
   let outcome: string | null = null;
   if (closed) {
     const terminate = effective.findLast(
-      (e) => e.type === "case.terminate" && "caseId" in e && e.caseId === facts.caseId,
+      (e) =>
+        e.type === "case.terminate" &&
+        "caseId" in e &&
+        e.caseId === facts.caseId &&
+        e.occurredAt === endedAt,
     );
-    const terminal = terminate && "terminal" in terminate ? terminate.terminal : null;
-    outcome = (terminate && facts.outcomes.get(terminate.id)) ?? terminal;
+    const terminalStage = result.stageInstances.find(
+      (s) =>
+        s.caseId === facts.caseId && s.enteredAt === endedAt && facts.terminalStages.has(s.stageId),
+    );
+    outcome =
+      (terminate && facts.outcomes.get(terminate.id)) ?? terminalStage?.stageId ?? state.terminal;
     if (outcome !== null && !SLUG.test(outcome)) {
       report("outcome_not_served");
-      outcome = terminal;
+      outcome = state.terminal;
     }
   }
 
@@ -106,6 +116,7 @@ export async function toSnapshot(
       continue;
     }
     if (stage.enteredAt === null) continue; // the engine reported the missing boundary
+    if (facts.unclassifiedTerminalStages.has(stage.stageId)) report("terminal_stage_unclassified");
     if (closed && stage.exitedAt === null) {
       report("stage_open_at_case_end");
       continue;

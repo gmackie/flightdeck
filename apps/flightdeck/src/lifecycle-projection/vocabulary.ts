@@ -61,5 +61,6 @@ export const ADAPTER_CODES = [
   "object_relation_not_served",
   "outcome_not_served",
   "too_many_intervals",
+  "terminal_stage_unclassified",
 ] as const;
 export type AdapterCode = (typeof ADAPTER_CODES)[number];

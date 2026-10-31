@@ -1,8 +1,13 @@
-import type {
-  LifecycleEvent,
-  ProcessDefinition,
-  ReplayInput,
-  StageInstanceInput,
+import {
+  id as brand,
+  type CaseId,
+  type LifecycleEvent,
+  normalizeCanonicalDefinition,
+  normalizeCanonicalEnvelope,
+  type ReplayInput,
+  type StageInstanceInput,
+  type TerminalClass,
+  terminalClasses,
 } from "@flightdeckhq/lifecycle";
 import type { LifecycleRecord, ProcessDefinitionV1 } from "@flightdeckhq/schema";
 import {
@@ -33,13 +38,21 @@ export type CaseFacts = {
   outcomes: ReadonlyMap<string, string>;
   /** `stage.exited` reason per engine `stage.exit` event id. */
   exitReasons: ReadonlyMap<string, string>;
+  /** Terminal stages (A `terminal: true`) the engine closes the case on, with their class. */
+  terminalStages: ReadonlyMap<string, TerminalClass>;
+  /** Terminal stages without a class: they do not end the case and are reported when entered. */
+  unclassifiedTerminalStages: ReadonlySet<string>;
 };
 
 export type AdaptedCase = { input: ReplayInput; facts: CaseFacts | null; issues: AdapterIssue[] };
 
 type Draft = Record<string, unknown> & { id: string; type: string };
 /** An engine envelope before branding; ids are cast once, when the input is assembled. */
-type Envelope = { id: string; occurredAt: number; source: { id: string; sequence: number } };
+type Envelope = {
+  id: string;
+  occurredAt: number;
+  source: { id: string; sequence?: number; producer?: string };
+};
 
 const order = (a: LifecycleRecord, b: LifecycleRecord) =>
   a.occurred_at - b.occurred_at ||
@@ -83,16 +96,25 @@ export function adaptCase(
   const outcomes = new Map<string, string>();
   const exitReasons = new Map<string, string>();
   const stageInstances = new Map<string, StageInstanceInput>();
-  const sources = new Set<string>();
   const asserted = new Set<string>();
   /** Engine ids of the relation links each record's `relations` produced, by position. */
   const derived = new Map<string, (string | null)[]>();
   const events: Draft[] = [];
 
-  const envelope = (r: LifecycleRecord, id = r.event_id, occurredAt = r.occurred_at) => {
-    const source = `${r.source ?? "_"}:${caseId}`;
-    sources.add(source);
-    return { id, occurredAt, source: { id: source, sequence: r.source_sequence } };
+  // The engine's canonical envelope: `sourceSequence` is authoritative per case, across
+  // producer names, so equal-millisecond events order by it (the case is a reliable case).
+  const envelope = (r: LifecycleRecord, id = r.event_id, occurredAt = r.occurred_at): Envelope => {
+    const { source } = normalizeCanonicalEnvelope(
+      {
+        eventId: r.event_id,
+        caseId,
+        occurredAt,
+        sourceSequence: r.source_sequence,
+        ...(r.source ? { source: r.source } : {}),
+      },
+      "",
+    );
+    return { id, occurredAt, source };
   };
 
   /** The engine events for one lifecycle (non-correction) record. */
@@ -138,7 +160,11 @@ export function adaptCase(
       case "stage.resumed": {
         if (!stage || !r.stage_id) return [];
         // A reused instance id with another stage is a catalog conflict the engine reports.
-        const instance = { id: stage, caseId, stageId: r.stage_id } as StageInstanceInput;
+        const instance: StageInstanceInput = {
+          id: brand<"stage-instance">(stage),
+          caseId: brand<"case">(caseId),
+          stageId: brand<"stage">(r.stage_id),
+        };
         const known = stageInstances.get(`${stage}\n${r.stage_id}`);
         if (!known) stageInstances.set(`${stage}\n${r.stage_id}`, instance);
         if (r.type === "stage.exited" && r.reason) exitReasons.set(id, r.reason);
@@ -269,19 +295,15 @@ export function adaptCase(
     }
   }
 
-  const engineDefinition: ProcessDefinition = {
-    id: key,
-    label: definition.name,
-    stages: definition.stages.map((s) => ({ id: s.stageId, label: s.name })),
-  } as unknown as ProcessDefinition;
+  const { engine, terminalStages, unclassified } = engineDefinition(key, definition);
   return {
     input: {
-      definitions: [engineDefinition],
-      cases: [{ id: caseId, processId: key }] as unknown as ReplayInput["cases"],
+      definitions: [engine],
+      cases: [{ id: brand<"case">(caseId), processId: brand<"process">(key) }],
       stageInstances: [...stageInstances.values()],
       events: events as unknown as LifecycleEvent[],
       asOf,
-      reliableSources: [...sources].sort(),
+      reliableCases: [caseId as CaseId],
     },
     facts: {
       caseId,
@@ -291,9 +313,42 @@ export function adaptCase(
       createdAt: createdAt(own),
       outcomes,
       exitReasons,
+      terminalStages,
+      unclassifiedTerminalStages: unclassified,
     },
     issues,
   };
+}
+
+/**
+ * The engine definition for one registered version. A marks terminal stages with a boolean; the
+ * engine needs a terminal class and never infers one. The vocabulary's explicit rule: a terminal
+ * stage whose id is a terminal class name (`completed`, `cancelled`, ...) has that class. Others
+ * are unclassified: they do not close the case (report `terminal_stage_unclassified`).
+ */
+export function engineDefinition(key: string, definition: ProcessDefinitionV1) {
+  const terminalStages = new Map<string, TerminalClass>();
+  const unclassified = new Set<string>();
+  for (const stage of definition.stages) {
+    if (!stage.terminal) continue;
+    const terminal = terminalClasses.find((c) => c === stage.stageId);
+    if (terminal) terminalStages.set(stage.stageId, terminal);
+    else unclassified.add(stage.stageId);
+  }
+  const normalized = normalizeCanonicalDefinition(
+    {
+      ...definition,
+      stages: definition.stages.map((s) => ({ ...s, terminal: terminalStages.has(s.stageId) })),
+    },
+    {
+      processId: brand<"process">(key),
+      stageIds: new Map(definition.stages.map((s) => [s.stageId, brand<"stage">(s.stageId)])),
+      terminalClasses: terminalStages,
+    },
+  );
+  // Every stage is mapped and every terminal flag classified above, so this cannot fail.
+  if (!normalized.definition) throw new Error("lifecycle definition normalization failed");
+  return { engine: normalized.definition, terminalStages, unclassified };
 }
 
 /** The domain outcome code: the `outcome` dimension, else the reason, else the class. */
