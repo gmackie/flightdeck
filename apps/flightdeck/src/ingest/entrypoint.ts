@@ -5,6 +5,7 @@ import type {
   IngestRpc,
   LifecycleIngestResult,
   LifecycleRpc,
+  ProcessRegistration,
   StoredEvent,
 } from "@flightdeckhq/schema";
 import { ulid } from "ulid";
@@ -12,8 +13,14 @@ import { verifyAccessUser } from "../access";
 import { type AppRecord, getApp } from "../apps";
 import { appShard, sessionStub } from "../do/shards";
 import { DOGFOOD_APP_ID } from "../dogfood";
+import { getDefinitions, registerDefinition } from "../processes";
 import { sinks } from "../sinks";
-import { ingestLifecycle, type LifecycleDeps, LifecycleForbidden } from "./lifecycle";
+import {
+  ingestLifecycle,
+  type LifecycleDeps,
+  LifecycleForbidden,
+  LifecycleRejected,
+} from "./lifecycle";
 import { lifecycleGranted } from "./server-auth";
 import { type IngestDeps, IngestError, ingestBatch } from "./service";
 
@@ -59,13 +66,38 @@ export class Ingest extends WorkerEntrypoint<Env, IngestProps> implements Ingest
     return ingestBatch(appId, input, source, deps(this.env, this.ctx, app));
   }
 
+  /**
+   * Registers a `ProcessDefinitionV1` for the bound app; events must name a registered version.
+   * Idempotent for identical content; changing a registered version is rejected.
+   */
+  async registerProcess(definition: unknown): Promise<ProcessRegistration> {
+    const appId = await this.lifecycleApp();
+    const result = await registerDefinition(this.env.DB, appId, definition);
+    if (result.status === "invalid") {
+      throw new LifecycleRejected([
+        { index: null, code: "invalid_definition", message: result.message },
+      ]);
+    }
+    if (result.status === "conflict") {
+      const message = "this process version is registered with different content";
+      throw new LifecycleRejected([{ index: null, code: "definition_conflict", message }]);
+    }
+    return { created: result.status === "created" };
+  }
+
   private async lifecycle(input: unknown): Promise<LifecycleIngestResult> {
+    const appId = await this.lifecycleApp();
+    return ingestLifecycle(appId, input, "binding", lifecycleDeps(this.env, appId));
+  }
+
+  /** The bound app, once it is registered and granted `lifecycle.write`. */
+  private async lifecycleApp(): Promise<string> {
     const appId = this.ctx.props?.appId;
     if (!appId) throw new IngestError("service binding is missing props.appId");
     const app = await getApp(this.env.DB, appId);
     if (!app) throw new IngestError(`unknown app ${appId}`);
     if (!(await lifecycleGranted(this.env.DB, appId))) throw new LifecycleForbidden();
-    return ingestLifecycle(appId, input, "binding", lifecycleDeps(this.env));
+    return appId;
   }
 }
 
@@ -103,7 +135,8 @@ export function deps(env: Env, ctx: ExecutionContext, app: AppRecord): IngestDep
   };
 }
 
-export const lifecycleDeps = (env: Env): LifecycleDeps => ({
+export const lifecycleDeps = (env: Env, appId: string): LifecycleDeps => ({
   now: Date.now,
   send: (rows) => sinks.lifecycle(env, rows),
+  definitions: (keys) => getDefinitions(env.DB, appId, keys),
 });

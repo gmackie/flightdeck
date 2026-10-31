@@ -3,6 +3,7 @@ import type { LifecycleRecord } from "@flightdeckhq/schema";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { MAX_FUTURE_SKEW_MS } from "../src/ingest/lifecycle";
 import { sinks } from "../src/sinks";
+import { registerDeploy } from "./lifecycle-fixtures";
 
 // Keys: `lifecycle` (lifecycle.write) and `events` (legacy default scope) for the granted app,
 // `ungranted` (lifecycle.write) for an app with no grant, `expired` for the granted app.
@@ -45,6 +46,7 @@ beforeAll(async () => {
       .bind(id)
       .run();
   }
+  for (const id of [GRANTED, "app_lc_rpc"]) await registerDeploy(id);
   const later = Date.now() + 600_000;
   await insertKey(KEYS.lifecycle, GRANTED, "lifecycle.write", later);
   await insertKey(KEYS.both, GRANTED, "events.write lifecycle.write", later);
@@ -137,6 +139,7 @@ describe("POST /v1/lifecycle/events auth", () => {
     ).run();
     const key = "r".repeat(48);
     await insertKey(key, "app_lc_revoke", "lifecycle.write", Date.now() + 600_000);
+    await registerDeploy("app_lc_revoke");
     expect((await post({ events: [event()] }, key)).status).toBe(200);
     await env.DB.prepare("DELETE FROM app_capabilities WHERE app_id = 'app_lc_revoke'").run();
     expect((await post({ events: [event()] }, key)).status).toBe(403);

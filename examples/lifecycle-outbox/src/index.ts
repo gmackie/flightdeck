@@ -18,6 +18,20 @@ const PROCESS = { processId: "deploy", processVersion: 1 } as const;
 const BATCH = 100;
 const STAGES = new Set(["build", "canary", "rollout", "done"]);
 
+/** Registered with Flightdeck before sending; events must conform to it. */
+export const DEPLOY_PROCESS = {
+  schemaVersion: 1,
+  processId: PROCESS.processId,
+  version: PROCESS.processVersion,
+  name: "Deploy",
+  caseType: "deploy",
+  stages: [...STAGES].map((stageId) => ({
+    stageId,
+    name: stageId,
+    ...(stageId === "done" ? { terminal: true } : {}),
+  })),
+};
+
 type Pending = { seq: number; event_id: string; payload: string };
 
 /** `Omit` over each member of a union, keeping the transitions' distinct shapes. */
@@ -105,6 +119,8 @@ async function mark(db: D1Database, column: "sent_at" | "quarantined_at", rows: 
 /** Sends pending events in order. Stops at the first retryable failure; the next run resumes. */
 export async function drain(env: Env): Promise<void> {
   const lifecycle = flightdeckLifecycle(env);
+  // Idempotent; a changed definition must be published as a new version instead.
+  await lifecycle.registerProcess(DEPLOY_PROCESS);
   const { results } = await env.DB.prepare(
     `SELECT seq, event_id, payload FROM lifecycle_outbox
      WHERE sent_at IS NULL AND quarantined_at IS NULL ORDER BY seq LIMIT ?`,

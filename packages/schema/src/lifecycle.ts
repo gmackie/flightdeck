@@ -406,14 +406,17 @@ export type LifecycleRecord = {
 };
 
 export type LifecycleIngestResult = { accepted: number };
+export type ProcessRegistration = { created: boolean };
 
 /**
  * Lifecycle methods on `env.FLIGHTDECK`. Server-only: Flightdeck must have granted the bound
  * app `lifecycle.write`. A batch is accepted or rejected whole; errors whose message starts
  * with `lifecycle rejected` are permanent (fix or quarantine the events) except
- * `lifecycle rejected (future_occurred_at)`; others are retryable.
+ * `future_occurred_at` and `unknown_process`; others are retryable.
  */
 export interface LifecycleRpc {
   trackLifecycle(event: unknown): Promise<LifecycleIngestResult>;
   ingestLifecycleBatch(batch: unknown): Promise<LifecycleIngestResult>;
+  /** Registers a `ProcessDefinitionV1`; events must name a registered process version. */
+  registerProcess(definition: unknown): Promise<ProcessRegistration>;
 }

@@ -51,10 +51,25 @@ dimension value could still be a phone number). Free text has no field to go in.
 data in the source system and send opaque ids.
 
 `ProcessDefinitionV1` describes a process version: its stages, the allowed dimension keys with
-every allowed value, and the allowed relation types. `checkAgainstDefinition(event,
-definition)` checks an event against it. **Ingestion enforces only the structural schema**,
-since Flightdeck has no process registry yet, so producers should run the definition check
-before enqueueing.
+every allowed value, and the allowed relation and linked-object types. Producers **register**
+each version before sending its events (FLIG-25), and ingestion rejects any event that does
+not conform:
+
+- An unregistered `processId@processVersion` is rejected with `unknown_process`. This is
+  retryable: register the version, then resend.
+- An unknown stage, dimension key or value, relation type or object type is rejected with
+  `nonconforming_event` (permanent).
+
+Registered versions are immutable per app. Re-registering identical content is a no-op; a
+different definition under the same version is refused, so publish a new version instead.
+Definitions belong to one app and never apply to another. Producers can run the same check
+locally with `checkAgainstDefinition(event, definition)` before enqueueing.
+
+Register over the binding with `flightdeckLifecycle(env).registerProcess(definition)`, or with
+`POST /v1/lifecycle/processes` (body: the definition; same key and grant as events; at most
+128 KiB). It answers 201 created, 200 already registered, 409 changed content, 400 invalid
+(`{ "error", "message" }`, values never echoed). Over RPC the errors are
+`lifecycle rejected (invalid_definition)` and `lifecycle rejected (definition_conflict)`.
 
 ## Authorization
 
@@ -83,8 +98,8 @@ keep each key private to one service.
 
 Use the same Cloudflare account and D1 database as the rest of Flightdeck.
 
-1. **Migrate D1** (adds `server_ingest_keys.scopes` with default `events.write` and
-   `app_capabilities`; existing keys keep working):
+1. **Migrate D1** (0005 adds `server_ingest_keys.scopes` with default `events.write` and
+   `app_capabilities`; existing keys keep working. 0006 adds `process_definitions`):
 
    ```bash
    cd apps/flightdeck && pnpm exec wrangler d1 migrations apply flightdeck --remote
@@ -188,9 +203,10 @@ Content-Type: application/json
 
 Issue codes: `invalid_envelope`, `unsupported_schema_version`, `prohibited_key`,
 `event_too_large` (8 KiB serialized), `invalid_event`, `future_occurred_at`,
-`duplicate_event_id` (within one batch). `future_occurred_at` comes from producer clock skew:
-retry it after a few minutes instead of quarantining (`isPermanentLifecycleError` treats it as
-retryable). Use HTTPS and do not follow redirects.
+`duplicate_event_id` (within one batch), `unknown_process`, `nonconforming_event`.
+`future_occurred_at` comes from producer clock skew: retry it after a few minutes instead of
+quarantining. `unknown_process` clears once the version is registered.
+`isPermanentLifecycleError` treats both as retryable. Use HTTPS and do not follow redirects.
 
 ## Time
 
@@ -219,7 +235,7 @@ Order a case's events by `(occurred_at, source_sequence)`.
 1. In the **same D1 batch (transaction)** as the state change, insert the lifecycle event into
    `lifecycle_outbox(seq AUTOINCREMENT, event_id UNIQUE, payload, sent_at, quarantined_at)`,
    with an `eventId` minted at insert time.
-2. A cron selects pending rows in `seq` order (at most 100), sets `sourceSequence = seq`, and
+2. A cron registers the process definition (idempotent), selects pending rows in `seq` order (at most 100), sets `sourceSequence = seq`, and
    calls `ingestLifecycleBatch`.
 3. On success, set `sent_at`. On a retryable error, stop and let the next run retry the same
    rows. On a permanent rejection, resend the rows one at a time and set `quarantined_at` on
@@ -254,7 +270,9 @@ Still monitor it:
 After provisioning, with a scratch app granted `lifecycle.write` and a lifecycle key in
 `$KEY` (load it from the file, not the command line):
 
-1. `POST /v1/lifecycle/events` with one `case.created` event returns `{"accepted":1}`.
+1. `POST /v1/lifecycle/processes` with a scratch definition returns 201, and the same body
+   again returns 200. An event naming an unregistered version returns 400 `unknown_process`.
+   `POST /v1/lifecycle/events` with one `case.created` event returns `{"accepted":1}`.
 2. Sending the same body again returns 200 (at least once). After the sink rolls, the table has
    two rows with that `event_id` and the dedup view one.
 3. An event with `occurredAt` a year ago is stored with that exact `occurred_at`.
@@ -270,8 +288,6 @@ complete onboarding.
 
 ## Not yet implemented
 
-- No process-definition registry: ingestion does not check stages or dimension values against a
-  published `ProcessDefinitionV1` (producers do, with `checkAgainstDefinition`).
 - No admin API or CLI flag for lifecycle grants or key scopes: operators use D1 statements.
 - No query API, dedup view or correction-application view over `lifecycle_events` (FLIG-16).
 - No per-app rate limits or quotas beyond the batch, event and body limits.
