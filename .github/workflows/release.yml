@@ -1,0 +1,69 @@
+name: release
+# Publishes @flightdeckhq/schema, @flightdeckhq/worker, @flightdeckhq/browser and create-flightdeck
+# to npm. All four share one version; push a tag v<version> that matches it (see
+# docs/operations/releasing.md). Run it by hand with dry_run to check everything but the upload.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run every step, but publish with --dry-run"
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  id-token: write # npm provenance
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    env:
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, cache: pnpm }
+      - name: Check the version
+        run: |
+          if [ "$DRY_RUN" != "true" ] && [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "::error::A real publish must run from a v* tag; use dry_run on branches"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            version=$GITHUB_REF_NAME
+          else
+            version=$(node -p "require('./packages/schema/package.json').version")
+          fi
+          node scripts/release-version.mjs check "$version"
+          # Prereleases (0.2.0-rc.1) go to the "next" dist-tag so they never become latest.
+          case "$version" in *-*) echo "NPM_TAG=next" >>"$GITHUB_ENV" ;; *) echo "NPM_TAG=latest" >>"$GITHUB_ENV" ;; esac
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm --filter @flightdeckhq/browser size
+      - run: pnpm smoke:pack
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          args=(-r publish --access public --no-git-checks --tag "$NPM_TAG")
+          if [ "$DRY_RUN" = "true" ]; then
+            args+=(--dry-run)
+          else
+            if [ -z "$NODE_AUTH_TOKEN" ]; then
+              echo "::error::The NPM_TOKEN secret is not set"
+              exit 1
+            fi
+            # pnpm expands ${NODE_AUTH_TOKEN} when it reads the file; the token is never written.
+            echo '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' >>"$HOME/.npmrc"
+            args+=(--provenance)
+          fi
+          # Versions already on npm are skipped, so a failed run can be re-run.
+          pnpm "${args[@]}"
