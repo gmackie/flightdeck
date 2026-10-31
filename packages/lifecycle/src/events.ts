@@ -1,3 +1,5 @@
+import type { OrderingContext } from "./ordering.js";
+import { orderEvents } from "./ordering.js";
 import type { Diagnostic, EventId, LifecycleEvent } from "./types.js";
 
 export const compareText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -20,7 +22,9 @@ export function prepareEvents(
   asOf: number,
   reliable: ReadonlySet<string>,
   diagnostics: Diagnostic[],
-): { events: LifecycleEvent[]; supersededEventIds: EventId[] } {
+  ordering: OrderingContext,
+): { events: LifecycleEvent[]; supersededEventIds: EventId[]; uncertainEventIds: EventId[] } {
+  const uncertain = new Set<EventId>();
   const groups = new Map<EventId, Map<string, LifecycleEvent>>();
   for (const event of input) {
     const group = groups.get(event.id) ?? new Map<string, LifecycleEvent>();
@@ -30,6 +34,7 @@ export function prepareEvents(
   const unique = new Map<EventId, LifecycleEvent>();
   for (const [key, group] of [...groups].sort(([a], [b]) => compareText(a, b))) {
     if (group.size > 1) {
+      uncertain.add(key);
       diagnostics.push({
         code: "duplicate_conflict",
         subject: key,
@@ -40,6 +45,7 @@ export function prepareEvents(
     const event = [...group.values()][0];
     if (!event) continue;
     if (!Number.isFinite(event.occurredAt)) {
+      uncertain.add(key);
       diagnostics.push({
         code: "invalid_time",
         subject: key,
@@ -52,13 +58,16 @@ export function prepareEvents(
       event.source.sequence !== undefined &&
       (!Number.isSafeInteger(event.source.sequence) || event.source.sequence < 0)
     ) {
+      if (reliable.has(event.source.id) || ordering.reliableCase(ordering.scope(event)))
+        uncertain.add(key);
       diagnostics.push({
         code: "invalid_sequence",
         subject: key,
         eventId: key,
-        message: "Sequence must be a nonnegative safe integer; event excluded.",
+        message:
+          "Sequence must be a nonnegative safe integer; untrusted metadata is ignored, authoritative sequence errors exclude the event.",
       });
-      continue;
+      if (reliable.has(event.source.id) || ordering.reliableCase(ordering.scope(event))) continue;
     }
     unique.set(key, event);
   }
@@ -77,12 +86,36 @@ export function prepareEvents(
       });
       invalid.add(event.id);
     }
+    if (target && event.type !== "event.retract") {
+      const payload = (e: LifecycleEvent) => {
+        const {
+          id: _id,
+          occurredAt: _time,
+          source: _source,
+          supersedes: _supersedes,
+          ...action
+        } = e;
+        return canonical(action);
+      };
+      if (payload(event) !== payload(target)) {
+        invalid.add(event.id);
+        uncertain.add(target.id);
+        diagnostics.push({
+          code: "invalid_transition",
+          subject: event.id,
+          eventId: event.id,
+          message:
+            "An amendment cannot change its target action or subject; retract and supply new evidence instead.",
+        });
+      }
+    }
     const group = successors.get(event.supersedes) ?? [];
     group.push(event);
     successors.set(event.supersedes, group);
   }
   for (const [target, group] of successors) {
     if (group.length < 2) continue;
+    uncertain.add(target);
     for (const event of group) invalid.add(event.id);
     diagnostics.push({
       code: "correction_conflict",
@@ -131,60 +164,10 @@ export function prepareEvents(
       e.type !== "event.retract" &&
       e.occurredAt <= asOf,
   );
-  events.sort(
-    (a, b) =>
-      a.occurredAt - b.occurredAt ||
-      compareText(a.source.id, b.source.id) ||
-      (reliable.has(a.source.id)
-        ? (a.source.sequence ?? Number.MAX_SAFE_INTEGER) -
-          (b.source.sequence ?? Number.MAX_SAFE_INTEGER)
-        : 0) ||
-      compareText(a.id, b.id),
-  );
-  const last = new Map<string, LifecycleEvent>();
-  const times = new Map<number, LifecycleEvent[]>();
-  for (const event of events) {
-    const group = times.get(event.occurredAt) ?? [];
-    group.push(event);
-    times.set(event.occurredAt, group);
-    if (!reliable.has(event.source.id) || event.source.sequence === undefined) continue;
-    const previous = last.get(event.source.id);
-    if (
-      previous?.source.sequence !== undefined &&
-      event.source.sequence <= previous.source.sequence
-    ) {
-      diagnostics.push({
-        code: "sequence_time_conflict",
-        subject: event.source.id,
-        eventId: event.id,
-        message:
-          "Reliable source sequence contradicts occurrence time or repeats; occurrence time takes precedence.",
-      });
-    }
-    if (!previous || (previous.source.sequence ?? -1) < event.source.sequence)
-      last.set(event.source.id, event);
-  }
-  for (const group of times.values()) {
-    if (group.length < 2) continue;
-    const first = group[0];
-    if (!first) continue;
-    const known = new Set(group.map((e) => e.source.sequence));
-    if (
-      group.every(
-        (e) =>
-          e.source.id === first.source.id &&
-          reliable.has(e.source.id) &&
-          e.source.sequence !== undefined,
-      ) &&
-      known.size === group.length
-    )
-      continue;
-    diagnostics.push({
-      code: "ambiguous_order",
-      subject: String(first.occurredAt),
-      message:
-        "Equal occurrence times lack a common reliable sequence; source ID then event ID provide a deterministic, noncausal fallback.",
-    });
-  }
-  return { events, supersededEventIds: [...superseded].sort(compareText) };
+  for (const key of invalid) uncertain.add(key);
+  return {
+    events: orderEvents(events, reliable, ordering, diagnostics),
+    supersededEventIds: [...superseded].sort(compareText),
+    uncertainEventIds: [...uncertain].sort(compareText),
+  };
 }

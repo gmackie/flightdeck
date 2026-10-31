@@ -7,7 +7,7 @@ import type {
   StageInstanceId,
   TerminalClass,
 } from "./types.js";
-import { terminalClasses } from "./types.js";
+import { id, terminalClasses } from "./types.js";
 
 /** Explicit context supplied by the schema adapter. No business outcome/reason inference. */
 export interface NormalizationContext {
@@ -125,8 +125,83 @@ export function normalizeCanonicalTransition(
         event: null,
         diagnostic: {
           code: "unsupported_transition",
-          message: `Unsupported canonical transition ${type}. case.created is catalog evidence, event.corrected needs target resolution; neither is silently treated as a lifecycle action.`,
+          message:
+            "Unsupported canonical transition. case.created is catalog evidence, event.corrected needs target resolution; neither is silently treated as a lifecycle action.",
         },
       };
   }
+}
+
+/** Structural subset of Workstream A ProcessDefinitionV1; no shared-schema dependency. */
+export interface CanonicalProcessDefinition {
+  readonly processId: string;
+  readonly version: number;
+  readonly name: string;
+  readonly stages: readonly {
+    readonly stageId: string;
+    readonly name: string;
+    readonly terminal?: boolean;
+  }[];
+}
+/** A only provides terminal=true, never an outcome. Require an explicit stage-to-class mapping. */
+export function normalizeCanonicalDefinition(
+  definition: CanonicalProcessDefinition,
+  context: {
+    processId: import("./types.js").ProcessId;
+    stageIds: ReadonlyMap<string, import("./types.js").StageId>;
+    terminalClasses?: ReadonlyMap<string, TerminalClass>;
+  },
+):
+  | { definition: import("./types.js").ProcessDefinition; diagnostic: null }
+  | { definition: null; diagnostic: { code: "missing_context"; message: string } } {
+  const stages: import("./types.js").StageDefinition[] = [];
+  for (const stage of definition.stages) {
+    const stageId = context.stageIds.get(stage.stageId);
+    const terminal = context.terminalClasses?.get(stage.stageId);
+    if (
+      !stageId ||
+      (stage.terminal === true && (!terminal || !terminalClasses.includes(terminal))) ||
+      (stage.terminal !== true && terminal !== undefined)
+    ) {
+      return {
+        definition: null,
+        diagnostic: {
+          code: "missing_context",
+          message:
+            "Every canonical stage requires an explicit ID mapping; terminal flags require an authoritative terminal class, and nonterminal stages cannot be classified as terminal.",
+        },
+      };
+    }
+    stages.push({
+      id: stageId,
+      label: stage.name,
+      ...(stage.terminal === true ? { terminal } : {}),
+    });
+  }
+  return {
+    definition: { id: context.processId, label: definition.name, stages },
+    diagnostic: null,
+  };
+}
+
+/** A sourceSequence is per app/case, across producer names. Preserve producer as metadata. */
+export function normalizeCanonicalEnvelope(
+  wire: {
+    readonly eventId: string;
+    readonly caseId: string;
+    readonly occurredAt: number;
+    readonly sourceSequence: number;
+    readonly source?: string;
+  },
+  appId: string,
+): EventEnvelope {
+  return {
+    id: id<"event">(JSON.stringify([appId, wire.eventId])),
+    occurredAt: wire.occurredAt,
+    source: {
+      id: JSON.stringify([appId, wire.caseId]),
+      sequence: wire.sourceSequence,
+      producer: wire.source,
+    },
+  };
 }

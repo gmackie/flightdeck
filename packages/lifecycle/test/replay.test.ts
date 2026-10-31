@@ -60,10 +60,10 @@ describe("deterministic full-log replay", () => {
     expect(stageMetrics(result, instance).wallClockMs).toBe(50);
   });
 
-  it("documents fallback through ambiguity diagnostics, independent of arrival order", () => {
+  it("uses lifecycle prerequisites for equal timestamps, independent of arrival order", () => {
     const input = fixture([start(), enter(0)]);
     const result = replay(input);
-    expect(codes(result)).toContain("ambiguous_order");
+    expect(codes(result)).not.toContain("ambiguous_order");
     expect(replay({ ...input, events: [...input.events].reverse() })).toEqual(result);
   });
 

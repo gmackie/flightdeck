@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { LifecycleEvent } from "../src/index.js";
-import { id, normalizeCanonicalTransition, replay, stageMetrics } from "../src/index.js";
+import { id, normalizeCanonicalTransition, replay, stageMetrics, summarize } from "../src/index.js";
 import { caseId, enter, event, exit, fixture, instance, start, terminate } from "./fixtures.js";
 
 it("normalizes Workstream A canonical names to identical replay semantics", () => {
@@ -118,4 +118,70 @@ it("canonical interruption normalization preserves overlap semantics", () => {
       instance,
     ),
   ).toMatchObject({ blockedMs: 20, pausedMs: 20, unavailableMs: 30 });
+});
+
+it("requires mapping for A's terminal flag and ends the case on canonical terminal entry", async () => {
+  const { normalizeCanonicalDefinition } = await import("../src/index.js");
+  const final = id<"stage">("terminal-stage");
+  const attempt = id<"stage-instance">("terminal-attempt");
+  const canonical = {
+    processId: "flow",
+    version: 1,
+    name: "Flow",
+    stages: [{ stageId: "done", name: "Done", terminal: true }],
+  };
+  const mapping = { processId: id<"process">("flow-v1"), stageIds: new Map([["done", final]]) };
+  expect(normalizeCanonicalDefinition(canonical, mapping)).toMatchObject({
+    definition: null,
+    diagnostic: { code: "missing_context" },
+  });
+  const mapped = normalizeCanonicalDefinition(canonical, {
+    ...mapping,
+    terminalClasses: new Map([["done", "completed" as const]]),
+  });
+  if (mapped.definition === null) throw new Error("Mapping failed");
+  const terminal = normalizeCanonicalTransition(
+    "stage.entered",
+    { id: id<"event">("final"), occurredAt: 50, source: { id: "case-stream" } },
+    { stageInstanceId: attempt },
+  );
+  if (terminal.event === null) throw new Error("Normalization failed");
+  const result = replay({
+    definitions: [mapped.definition],
+    cases: [{ id: caseId, processId: mapped.definition.id }],
+    stageInstances: [{ id: attempt, caseId, stageId: final }],
+    events: [start(), terminal.event],
+    asOf: 1000,
+  });
+  expect(result.cases[0]).toMatchObject({ status: "terminated", terminal: "completed" });
+  expect(summarize(result)).toMatchObject({
+    openCensored: 0,
+    completionRatio: 1,
+    closedCaseDuration: { p50: 50 },
+  });
+  expect(stageMetrics(result, attempt)).toMatchObject({ activeAgeMs: null, openCensored: false });
+});
+
+it("scopes A sequences by app/case across producer names", async () => {
+  const { normalizeCanonicalEnvelope } = await import("../src/index.js");
+  const first = normalizeCanonicalEnvelope(
+    { eventId: "z", caseId: "case", occurredAt: 0, sourceSequence: 1, source: "z-producer" },
+    "app",
+  );
+  const second = normalizeCanonicalEnvelope(
+    { eventId: "a", caseId: "case", occurredAt: 0, sourceSequence: 2, source: "a-producer" },
+    "app",
+  );
+  expect(first.source.id).toBe(second.source.id);
+  const started = normalizeCanonicalTransition("case.started", first, { caseId });
+  const entered = normalizeCanonicalTransition("stage.entered", second, {
+    stageInstanceId: instance,
+  });
+  if (started.event === null || entered.event === null) throw new Error("Normalization failed");
+  const result = replay({
+    ...fixture([entered.event, started.event]),
+    reliableSources: [first.source.id],
+  });
+  expect(result.events.map((e) => e.source.sequence)).toEqual([1, 2]);
+  expect(result.diagnostics).toEqual([]);
 });

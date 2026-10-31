@@ -73,12 +73,16 @@ export interface StageMetrics {
 }
 export function stageMetrics(result: ReplayResult, stageInstanceId: StageInstanceId): StageMetrics {
   const stage = result.stageInstances.find((s) => s.id === stageInstanceId);
-  if (!stage) throw new RangeError(`Unknown stage instance: ${stageInstanceId}`);
+  if (!stage) throw new RangeError("Unknown stage instance");
   const owner = result.cases.find((c) => c.id === stage.caseId);
   const crossedTermination = owner?.episodes.some(
     (e) => e.end !== null && e.end >= (stage.enteredAt ?? Infinity),
   );
   const openCensored =
+    stage.timingComplete &&
+    Boolean(owner?.timingComplete) &&
+    owner !== undefined &&
+    !caseIncomplete(result, owner) &&
     stage.status === "open" &&
     !crossedTermination &&
     (owner?.status === "open" || owner?.status === "paused");
@@ -99,7 +103,11 @@ export function stageMetrics(result: ReplayResult, stageInstanceId: StageInstanc
     (stage.status === "open" && owner?.status === "terminated")
   )
     return output;
-  if (stage.status === "open" && crossedTermination) return output;
+  if (
+    stage.status === "open" &&
+    (crossedTermination || !stage.timingComplete || !owner?.timingComplete)
+  )
+    return output;
   const end = stage.exitedAt ?? result.asOf;
   if (end < stage.enteredAt) return output;
   const bounds = [{ start: stage.enteredAt, end }];
@@ -136,10 +144,11 @@ export interface CaseMetrics {
 }
 export function caseMetrics(result: ReplayResult, caseId: CaseId): CaseMetrics {
   const owner = result.cases.find((c) => c.id === caseId);
-  if (!owner) throw new RangeError(`Unknown case: ${caseId}`);
+  if (!owner) throw new RangeError("Unknown case");
   const output: CaseMetrics = {
     caseId,
-    openCensored: owner.status === "open" || owner.status === "paused",
+    openCensored:
+      !caseIncomplete(result, owner) && (owner.status === "open" || owner.status === "paused"),
     spanMs: null,
     openDurationMs: null,
     pausedMs: null,
@@ -164,7 +173,8 @@ export function caseMetrics(result: ReplayResult, caseId: CaseId): CaseMetrics {
     const child = result.cases.find((c) => c.id === edge.childCaseId);
     const childEpisodes = child && ranges(child.episodes, result.asOf);
     const links = ranges(edge.intervals, result.asOf);
-    if (!child?.timingComplete || !childEpisodes?.length || links === null) return output;
+    if (!child || caseIncomplete(result, child) || !childEpisodes?.length || links === null)
+      return output;
     const covered = intersect(intersect(childEpisodes, links), episodes);
     childRanges.push(...covered);
     for (const interval of covered)
@@ -217,6 +227,8 @@ export interface CohortFilter {
   status?: CaseState["status"];
   /** Currently linked object via an explicit endpoint with type='case' and id=case ID. */
   relatedObject?: ObjectRef;
+  /** All counts cases; roots excludes every known child within this replay horizon, even after unlink. */
+  hierarchy?: "all" | "roots" | "children";
 }
 export function selectCases(result: ReplayResult, filter: CohortFilter = {}): CaseState[] {
   if (
@@ -227,6 +239,9 @@ export function selectCases(result: ReplayResult, filter: CohortFilter = {}): Ca
   }
   return result.cases.filter((c) => {
     const start = c.episodes[0]?.start;
+    const child = result.children.some((edge) => edge.childCaseId === c.id);
+    if (filter.hierarchy === "roots" && child) return false;
+    if (filter.hierarchy === "children" && !child) return false;
     if (filter.processId !== undefined && c.processId !== filter.processId) return false;
     if (filter.status !== undefined && c.status !== filter.status) return false;
     if (filter.terminal && (c.terminal === null || !filter.terminal.includes(c.terminal)))
@@ -299,13 +314,13 @@ export function funnel(
     const reached = prefixes.filter((p) => p.length > index);
     const converted = reached.filter((p) => p.length > index + 1).length;
     const openCensored = reached.filter(
-      (p) => p.c.status === "open" || p.c.status === "paused",
+      (p) => !caseIncomplete(result, p.c) && (p.c.status === "open" || p.c.status === "paused"),
     ).length;
     const unknown = reached.filter((p) => caseIncomplete(result, p.c)).length;
     const eligible =
       options.denominator === "closed-only"
-        ? reached.filter((p) => p.c.status === "terminated")
-        : reached;
+        ? reached.filter((p) => p.c.status === "terminated" && !caseIncomplete(result, p.c))
+        : reached.filter((p) => !caseIncomplete(result, p.c));
     const numerator = eligible.filter((p) => p.length > index + 1).length;
     return {
       stageId,
@@ -378,17 +393,26 @@ export function summarize(result: ReplayResult, cohort?: CohortFilter) {
     terminalClasses.map((t) => [t, selected.filter((c) => c.terminal === t).length]),
   ) as Record<TerminalClass, number>;
   const closed = selected.filter((c) => c.status === "terminated");
+  const eligibleClosed = closed.filter((c) => !caseIncomplete(result, c));
   const stageIds = [
     ...new Set(result.stageInstances.filter((s) => ids.has(s.caseId)).map((s) => s.stageId)),
   ].sort(compareText);
   return {
     cases: selected.length,
-    openCensored: selected.filter((c) => c.status === "open" || c.status === "paused").length,
+    openCensored: selected.filter(
+      (c) => !caseIncomplete(result, c) && (c.status === "open" || c.status === "paused"),
+    ).length,
     unknown: selected.filter((c) => caseIncomplete(result, c)).length,
     terminal,
-    completionRatio: ratio(terminal.completed, closed.length),
+    completionRatio: ratio(
+      eligibleClosed.filter((c) => c.terminal === "completed").length,
+      eligibleClosed.length,
+    ),
+    completionDenominator: eligibleClosed.length,
+    completionUnknown: closed.length - eligibleClosed.length,
     closedCaseDuration: distribution(
       closed
+        .filter((c) => !caseIncomplete(result, c))
         .map((c) => caseMetrics(result, c.id).openDurationMs)
         .filter((n): n is number => n !== null),
     ),
@@ -397,7 +421,12 @@ export function summarize(result: ReplayResult, cohort?: CohortFilter) {
         (s) => s.stageId === stageId && ids.has(s.caseId),
       );
       const samples = instances
-        .filter((s) => s.status === "closed")
+        .filter(
+          (s) =>
+            s.status === "closed" &&
+            s.timingComplete &&
+            !caseIncomplete(result, selected.find((c) => c.id === s.caseId) as CaseState),
+        )
         .map((s) => stageMetrics(result, s.id))
         .filter((m) => m.wallClockMs !== null);
       return {
@@ -406,7 +435,11 @@ export function summarize(result: ReplayResult, cohort?: CohortFilter) {
         openCensored: instances.filter((s) => stageMetrics(result, s.id).openCensored).length,
         skipped: instances.filter((s) => s.status === "skipped").length,
         unknown: instances.filter(
-          (s) => stageMetrics(result, s.id).wallClockMs === null && s.status !== "skipped",
+          (s) =>
+            s.status !== "skipped" &&
+            (!s.timingComplete ||
+              caseIncomplete(result, selected.find((c) => c.id === s.caseId) as CaseState) ||
+              stageMetrics(result, s.id).wallClockMs === null),
         ).length,
       };
     }),

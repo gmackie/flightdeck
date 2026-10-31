@@ -45,13 +45,23 @@ export function replay(input: ReplayInput): ReplayResult {
     if (
       stageIds.size !== definition.stages.length ||
       definition.initialStages?.some((s) => !stageIds.has(s)) ||
-      definition.transitions?.some((t) => !stageIds.has(t.from) || !stageIds.has(t.to))
+      (definition.initialStages !== undefined &&
+        (definition.initialStages.length === 0 ||
+          new Set(definition.initialStages).size !== definition.initialStages.length)) ||
+      (Boolean(definition.transitions?.length) && !definition.initialStages?.length) ||
+      definition.stages.some(
+        (s) => s.terminal !== undefined && !terminalClasses.includes(s.terminal),
+      ) ||
+      definition.transitions?.some((t) => !stageIds.has(t.from) || !stageIds.has(t.to)) ||
+      (definition.transitions !== undefined &&
+        new Set(definition.transitions.map((t) => canonical([t.from, t.to]))).size !==
+          definition.transitions.length)
     ) {
       definitions.delete(key);
       report(
         "invalid_definition",
         key,
-        "Stage IDs must be unique and transition/initial references must exist.",
+        "Stage IDs and initial IDs must be unique, references must exist, constrained processes need initial stages, and terminal stages need an explicit terminal class.",
       );
     }
   }
@@ -84,6 +94,7 @@ export function replay(input: ReplayInput): ReplayResult {
     stages.set(item.id, {
       ...item,
       status: "unknown",
+      episodeIndex: null,
       enteredAt: null,
       exitedAt: null,
       blocked: [],
@@ -126,12 +137,121 @@ export function replay(input: ReplayInput): ReplayResult {
       );
     }
   }
+  const reliableCases = new Set<string>(input.reliableCases);
+  const relationScope = (relation: RelationState | import("./types.js").RelationInput) => {
+    for (const endpoint of [relation.from, relation.to]) {
+      if (endpoint.type === "case") return endpoint.id;
+      if (endpoint.type === "stage-instance") {
+        const owner = stages.get(endpoint.id)?.caseId;
+        if (owner) return owner;
+      }
+    }
+    return relation.id;
+  };
+  const eventCase = (event: LifecycleEvent): string => {
+    if ("stageInstanceId" in event)
+      return stages.get(event.stageInstanceId)?.caseId ?? event.stageInstanceId;
+    if ("caseId" in event) return event.caseId;
+    if (event.type === "relation.link") return relationScope(event.relation);
+    if (event.type === "relation.unlink") {
+      // Conflicting input links must not let arrival order choose a case/sequence scope.
+      const scopes = input.events
+        .filter((e) => e.type === "relation.link" && e.relation.id === event.relationId)
+        .map((e) => (e.type === "relation.link" ? relationScope(e.relation) : ""))
+        .sort(compareText);
+      return scopes[0] ?? event.relationId;
+    }
+    return event.id;
+  };
   const prepared = prepareEvents(
     input.events,
     input.asOf,
     new Set(input.reliableSources),
     diagnostics,
+    {
+      scope: eventCase,
+      reliableCase: (scope) => reliableCases.has(scope),
+      before: (a, b) => {
+        if (a.type === "relation.link" && b.type === "relation.unlink")
+          return a.relation.id === b.relationId;
+        if (a.type === "child.link" && b.type === "child.unlink")
+          return a.childCaseId === b.childCaseId;
+        if (a.type === "case.pause" && b.type === "case.resume")
+          return a.interruptionId === b.interruptionId;
+        if (a.type === "case.start" || a.type === "case.reopen")
+          return (
+            b.type.startsWith("stage.") ||
+            b.type === "case.pause" ||
+            b.type === "case.resume" ||
+            b.type === "case.terminate"
+          );
+        if (b.type === "case.terminate")
+          return a.type.startsWith("stage.") || a.type === "case.pause" || a.type === "case.resume";
+        if ("stageInstanceId" in a && "stageInstanceId" in b) {
+          if (a.stageInstanceId === b.stageInstanceId) {
+            if (a.type === "stage.enter")
+              return b.type !== "stage.enter" && b.type !== "stage.skip";
+            if (b.type === "stage.exit") return a.type !== "stage.exit" && a.type !== "stage.skip";
+            if (
+              "interruptionId" in a &&
+              "interruptionId" in b &&
+              a.interruptionId === b.interruptionId
+            )
+              return (
+                (a.type === "stage.block" && b.type === "stage.unblock") ||
+                (a.type === "stage.pause" && b.type === "stage.resume")
+              );
+          } else if (a.type === "stage.exit" && b.type === "stage.enter") {
+            const from = stages.get(a.stageInstanceId);
+            const to = stages.get(b.stageInstanceId);
+            const definition = to && definitions.get(cases.get(to.caseId)?.processId ?? "");
+            return Boolean(
+              from &&
+                to &&
+                (from.branchId ?? "") === (to.branchId ?? "") &&
+                (definition?.transitions?.some(
+                  (t) => t.from === from.stageId && t.to === to.stageId,
+                ) ||
+                  definition?.stages.some((s) => s.id === to.stageId && s.terminal !== undefined)),
+            );
+          }
+        }
+        return false;
+      },
+    },
   );
+  function closeInterruptions(lists: Interval[][], time: number) {
+    for (const [key, interval] of activeInterruptions) {
+      if (lists.some((list) => list.includes(interval))) {
+        interval.end = time;
+        activeInterruptions.delete(key);
+      }
+    }
+  }
+  function terminateCase(
+    owner: CaseState,
+    time: number,
+    terminal: CaseState["terminal"],
+    event: LifecycleEvent,
+  ) {
+    const episode = owner.episodes.at(-1);
+    if (episode) episode.end = time;
+    else {
+      owner.episodes.push({ start: null, end: time });
+      owner.timingComplete = false;
+      report("missing_boundary", owner.id, "Termination has no observed case start.", event);
+    }
+    owner.status = "terminated";
+    owner.terminal = terminal;
+    const stageLists = [...stages.values()]
+      .filter((s) => s.caseId === owner.id)
+      .flatMap((s) => [s.blocked, s.paused]);
+    closeInterruptions([owner.pauses, ...stageLists], time);
+  }
+  // Latest closed predecessor is scoped to a branch and explicit case episode.
+  const frontiers = new Map<string, StageState>();
+  const frontierKey = (stage: StageState, owner: CaseState) =>
+    canonical([owner.id, owner.episodes.length, stage.branchId ?? ""]);
   const supported = new Set([
     "case.start",
     "case.pause",
@@ -195,25 +315,11 @@ export function replay(input: ReplayInput): ReplayResult {
             break;
           }
           if (owner.status === "terminated") {
-            invalid("Case already terminated.");
+            if (owner.episodes.at(-1)?.end !== time || owner.terminal !== event.terminal)
+              invalid("Case already terminated or terminal class conflicts.");
             break;
           }
-          const episode = owner.episodes.at(-1);
-          if (episode) episode.end = time;
-          else {
-            owner.episodes.push({ start: null, end: time });
-            owner.timingComplete = false;
-            report("missing_boundary", owner.id, "Termination has no observed case start.", event);
-          }
-          owner.status = "terminated";
-          owner.terminal = event.terminal;
-          // Explicit case termination bounds existing pauses; reopening starts a fresh episode.
-          for (const [key, interval] of activeInterruptions) {
-            if (owner.pauses.includes(interval)) {
-              interval.end = time;
-              activeInterruptions.delete(key);
-            }
-          }
+          terminateCase(owner, time, event.terminal, event);
           break;
         }
         case "case.pause":
@@ -271,24 +377,35 @@ export function replay(input: ReplayInput): ReplayResult {
           );
         }
         const definition = definitions.get(owner.processId);
-        const prior = [...stages.values()].filter(
-          (s) => s.caseId === owner.id && s.status === "closed" && s.enteredAt !== null,
-        );
-        if (definition?.transitions?.length) {
-          const allowed = prior.length
-            ? definition.transitions.some(
-                (t) => t.to === stage.stageId && prior.some((s) => s.stageId === t.from),
-              )
-            : definition.initialStages?.includes(stage.stageId);
-          if (!allowed) {
-            invalid(
-              "No observed predecessor exit permits this stage entry (or initialStages omits it).",
-            );
-            continue;
-          }
+        if (
+          definition?.transitions?.length &&
+          [...stages.values()].some(
+            (s) =>
+              s.caseId === owner.id &&
+              s.status === "open" &&
+              s.episodeIndex === owner.episodes.length - 1 &&
+              (s.branchId ?? "") === (stage.branchId ?? ""),
+          )
+        ) {
+          invalid(
+            "A constrained serial branch already has an open attempt; use distinct branch IDs for parallel paths.",
+          );
+          continue;
+        }
+        const prior = frontiers.get(frontierKey(stage, owner));
+        const allowed = prior
+          ? !definition?.transitions?.length ||
+            definition.transitions.some((t) => t.to === stage.stageId && t.from === prior.stageId)
+          : !definition?.initialStages || definition.initialStages.includes(stage.stageId);
+        if (!allowed) {
+          invalid(
+            "Latest predecessor in this branch and case episode does not permit entry (or initial stage is not allowed).",
+          );
+          continue;
         }
         stage.status = "open";
         stage.enteredAt = time;
+        stage.episodeIndex = owner.episodes.length - 1;
         visits.push({
           caseId: stage.caseId,
           stageId: stage.stageId,
@@ -296,10 +413,27 @@ export function replay(input: ReplayInput): ReplayResult {
           occurredAt: time,
           eventId: event.id,
         });
+        const terminal = definition?.stages.find((s) => s.id === stage.stageId)?.terminal;
+        if (terminal !== undefined) {
+          // The terminal marker has no continuing dwell: its entry explicitly ends this episode.
+          stage.status = "closed";
+          stage.exitedAt = time;
+          terminateCase(owner, time, terminal, event);
+        }
       } else if (event.type === "stage.exit") {
         if (stage.status === "closed" || stage.status === "skipped") {
+          const terminal = definitions
+            .get(owner.processId)
+            ?.stages.find((s) => s.id === stage.stageId)?.terminal;
+          if (terminal !== undefined && stage.enteredAt === time && stage.exitedAt === time)
+            continue;
           invalid("Stage already closed or skipped.");
           continue;
+        }
+        if (stage.enteredAt !== null && stage.episodeIndex !== owner.episodes.length - 1) {
+          invalid(
+            "Stage exit belongs to a prior case episode; it cannot advance the reopened branch.",
+          );
         }
         if (owner.status === "terminated") {
           stage.timingComplete = false;
@@ -321,6 +455,9 @@ export function replay(input: ReplayInput): ReplayResult {
         }
         stage.status = "closed";
         stage.exitedAt = time;
+        closeInterruptions([stage.blocked, stage.paused], time);
+        if (stage.enteredAt !== null && stage.episodeIndex === owner.episodes.length - 1)
+          frontiers.set(frontierKey(stage, owner), stage);
       } else if ("interruptionId" in event) {
         if (stage.status !== "open") {
           invalid("Stage interruption requires an observed entry and no exit.");
@@ -408,25 +545,19 @@ export function replay(input: ReplayInput): ReplayResult {
     }
   }
   // Excluded corrupt evidence must not make an interruption disappear into a fabricated zero.
-  const uncertainIds = new Set(
-    diagnostics
-      .filter(
-        (d) =>
-          d.code === "unsupported_event" ||
-          d.code === "duplicate_conflict" ||
-          d.code === "invalid_time" ||
-          d.code === "invalid_sequence" ||
-          d.code === "correction_conflict" ||
-          (d.code === "cycle" &&
-            input.events.some((e) => e.id === d.eventId && e.supersedes !== undefined)),
-      )
-      .map((d) => d.eventId ?? d.subject),
-  );
+  const uncertainIds = new Set(prepared.uncertainEventIds);
+  for (const d of diagnostics) {
+    if (d.code === "unsupported_event" && d.eventId) uncertainIds.add(d.eventId);
+  }
   for (const event of input.events) {
     if (!uncertainIds.has(event.id)) continue;
     if ("stageInstanceId" in event) {
       const stage = stages.get(event.stageInstanceId);
-      if (stage) stage.timingComplete = false;
+      if (stage) {
+        stage.timingComplete = false;
+        const owner = cases.get(stage.caseId);
+        if (owner) owner.timingComplete = false;
+      }
     } else if ("caseId" in event && event.type.startsWith("case.")) {
       const owner = cases.get(event.caseId);
       if (owner) owner.timingComplete = false;

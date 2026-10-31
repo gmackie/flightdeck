@@ -34,13 +34,15 @@ export type Attributes = Readonly<Record<string, string | number | boolean | nul
 export interface StageDefinition {
   readonly id: StageId;
   readonly label?: string;
+  /** Entering this explicitly classified terminal stage terminates the case at entry time. */
+  readonly terminal?: TerminalClass;
 }
 export interface ProcessDefinition {
   readonly id: ProcessId;
   readonly label?: string;
   readonly stages: readonly StageDefinition[];
-  /** If present, entering a new instance requires an observed prior exit from one of these edges.
-   * Empty means no restrictions. Self edges allow repeat attempts; definition cycles are valid. */
+  /** With edges, entry requires the latest branch predecessor in the current case episode.
+   * Constrained definitions require initialStages. Self edges permit retries; cycles are valid. */
   readonly transitions?: readonly { readonly from: StageId; readonly to: StageId }[];
   readonly initialStages?: readonly StageId[];
 }
@@ -56,6 +58,8 @@ export interface StageInstanceInput {
   readonly id: StageInstanceId;
   readonly caseId: CaseId;
   readonly stageId: StageId;
+  /** Independent transition frontier within the case. Defaults to one serial branch. */
+  readonly branchId?: string;
 }
 export interface ObjectRef {
   readonly type: string;
@@ -71,7 +75,7 @@ export interface EventEnvelope {
   readonly id: EventId;
   /** Finite Unix milliseconds. Receipt time must never be substituted for occurrence time. */
   readonly occurredAt: number;
-  readonly source: { readonly id: string; readonly sequence?: number };
+  readonly source: { readonly id: string; readonly sequence?: number; readonly producer?: string };
   /** Replacement uses its own authoritative occurrence time; this is not receipt order. */
   readonly supersedes?: EventId;
 }
@@ -109,6 +113,8 @@ export interface ReplayInput {
   readonly asOf: number;
   /** Sequence is trusted only for these source IDs, and only to order equal occurrence times. */
   readonly reliableSources?: readonly string[];
+  /** Authoritative per-case sequences span producer/source names, as in Workstream A. */
+  readonly reliableCases?: readonly CaseId[];
 }
 export type DiagnosticCode =
   | "unsupported_event"
@@ -143,6 +149,7 @@ export interface CaseState extends CaseInput {
 }
 export interface StageState extends StageInstanceInput {
   status: "unknown" | "open" | "closed" | "skipped";
+  episodeIndex: number | null;
   enteredAt: number | null;
   exitedAt: number | null;
   blocked: Interval[];
@@ -174,5 +181,6 @@ export interface ReplayResult {
   /** Effective events, after deduplication and supersession, at/before asOf. */
   events: LifecycleEvent[];
   supersededEventIds: EventId[];
+  uncertainEventIds: EventId[];
   diagnostics: Diagnostic[];
 }
