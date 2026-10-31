@@ -27,6 +27,7 @@ export function liveView(over: Partial<LiveView> = {}): LiveView {
         ],
         transitions: [],
         sessions: 4,
+        seq: 10,
         minutes: [
           { minute: START + 25 * MIN, count: 5 },
           { minute: START + 29 * MIN, count: 4 },
@@ -39,6 +40,7 @@ export function liveView(over: Partial<LiveView> = {}): LiveView {
         counters: [{ kind: "page", name: "/docs", count: 3 }],
         transitions: [],
         sessions: 2,
+        seq: 4,
         minutes: [{ minute: PREV_START + 59 * MIN, count: 3 }],
       },
     ],
@@ -56,6 +58,8 @@ const delta = (over: Partial<LiveDelta> = {}): LiveDelta => ({
   ],
   minutes: [{ minute: START + 30 * MIN, count: 2 }],
   truncated: false,
+  since: 10,
+  seq: 11,
   sessions: 5,
   active: 4,
   at: START + 30 * MIN,
@@ -99,7 +103,8 @@ describe("summarize", () => {
 
 describe("applyDelta", () => {
   it("adds increments to the current hour and takes absolute session counts", () => {
-    const next = applyDelta(liveView(), delta());
+    const { view: next, resync } = applyDelta(liveView(), delta());
+    expect(resync).toBe(false);
     const [cur] = next.hours;
     expect(cur?.totals).toEqual([
       { kind: "page", count: 8 },
@@ -110,21 +115,26 @@ describe("applyDelta", () => {
     expect(cur?.counters).toContainEqual({ kind: "track", name: "signup", count: 1 });
     expect(cur?.minutes.at(-1)).toEqual({ minute: START + 30 * MIN, count: 2 });
     expect(cur?.sessions).toBe(5);
+    expect(cur?.seq).toBe(11);
     // Mid-hour the shard sees the whole active window, so its count is exact.
     expect(next.active_sessions).toBe(4);
     expect(next.now).toBe(START + 30 * MIN);
   });
 
   it("keeps the larger active count while the window reaches into the previous hour", () => {
-    const next = applyDelta(liveView({ active_sessions: 6 }), delta({ at: START + 2 * MIN }));
+    const { view: next } = applyDelta(
+      liveView({ active_sessions: 6 }),
+      delta({ at: START + 2 * MIN }),
+    );
     expect(next.active_sessions).toBe(6);
   });
 
   it("starts a new hour when the delta is for a later one", () => {
-    const next = applyDelta(
+    const { view: next, resync } = applyDelta(
       liveView(),
-      delta({ hour: "2026-10-30T15", at: START + 61 * MIN, minutes: [] }),
+      delta({ hour: "2026-10-30T15", at: START + 61 * MIN, minutes: [], since: 0, seq: 1 }),
     );
+    expect(resync).toBe(false);
     expect(next.hours.map((h) => h.hour)).toEqual(["2026-10-30T15", HOUR]);
     expect(next.hours[0]?.totals).toEqual([
       { kind: "page", count: 1 },
@@ -134,6 +144,26 @@ describe("applyDelta", () => {
 
   it("ignores deltas for older hours", () => {
     const view = liveView();
-    expect(applyDelta(view, delta({ hour: "2026-10-30T13" }))).toBe(view);
+    expect(applyDelta(view, delta({ hour: "2026-10-30T13" }))).toEqual({ view, resync: false });
+  });
+
+  it("skips deltas the snapshot already includes", () => {
+    const view = liveView();
+    expect(applyDelta(view, delta({ since: 8, seq: 10 }))).toEqual({ view, resync: false });
+  });
+
+  it("asks for a refetch instead of double-counting a delta that overlaps the snapshot", () => {
+    const view = liveView();
+    expect(applyDelta(view, delta({ since: 9, seq: 12 }))).toEqual({ view, resync: true });
+  });
+
+  it("applies a delta after a gap but asks for a refetch to fill it", () => {
+    const { view, resync } = applyDelta(liveView(), delta({ since: 12, seq: 13 }));
+    expect(resync).toBe(true);
+    expect(view.hours[0]?.seq).toBe(13);
+  });
+
+  it("asks for a refetch after a truncated delta", () => {
+    expect(applyDelta(liveView(), delta({ truncated: true })).resync).toBe(true);
   });
 });

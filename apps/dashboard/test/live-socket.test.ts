@@ -10,7 +10,16 @@ import {
 import { FakeWebSocket } from "./helpers";
 
 const URL = "wss://flightdeck.test/api/apps/app_alpha/live/ws";
-const delta = { type: "delta", hour: "2026-10-30T14", events: 1, counters: [], minutes: [], at: 1 };
+const delta = {
+  type: "delta",
+  hour: "2026-10-30T14",
+  events: 1,
+  counters: [],
+  minutes: [],
+  since: 0,
+  seq: 1,
+  at: 1,
+};
 
 beforeEach(() => {
   FakeWebSocket.reset();
@@ -83,13 +92,25 @@ describe("LiveSocket", () => {
     expect(FakeWebSocket.instances).toHaveLength(2);
   });
 
-  it("reconnects shortly after the hour turns", () => {
+  it("moves to the next hour by the server's clock, not the client's", () => {
     start();
     const first = FakeWebSocket.latest();
     first.open();
-    vi.advanceTimersByTime(29 * 60_000);
+    // Without a hello there is no client-side rollover; the server closes the hour itself.
+    vi.advanceTimersByTime(60 * 60_000);
     expect(FakeWebSocket.instances).toHaveLength(1);
-    vi.advanceTimersByTime(60_000 + 1_000);
+    // The client clock runs 32 minutes fast: the server says 13:58 with the hour ending at 14:00.
+    const serverNow = Date.UTC(2026, 9, 30, 13, 58);
+    first.receive({
+      type: "hello",
+      hour: "2026-10-30T13",
+      hour_end: Date.UTC(2026, 9, 30, 14),
+      seq: 0,
+      now: serverNow,
+    });
+    vi.advanceTimersByTime(2 * 60_000);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    vi.advanceTimersByTime(1_000);
     expect(first.closedByClient).toBe(1000);
     expect(FakeWebSocket.instances).toHaveLength(2);
   });

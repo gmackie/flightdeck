@@ -23,7 +23,8 @@ export const fetchLive = (appId: string) =>
 /**
  * The Live page's data: a snapshot fetch, then WebSocket deltas folded in. While the socket is
  * down the snapshot is polled instead; while it is up it is refetched now and then to correct
- * drift (truncated deltas, sessions counted across the hour boundary).
+ * drift (sessions counted across the hour boundary). Deltas that overlap a snapshot, leave a
+ * gap after it, or are truncated trigger a refetch instead of drifting.
  */
 export function useLive(appId: string) {
   const [state, setState] = useState<LiveState>({ status: "loading" });
@@ -32,21 +33,29 @@ export function useLive(appId: string) {
   const socketRef = useRef<LiveSocket | null>(null);
   const currentApp = useRef(appId);
   currentApp.current = appId;
+  // The latest view, kept outside React state so deltas apply in arrival order and can ask
+  // for a refetch synchronously.
+  const viewRef = useRef<LiveView | null>(null);
 
   const load = useCallback(async () => {
     const result = await fetchLive(appId);
     // The user switched apps while this was in flight.
     if (currentApp.current !== appId) return;
-    setState((prev) => {
-      if (result.status === "ok") return { status: "ok", view: result.data };
-      // A failed refresh keeps the last good data on screen; the status badge shows trouble.
-      return prev.status === "ok" && result.status === "error" ? prev : result;
-    });
+    if (result.status === "ok") {
+      viewRef.current = result.data;
+      setState({ status: "ok", view: result.data });
+      return;
+    }
+    // A failed refresh keeps the last good data on screen; the status badge shows trouble.
+    if (viewRef.current && result.status === "error") return;
+    viewRef.current = null;
+    setState(result);
   }, [appId]);
 
   useEffect(() => {
     let live = true;
     let opened = false;
+    viewRef.current = null;
     setState({ status: "loading" });
     const guarded = () => {
       if (live) void load();
@@ -60,11 +69,14 @@ export function useLive(appId: string) {
         opened = true;
       },
       onDelta: (delta) => {
-        if (!live) return;
-        setState((prev) =>
-          prev.status === "ok" ? { status: "ok", view: applyDelta(prev.view, delta) } : prev,
-        );
-        if (delta.truncated) guarded();
+        // Before the first snapshot arrives, that snapshot will include this delta.
+        if (!live || !viewRef.current) return;
+        const { view, resync } = applyDelta(viewRef.current, delta);
+        if (view !== viewRef.current) {
+          viewRef.current = view;
+          setState({ status: "ok", view });
+        }
+        if (resync) guarded();
       },
     });
     socketRef.current = ws;

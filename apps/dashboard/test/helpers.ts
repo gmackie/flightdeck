@@ -23,6 +23,7 @@ export const emptyLive = (appId: string, now = Date.now()) => ({
       counters: [],
       transitions: [],
       sessions: 0,
+      seq: 0,
       minutes: [],
     };
   }),

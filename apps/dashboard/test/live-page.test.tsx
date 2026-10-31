@@ -86,6 +86,8 @@ describe("Live page", () => {
         counters: [{ kind: "page", name: "/welcome", count: 1 }],
         minutes: [{ minute: Math.floor(Date.now() / MIN) * MIN, count: 1 }],
         truncated: false,
+        since: 0,
+        seq: 1,
         sessions: 1,
         active: 1,
         at: Date.now(),
@@ -93,6 +95,47 @@ describe("Live page", () => {
     );
     expect(await screen.findByText("/welcome")).toBeInTheDocument();
     expect(screen.queryByText("Waiting for the first event")).not.toBeInTheDocument();
+  });
+
+  it("refetches instead of double-counting a delta that overlaps the snapshot", async () => {
+    let seq = 3;
+    const fetcher = mockApps(
+      200,
+      undefined,
+      liveRoute(() => {
+        const view = withEvents();
+        if (view.hours[0]) view.hours[0].seq = seq;
+        return view;
+      }),
+    );
+    render(<LivePage app={app} />);
+    await screen.findByText("/pricing");
+    const liveCalls = () => fetchedPaths(fetcher).filter((p) => p.endsWith("/live")).length;
+    expect(liveCalls()).toBe(1);
+    const ws = FakeWebSocket.latest();
+    act(() => ws.open());
+    const hour = new Date().toISOString().slice(0, 13);
+    const overlap = {
+      type: "delta",
+      hour,
+      events: 2,
+      counters: [{ kind: "page", name: "/pricing", count: 2 }],
+      minutes: [],
+      truncated: false,
+      since: 2,
+      seq: 4,
+      sessions: 5,
+      active: 3,
+      at: Date.now(),
+    };
+    seq = 4;
+    act(() => ws.receive(overlap));
+    await waitFor(() => expect(liveCalls()).toBe(2));
+    // The refetched snapshot (seq 4) already has the delta; replaying it changes nothing.
+    act(() => ws.receive(overlap));
+    const row = (await screen.findByText("/pricing")).closest("tr") as HTMLElement;
+    expect(within(row).getByText("8")).toBeInTheDocument();
+    expect(liveCalls()).toBe(2);
   });
 
   it("shows the connection status and reconnects on demand", async () => {

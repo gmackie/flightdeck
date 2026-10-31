@@ -51,23 +51,35 @@ only.
 - **Page views this hour** counts `page` events since the top of the UTC hour.
 
 `GET /api/apps/:id/live/ws` hands an Access-checked, same-origin WebSocket upgrade to the
-current hour's AppDO, which holds it with the Hibernation API. Each ingest broadcasts a
-compact delta (increments plus absolute session counts), coalesced to at most one message
-per second. The DO closes its sockets with code 4000 once its hour is flushed, and the
-client also reconnects a moment after each hour turns. The client sends `ping` every
-30 seconds (answered by an auto-response, without waking the DO), reconnects with
-exponential backoff, and polls the snapshot every 10 seconds while the socket is down
-(every 60 seconds while it is up, to correct drift).
+current hour's AppDO, which holds it with the Hibernation API. Its first message is a
+`hello` with the hour's end and the time, both by the server clock. The client moves to the
+next hour's shard a moment after that hour end, so a client clock running fast or slow
+doesn't matter. The DO refuses upgrades once its hour is over (410), and an alarm closes its
+sockets with code 4000 at the hour end.
+
+Each ingest broadcasts a compact delta (increments plus absolute session counts), coalesced
+to at most one message per second. Snapshots carry the shard's write sequence `seq`; a delta
+covers writes `since + 1` to `seq`. The client skips deltas a snapshot already includes,
+refetches instead of double-counting one that overlaps it, and refetches after a gap or a
+truncated delta. The client sends `ping` every 30 seconds (answered by an auto-response,
+without waking the DO), reconnects with exponential backoff, and polls the snapshot every
+10 seconds while the socket is down (every 60 seconds while it is up, to correct drift).
 
 ## Trends and the warm tier
 
 Each AppDO flushes its hour into D1 (`hourly_rollups`, `hourly_sessions`; migration 0004)
 by alarm 10 minutes after the hour ends. Events that arrive later re-arm a flush a minute
 out. A flush deletes and rewrites the app-hour in one batch, so re-flushing is idempotent.
-An hour keeps at most 1,000 names; the rest fold into one `$other` row per kind.
+If a write lands while the D1 write is in flight (the shard counts its writes and compares
+before and after), the alarm flushes again a minute later instead of waiting for expiry. An
+hour keeps at most 1,000 names; the rest fold into one `$other` row per kind. Ingest rejects
+custom event names starting with `$` (Flightdeck reserves them: `$start`, `$exit`,
+`$other`); a `$other` recorded before that rule merges into the folded row.
 
-This deviates from the design, where a cron runs Basin SQL over closed hours. Backfilling
-or repairing rollups from the Iceberg tables with Basin SQL is a follow-up.
+This deviates from the design, where a cron runs Basin SQL over closed hours. Hours that
+closed before this shipped never get D1 rows: their shards had no flush alarm, and expire
+48h after their hour. Backfilling or repairing rollups from the Iceberg tables with Basin
+SQL is a follow-up.
 
 `GET /api/apps/:id/trends?range=24h|7d|30d&breakdown=kind|name|page&kind=...` reads D1
 for older hours and the AppDOs for the previous and current hour (they stay authoritative

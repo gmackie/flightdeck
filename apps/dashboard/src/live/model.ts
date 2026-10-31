@@ -17,6 +17,8 @@ export type LiveHour = {
   counters: Counter[];
   transitions: { source: string; target: string; count: number }[];
   sessions: number;
+  /** The shard's write sequence when this snapshot was taken. */
+  seq: number;
   minutes: MinuteCount[];
 };
 
@@ -38,10 +40,16 @@ export type LiveDelta = {
   minutes: MinuteCount[];
   /** More counters changed than the delta lists: refetch for exact tables. */
   truncated: boolean;
+  /** Covers the shard's writes `since + 1` through `seq`. */
+  since: number;
+  seq: number;
   sessions: number;
   active: number;
   at: number;
 };
+
+/** The first message on a live socket, stamped by the server clock. */
+export type LiveHello = { type: "hello"; hour: string; hour_end: number; seq: number; now: number };
 
 export function isLiveView(value: unknown): value is LiveView {
   if (typeof value !== "object" || value === null) return false;
@@ -70,8 +78,16 @@ export function isLiveDelta(value: unknown): value is LiveDelta {
     typeof v.hour === "string" &&
     Array.isArray(v.counters) &&
     Array.isArray(v.minutes) &&
-    typeof v.at === "number"
+    typeof v.at === "number" &&
+    typeof v.seq === "number" &&
+    typeof v.since === "number"
   );
+}
+
+export function isLiveHello(value: unknown): value is LiveHello {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return v.type === "hello" && typeof v.hour_end === "number" && typeof v.now === "number";
 }
 
 const byCount =
@@ -110,12 +126,20 @@ function addMinutes(base: MinuteCount[], add: MinuteCount[]): MinuteCount[] {
   return [...merged.values()].sort((a, b) => a.minute - b.minute);
 }
 
-/** Folds a pushed delta into the view. Returns the same object for deltas about older hours. */
-export function applyDelta(view: LiveView, delta: LiveDelta): LiveView {
+/**
+ * Folds a pushed delta into the view, using the shard sequence to stay exact:
+ * - `seq <= hour.seq`: the snapshot already has it; skip.
+ * - `since < hour.seq`: it overlaps the snapshot; skip and refetch rather than double-count.
+ * - `since > hour.seq`: writes went unpushed (e.g. before the socket opened); apply, then refetch.
+ * `resync` asks the caller to refetch the snapshot; truncated deltas ask for one too.
+ */
+export function applyDelta(view: LiveView, delta: LiveDelta): { view: LiveView; resync: boolean } {
   const [current, ...older] = view.hours;
   let hours: LiveHour[];
   let hour: LiveHour;
   if (current && delta.hour === current.hour) {
+    if (delta.seq <= current.seq) return { view, resync: false };
+    if (delta.since < current.seq) return { view, resync: true };
     hour = current;
     hours = older;
   } else if (!current || delta.hour > current.hour) {
@@ -127,11 +151,12 @@ export function applyDelta(view: LiveView, delta: LiveDelta): LiveView {
       counters: [],
       transitions: [],
       sessions: 0,
+      seq: 0,
       minutes: [],
     };
     hours = view.hours;
   } else {
-    return view;
+    return { view, resync: false };
   }
   const next: LiveHour = {
     ...hour,
@@ -139,16 +164,20 @@ export function applyDelta(view: LiveView, delta: LiveDelta): LiveView {
     counters: addCounters(hour.counters, delta.counters),
     minutes: addMinutes(hour.minutes, delta.minutes),
     sessions: delta.sessions,
+    seq: delta.seq,
   };
   // The shard only knows its own hour: early in an hour some active sessions live in the
   // previous one, so keep the larger count until the next full fetch.
   const exact = delta.at - view.active_window_ms >= next.start;
   return {
-    ...view,
-    now: delta.at,
-    active_sessions: exact ? delta.active : Math.max(view.active_sessions, delta.active),
-    // A new hour pushes the oldest one out, so the view keeps the number of hours it asked for.
-    hours: [next, ...hours].slice(0, Math.max(1, view.hours.length)),
+    view: {
+      ...view,
+      now: delta.at,
+      active_sessions: exact ? delta.active : Math.max(view.active_sessions, delta.active),
+      // A new hour pushes the oldest one out, so the view keeps the number of hours it asked for.
+      hours: [next, ...hours].slice(0, Math.max(1, view.hours.length)),
+    },
+    resync: delta.truncated || delta.since > hour.seq,
   };
 }
 
