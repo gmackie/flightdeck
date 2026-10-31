@@ -1,0 +1,33 @@
+{
+  "name": "@flightdeckhq/lifecycle-queries",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p .",
+    "test": "vitest run --config vitest.config.ts",
+    "prepack": "pnpm run build"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "5.0.5"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "license": "MIT"
+}

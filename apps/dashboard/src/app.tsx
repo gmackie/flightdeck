@@ -22,6 +22,7 @@ import { AppsPage } from "./pages/apps";
 import { ComingSoonPage } from "./pages/coming-soon";
 import { LivePage } from "./pages/live";
 import { TrendsPage } from "./pages/trends";
+import { WorkflowsPage } from "./pages/workflows";
 import {
   navigate,
   type PageId,
@@ -50,6 +51,7 @@ function NavGroup(props: { label: string; items: NavItem[]; current: PageId | nu
           >
             {item.label}
             {item.soon ? <Sidebar.MenuBadge>Soon</Sidebar.MenuBadge> : null}
+            {item.demo ? <Sidebar.MenuBadge>Demo</Sidebar.MenuBadge> : null}
           </Sidebar.MenuButton>
         ))}
       </Sidebar.Menu>
@@ -86,6 +88,7 @@ function Content(props: {
     );
   }
   const item = NAV_ITEMS.find((i) => i.id === page);
+  if (page === "workflows") return <WorkflowsPage />;
   if (item?.soon) return <ComingSoonPage item={item} />;
   if (state.status === "loading") {
     return (
@@ -166,8 +169,8 @@ function Content(props: {
 
 export function App() {
   const href = useLocation();
-  const [state, reload] = useApps();
   const page = pageFrom(location.pathname);
+  const [state, reload] = useApps(page !== "workflows");
   const apps = state.status === "ok" ? state.apps : [];
   const param = selectedAppParam();
   const selected = apps.find((a) => a.id === param) ?? apps[0] ?? null;
@@ -176,10 +179,10 @@ export function App() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: `href` changes on every navigation.
   useEffect(() => {
     if (location.pathname === "/") navigate(`/live${location.search}`, { replace: true });
-    else if (state.status === "ok" && (selected?.id ?? null) !== param) {
+    else if (page !== "workflows" && state.status === "ok" && (selected?.id ?? null) !== param) {
       navigate(withApp(selected?.id ?? null), { replace: true });
     }
-  }, [href, state.status, selected?.id, param]);
+  }, [href, page, state.status, selected?.id, param]);
 
   const label = NAV_ITEMS.find((i) => i.id === page)?.label ?? "Not found";
   useEffect(() => {
@@ -206,11 +209,15 @@ export function App() {
         <div className="fd-main">
           <header className="fd-header">
             <Sidebar.Trigger aria-label="Toggle navigation" data-flightdeck="nav.toggle" />
-            <AppSwitcher
-              state={state}
-              selected={selected}
-              onSelect={(appId) => navigate(withApp(appId))}
-            />
+            {page === "workflows" ? (
+              <span className="wf-header-notice">Synthetic demo workspace</span>
+            ) : (
+              <AppSwitcher
+                state={state}
+                selected={selected}
+                onSelect={(appId) => navigate(withApp(appId))}
+              />
+            )}
           </header>
           <main className="fd-content" aria-label={label}>
             <Content page={page} state={state} selected={selected} reload={reload} />

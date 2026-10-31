@@ -1,0 +1,187 @@
+{
+  "schema": "flightdeck.lifecycle-fixture/v1",
+  "name": "broken-state-machine",
+  "description": "Negative case: streams that break baseline invariants. The validator must report each violation code rather than accept them.",
+  "covers": ["invariant_violations"],
+  "asOf": "2026-04-01T09:00:00.000Z",
+  "records": [
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "dh9goxhe75yyxqd5ng8r",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "ticket",
+          "id": "tqzezp986wn2qped9cgg"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:00:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "j32t7nihnbgn2m346o99",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "ticket",
+          "id": "hp8jq313xf167ez0h1w4"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:00:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "tcl3j3rk21kq9i5cctig",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "ticket",
+          "id": "zi1fjd3bvs7txo0hodl5"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:00:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:01:01.000Z",
+      "event": {
+        "eventId": "crr0ylz9t4qq44lx8bob",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.paused",
+        "entity": {
+          "kind": "ticket",
+          "id": "tqzezp986wn2qped9cgg"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:01:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:01:01.000Z",
+      "event": {
+        "eventId": "ybeom4xd5f5rh4krt6gb",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "ticket",
+          "id": "hp8jq313xf167ez0h1w4"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:01:00.000Z",
+        "outcome": "resolved"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:01:01.000Z",
+      "event": {
+        "eventId": "a56syau7i2l6qv9o3ftw",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.paused",
+        "entity": {
+          "kind": "ticket",
+          "id": "zi1fjd3bvs7txo0hodl5"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:01:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:02:01.000Z",
+      "event": {
+        "eventId": "zla627qlju48mpj3rgk6",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "hp8jq313xf167ez0h1w4"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-02T09:02:00.000Z",
+        "stage": {
+          "name": "triage",
+          "instanceId": "5zbmzbzg8yiho0xd05bf"
+        }
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:02:01.000Z",
+      "event": {
+        "eventId": "9yriwfqtwfhm1xrsfu27",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.paused",
+        "entity": {
+          "kind": "ticket",
+          "id": "zi1fjd3bvs7txo0hodl5"
+        },
+        "version": 3,
+        "occurredAt": "2026-03-02T09:02:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T09:03:01.000Z",
+      "event": {
+        "eventId": "a85nh3t3wm0d3crm43hn",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "ticket",
+          "id": "tqzezp986wn2qped9cgg"
+        },
+        "version": 4,
+        "occurredAt": "2026-03-02T09:03:00.000Z",
+        "outcome": "resolved"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T10:00:01.000Z",
+      "event": {
+        "eventId": "sf53hsjoct15z32o1nv5",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "ticket",
+          "id": "pggp50wz1s1ednbnsf13"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T10:00:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T10:00:01.000Z",
+      "event": {
+        "eventId": "5xizbrf6g6ciw2vm3j6v",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "stage.entered",
+        "entity": {
+          "kind": "ticket",
+          "id": "pggp50wz1s1ednbnsf13"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T09:00:00.000Z",
+        "stage": {
+          "name": "triage",
+          "instanceId": "6t5fnskqj8zc3y8ctkjb"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "violations": ["pause_invalid", "stage_on_closed", "time_regression", "version_gap"]
+  }
+}

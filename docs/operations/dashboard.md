@@ -22,6 +22,11 @@ includes the `workers.dev` hostname while `workers_dev` is enabled. Otherwise, d
 Set `ACCESS_TEAM_DOMAIN` to the team domain and `ACCESS_AUD` to the AUD tag of the
 dashboard's Access application.
 
+New lifecycle policy/projection reads additionally require scoped grants. Existing
+live/trends reads use an explicit compatibility rollout; see
+[read authorization](read-authorization.md) for bootstrap, `READ_AUTHZ_MODE`, and
+the privacy release contract.
+
 ## Dogfooding
 
 Flightdeck instruments itself as `app_flightdeck`, which migration 0003 registers. The
