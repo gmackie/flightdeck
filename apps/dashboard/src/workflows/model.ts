@@ -73,24 +73,48 @@ export interface WorkflowSnapshot {
 }
 
 export function duration(ms: number | undefined): string {
-  if (ms === undefined) return "—";
-  const minutes = Math.max(0, Math.floor(ms / 60_000));
+  if (ms === undefined || !Number.isFinite(ms) || ms < 0) return "—";
+  const minutes = Math.floor(ms / 60_000);
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
   return hours < 48 ? `${hours}h ${minutes % 60}m` : `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
+/** Invalid integration timestamps remain unavailable, never silently clamped to zero. */
+export function stageTimeProblem(stage: LifecycleStage, asOf: number): string | undefined {
+  if (!Number.isFinite(asOf)) return "Snapshot timestamp is invalid";
+  if (stage.enteredAt === undefined) {
+    if (stage.exitedAt !== undefined) return "Exit timestamp has no entry";
+    if (stage.state !== "future") return "Entered stage is missing its entry timestamp";
+    return undefined;
+  }
+  if (stage.state === "future") return "Future stage has recorded timestamps";
+  if (!Number.isFinite(stage.enteredAt)) return "Entry timestamp is invalid";
+  if (stage.enteredAt > asOf) return "Entry is after the snapshot";
+  if (stage.exitedAt !== undefined) {
+    if (!Number.isFinite(stage.exitedAt)) return "Exit timestamp is invalid";
+    if (stage.exitedAt < stage.enteredAt) return "Exit is before entry";
+    if (stage.exitedAt > asOf) return "Exit is after the snapshot";
+  } else if (["completed", "rejected", "cancelled", "withdrawn"].includes(stage.state))
+    return "Terminal stage is missing its exit timestamp";
+  return undefined;
+}
+
 export function stageDwell(stage: LifecycleStage, asOf: number): number | undefined {
-  return stage.enteredAt === undefined
-    ? undefined
-    : Math.max(0, (stage.exitedAt ?? asOf) - stage.enteredAt);
+  if (stage.enteredAt === undefined || stageTimeProblem(stage, asOf)) return undefined;
+  return (stage.exitedAt ?? asOf) - stage.enteredAt;
+}
+
+export function stageAge(stage: LifecycleStage, asOf: number): number | undefined {
+  if (stage.enteredAt === undefined || stageTimeProblem(stage, asOf)) return undefined;
+  return asOf - stage.enteredAt;
 }
 
 export function flattenNodes(roots: readonly LifecycleNode[]): LifecycleNode[] {
   return roots.flatMap((node) => [node, ...flattenNodes(node.children ?? [])]);
 }
 
-/** Nearest-rank percentile, including open-stage dwell at the snapshot time. */
+/** Nearest-rank percentile over a caller-selected, validated cohort. */
 export function percentile(values: readonly number[], quantile: number): number | undefined {
   if (!values.length) return undefined;
   const sorted = [...values].sort((a, b) => a - b);
@@ -103,20 +127,33 @@ export function summarizePortfolio(roots: readonly LifecycleNode[], asOf: number
     LifecycleState,
     number
   >;
-  const dwells: number[] = [];
+  const completedDwells: number[] = [];
+  const openAges: number[] = [];
+  let invalidStages = 0;
   for (const node of nodes) {
     counts[node.state] += 1;
     for (const stage of node.stages) {
       const dwell = stageDwell(stage, asOf);
-      if (dwell !== undefined) dwells.push(dwell);
+      if (stageTimeProblem(stage, asOf)) invalidStages += 1;
+      if (dwell === undefined) continue;
+      if (stage.state === "completed" && stage.exitedAt !== undefined) completedDwells.push(dwell);
+      else if (stage.exitedAt === undefined) openAges.push(dwell);
     }
   }
   return {
     total: nodes.length,
     counts,
-    p50: percentile(dwells, 0.5),
-    p90: percentile(dwells, 0.9),
-    samples: dwells.length,
+    completedDwell: {
+      p50: percentile(completedDwells, 0.5),
+      p90: percentile(completedDwells, 0.9),
+      count: completedDwells.length,
+    },
+    openStageAge: {
+      p50: percentile(openAges, 0.5),
+      p90: percentile(openAges, 0.9),
+      count: openAges.length,
+    },
+    invalidStages,
   };
 }
 

@@ -1,7 +1,11 @@
 import { Button } from "@cloudflare/kumo/components/button";
 import { Surface } from "@cloudflare/kumo/components/surface";
 import { useState } from "react";
-import { demoWorkflowAdapter, type WorkflowDataAdapter } from "../workflows/adapter";
+import {
+  demoWorkflowAdapter,
+  diagnoseWorkflowSnapshot,
+  type WorkflowDataAdapter,
+} from "../workflows/adapter";
 import { StateBadge } from "../workflows/lifecycle-bar";
 import { LifecycleTree } from "../workflows/lifecycle-tree";
 import { filterHierarchy, flattenNodes, LIFECYCLE_STATES } from "../workflows/model";
@@ -25,6 +29,7 @@ export function WorkflowsPage({
   adapter?: WorkflowDataAdapter;
 }) {
   const snapshot = adapter.read();
+  const diagnostics = diagnoseWorkflowSnapshot(snapshot);
   const [domain, setDomain] = useState(snapshot.portfolios[0]?.id ?? "");
   const [view, setView] = useState("hierarchy");
   const [query, setQuery] = useState("");
@@ -56,6 +61,24 @@ export function WorkflowsPage({
           UTC
         </span>
       </aside>
+      {diagnostics.length ? (
+        <aside className="wf-demo-notice" aria-label="Workflow timing diagnostics">
+          <strong>
+            {diagnostics.length} invalid stage timing samples · durations unavailable and excluded
+            from percentiles
+          </strong>
+          <details>
+            <summary>Review timestamp problems</summary>
+            <ul>
+              {diagnostics.map((diagnostic) => (
+                <li key={`${diagnostic.portfolioId}:${diagnostic.nodeId}:${diagnostic.stageId}`}>
+                  {diagnostic.nodeLabel} · {diagnostic.stageLabel}: {diagnostic.message}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </aside>
+      ) : null}
       <div className="wf-controls">
         <fieldset className="fd-segmented" aria-label="Workflow domain">
           {snapshot.portfolios.map((item) => (

@@ -6,7 +6,9 @@ import {
   type LifecycleState,
   STATE_LABELS,
   STATE_MARKS,
+  stageAge,
   stageDwell,
+  stageTimeProblem,
 } from "./model";
 
 export function StateBadge({ state }: { state: LifecycleState }) {
@@ -38,7 +40,9 @@ export function StageTooltip({
           <dt>Dwell</dt>
           <dd>
             {duration(stageDwell(stage, asOf))}
-            {stage.enteredAt !== undefined && stage.exitedAt === undefined ? " · ongoing" : ""}
+            {stageDwell(stage, asOf) !== undefined && stage.exitedAt === undefined
+              ? " · ongoing"
+              : ""}
           </dd>
         </div>
         <div>
@@ -47,7 +51,7 @@ export function StageTooltip({
         </div>
         <div>
           <dt>Age since entry</dt>
-          <dd>{duration(stage.enteredAt === undefined ? undefined : asOf - stage.enteredAt)}</dd>
+          <dd>{duration(stageAge(stage, asOf))}</dd>
         </div>
         <div>
           <dt>Reason</dt>
@@ -55,6 +59,12 @@ export function StageTooltip({
             {stage.reason ?? (stage.state === "future" ? "Not entered yet" : "No reason recorded")}
           </dd>
         </div>
+        {stageTimeProblem(stage, asOf) ? (
+          <div>
+            <dt>Timing</dt>
+            <dd>{stageTimeProblem(stage, asOf)}; duration unavailable</dd>
+          </div>
+        ) : null}
       </dl>
     </div>
   );

@@ -81,9 +81,16 @@ it("shows twelve compact jobs with dwell and outcomes, filters them, and handles
   await user.click(screen.getByRole("button", { name: "Many jobs" }));
   const list = screen.getByRole("list", { name: "Many jobs" });
   expect(within(list).getAllByRole("listitem")).toHaveLength(12);
-  expect(within(list).getAllByText(/p50 .* p90 .* stage dwell/)).toHaveLength(12);
+  expect(within(list).getAllByText(/Completed dwell p50 .* p90/)).toHaveLength(12);
+  expect(within(list).getAllByText(/Open-stage age p50 .* p90/)).toHaveLength(12);
   expect(screen.getByRole("region", { name: "Portfolio summary" })).toHaveTextContent(
-    "p90 stage dwell",
+    "p90 completed dwell",
+  );
+  expect(screen.getByRole("region", { name: "Portfolio summary" })).toHaveTextContent(
+    "p90 open-stage age",
+  );
+  expect(screen.getByRole("region", { name: "Portfolio summary" })).toHaveTextContent(
+    "right-censored ages",
   );
   expect(
     screen.getByRole("region", { name: "Workflow state and outcome counts" }),
@@ -137,4 +144,54 @@ it("accepts an independent adapter instead of coupling generic UI to fixture dom
   expect(read).toHaveBeenCalled();
   expect(screen.getByRole("status")).toHaveTextContent("No workflows match");
   act(() => navigate("/workflows"));
+});
+
+it("surfaces invalid adapter timestamps and leaves durations unavailable", async () => {
+  const user = userEvent.setup();
+  render(
+    <WorkflowsPage
+      adapter={{
+        read: () => ({
+          asOf: 1000,
+          source: { label: "Invalid timing fixture", synthetic: true },
+          portfolios: [
+            {
+              id: "test",
+              label: "Test",
+              description: "Test",
+              roots: [
+                {
+                  id: "test",
+                  label: "Invalid record",
+                  kind: "Test",
+                  owner: "Test team",
+                  state: "active",
+                  createdAt: 0,
+                  stages: [
+                    {
+                      id: "review",
+                      label: "Review",
+                      state: "active",
+                      owner: "Test team",
+                      enteredAt: 2000,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      }}
+    />,
+  );
+  const notice = screen.getByRole("complementary", { name: "Workflow timing diagnostics" });
+  expect(notice).toHaveTextContent("1 invalid stage timing samples");
+  await user.click(within(notice).getByText("Review timestamp problems"));
+  expect(notice).toHaveTextContent("Entry is after the snapshot");
+  const trigger = screen.getByRole("button", { name: "Review: Active, dwell —" });
+  await user.click(trigger);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("duration unavailable");
+  expect(screen.getByRole("region", { name: "Portfolio summary" })).toHaveTextContent(
+    "0 open stages",
+  );
 });

@@ -23,12 +23,20 @@ export function PortfolioSummary({
           <dd>{summary.total}</dd>
         </div>
         <div>
-          <dt>p50 stage dwell</dt>
-          <dd>{duration(summary.p50)}</dd>
+          <dt>p50 completed dwell</dt>
+          <dd>{duration(summary.completedDwell.p50)}</dd>
         </div>
         <div>
-          <dt>p90 stage dwell</dt>
-          <dd>{duration(summary.p90)}</dd>
+          <dt>p90 completed dwell</dt>
+          <dd>{duration(summary.completedDwell.p90)}</dd>
+        </div>
+        <div>
+          <dt>p50 open-stage age</dt>
+          <dd>{duration(summary.openStageAge.p50)}</dd>
+        </div>
+        <div>
+          <dt>p90 open-stage age</dt>
+          <dd>{duration(summary.openStageAge.p90)}</dd>
         </div>
       </dl>
       <section className="wf-outcomes" aria-label="Workflow state and outcome counts">
@@ -39,8 +47,9 @@ export function PortfolioSummary({
         ))}
       </section>
       <p className="wf-summary-note">
-        All {summary.total} workflows, including nested children · {summary.samples} entered stages
-        · nearest-rank dwell, including ongoing time at the frozen snapshot
+        All {summary.total} workflows, including nested children · {summary.completedDwell.count}{" "}
+        completed-stage samples · {summary.openStageAge.count} open stages (right-censored ages) ·{" "}
+        {summary.invalidStages} invalid timing samples excluded. Open ages are not completion times.
       </p>
     </section>
   );
@@ -67,7 +76,12 @@ export function LifecyclePortfolio({
               <LifecycleRow node={node} asOf={asOf} />
               <div className="wf-job-metrics">
                 <span>
-                  p50 {duration(summary.p50)} / p90 {duration(summary.p90)} stage dwell
+                  Completed dwell p50 {duration(summary.completedDwell.p50)} / p90{" "}
+                  {duration(summary.completedDwell.p90)} (n={summary.completedDwell.count})
+                </span>
+                <span>
+                  Open-stage age p50 {duration(summary.openStageAge.p50)} / p90{" "}
+                  {duration(summary.openStageAge.p90)} (n={summary.openStageAge.count})
                 </span>
                 <span>{summary.total - 1} nested workflows</span>
                 <span>
