@@ -1,8 +1,10 @@
 import type { IngestRpc, RequestContext } from "@flightdeckhq/schema";
+import { type PrivacyOptions, withPrivacy } from "./privacy";
 
 export type { ClientEventInput, IngestResult, IngestRpc } from "@flightdeckhq/schema";
+export type { PrivacyOptions } from "./privacy";
 
-export type FlightdeckOptions = {
+export type FlightdeckOptions = PrivacyOptions & {
   /** Env binding name of the Flightdeck service binding. Default `FLIGHTDECK`. */
   binding?: string;
   /** Endpoint path the browser script posts to. Default `/_fd/e`. */
@@ -18,15 +20,18 @@ const DEFAULT_BINDING = "FLIGHTDECK";
 const DEFAULT_MAX_BODY = 64 * 1024;
 const CONTENT_TYPES = new Set(["text/plain", "application/json"]);
 
-/** Returns the Flightdeck service binding from `env`, for server-side `track`/`identify` calls. */
+/**
+ * Returns the Flightdeck service binding from `env`, for server-side `track`/`identify` calls.
+ * With `beforeSend` or `hashUserId` set, returns a wrapper that applies them to every event.
+ */
 export function flightdeck(
   env: object,
-  options: Pick<FlightdeckOptions, "binding"> = {},
+  options: Pick<FlightdeckOptions, "binding" | keyof PrivacyOptions> = {},
 ): IngestRpc {
   const name = options.binding ?? DEFAULT_BINDING;
   const binding = (env as Record<string, IngestRpc | undefined>)[name];
   if (!binding) throw new Error(`Flightdeck: env.${name} service binding is missing`);
-  return binding;
+  return withPrivacy(binding, options);
 }
 
 /** Reads `stream` up to `maxBytes`. Returns null, cancelling the rest unread, once it exceeds the limit. */

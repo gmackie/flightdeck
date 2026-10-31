@@ -1,6 +1,6 @@
 import type { IngestResult } from "@flightdeckhq/schema";
 import { describe, expect, it, vi } from "vitest";
-import { flightdeck, handleFlightdeck, withFlightdeck } from "../src";
+import { type ClientEventInput, flightdeck, handleFlightdeck, withFlightdeck } from "../src";
 
 const ORIGIN = "https://app.example.com";
 const ok = async (): Promise<IngestResult> => ({ accepted: 1, rejected: 0 });
@@ -289,5 +289,137 @@ describe("flightdeck", () => {
   it("throws a clear error when the binding is missing", () => {
     expect(() => flightdeck({})).toThrow("Flightdeck: env.FLIGHTDECK service binding is missing");
     expect(() => flightdeck({ FD: undefined }, { binding: "FD" })).toThrow(/env\.FD/);
+  });
+});
+
+const sha256 = async (s: string) =>
+  Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s))),
+    (b) => b.toString(16).padStart(2, "0"),
+  ).join("");
+
+/** The batch passed to the `n`th ingest call. */
+const sentBatch = (ingest: { mock: { calls: unknown[][] } }, n = 0) =>
+  ingest.mock.calls[n]?.[0] as { events: ClientEventInput[] };
+
+describe("privacy options", () => {
+  const batch = JSON.stringify({
+    events: [
+      { kind: "click", name: "cta", ts: 1, userId: "jane@example.com", props: { a: 1 } },
+      { kind: "track", name: "secret", ts: 2 },
+    ],
+  });
+
+  it("applies beforeSend to browser batches, dropping and rewriting events", async () => {
+    const env = fakeEnv();
+    const beforeSend = vi.fn((e: ClientEventInput) =>
+      e.name === "secret" ? null : { ...e, props: { ...e.props, scrubbed: true } },
+    );
+    expect((await handleFlightdeck(post(batch), env, { beforeSend }))?.status).toBe(204);
+    expect(beforeSend).toHaveBeenCalledTimes(2);
+    expect(env.ingest).toHaveBeenCalledWith({
+      events: [
+        {
+          kind: "click",
+          name: "cta",
+          ts: 1,
+          userId: "jane@example.com",
+          props: { a: 1, scrubbed: true },
+        },
+      ],
+      context: {},
+    });
+  });
+
+  it("skips the ingest call when beforeSend drops every event", async () => {
+    const env = fakeEnv();
+    const res = await handleFlightdeck(post(batch), env, { beforeSend: () => null });
+    expect(res?.status).toBe(204);
+    expect(env.ingest).not.toHaveBeenCalled();
+  });
+
+  it("drops an event whose beforeSend throws and logs it", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const env = fakeEnv();
+    const beforeSend = (e: ClientEventInput) => {
+      if (e.name === "secret") throw new Error("boom");
+      return e;
+    };
+    expect((await handleFlightdeck(post(batch), env, { beforeSend }))?.status).toBe(204);
+    expect(sentBatch(env.ingest)).toMatchObject({ events: [{ name: "cta" }] });
+    expect(errors).toHaveBeenCalledOnce();
+    errors.mockRestore();
+  });
+
+  it("hashes browser userIds with SHA-256 hex, optionally salted", async () => {
+    const env = fakeEnv();
+    await handleFlightdeck(post(batch), env, { hashUserId: true });
+    const plain = sentBatch(env.ingest);
+    expect(plain.events[0]?.userId).toBe(await sha256("jane@example.com"));
+    expect(plain.events[1]?.userId).toBeUndefined();
+
+    await handleFlightdeck(post(batch), env, { hashUserId: { salt: "pepper" } });
+    const salted = sentBatch(env.ingest, 1);
+    expect(salted.events[0]?.userId).toBe(await sha256("pepperjane@example.com"));
+    expect(salted.events[0]?.userId).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("leaves malformed batches for Flightdeck to reject", async () => {
+    const env = fakeEnv();
+    const beforeSend = vi.fn((e: ClientEventInput) => e);
+    await handleFlightdeck(post('{"events":"nope"}'), env, { beforeSend });
+    await handleFlightdeck(post('{"events":[null,"x"]}'), env, { beforeSend });
+    expect(beforeSend).not.toHaveBeenCalled();
+    expect([sentBatch(env.ingest).events, sentBatch(env.ingest, 1).events]).toEqual([
+      "nope",
+      [null, "x"],
+    ]);
+  });
+
+  it("applies beforeSend and hashUserId to server track and identify", async () => {
+    const env = fakeEnv();
+    const fd = flightdeck(env, {
+      hashUserId: true,
+      beforeSend: (e) => (e.name === "student.viewed" ? null : { ...e, path: "/x" }),
+    });
+    expect(await fd.track({ name: "student.viewed", userId: "u1" })).toEqual({
+      accepted: 0,
+      rejected: 0,
+    });
+    expect(env.FLIGHTDECK.track).not.toHaveBeenCalled();
+
+    await fd.track({ name: "issue.created", userId: "u1" });
+    expect(env.FLIGHTDECK.track).toHaveBeenCalledWith({
+      kind: "track",
+      name: "issue.created",
+      userId: await sha256("u1"),
+      path: "/x",
+    });
+
+    await fd.identify({ userId: "u1", sessionId: "s".repeat(32) });
+    expect(env.FLIGHTDECK.identify).toHaveBeenCalledWith({
+      kind: "identify",
+      name: "identify",
+      userId: await sha256("u1"),
+      sessionId: "s".repeat(32),
+      path: "/x",
+    });
+  });
+
+  it("returns the raw binding when no privacy options are set", () => {
+    const env = fakeEnv();
+    expect(flightdeck(env, {})).toBe(env.FLIGHTDECK);
+    expect(flightdeck(env, { hashUserId: true })).not.toBe(env.FLIGHTDECK);
+  });
+
+  it("withFlightdeck passes the privacy options to the browser endpoint", async () => {
+    const env = fakeEnv();
+    const handler = withFlightdeck(
+      { fetch: async () => new Response("app") },
+      { hashUserId: true },
+    );
+    await handler.fetch?.(post(batch) as never, env, {} as ExecutionContext);
+    const sent = sentBatch(env.ingest);
+    expect(sent.events[0]?.userId).toBe(await sha256("jane@example.com"));
   });
 });
