@@ -1,16 +1,57 @@
 {
   "name": "@flightdeckhq/browser",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Tiny (<3 KB gzip) browser SDK for Flightdeck product analytics.",
+  "keywords": [
+    "flightdeck",
+    "analytics",
+    "product-analytics",
+    "cloudflare",
+    "browser",
+    "tracking"
+  ],
+  "homepage": "https://github.com/gmackie/flightdeck/tree/main/packages/browser#readme",
+  "bugs": {
+    "url": "https://github.com/gmackie/flightdeck/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gmackie/flightdeck.git",
+    "directory": "packages/browser"
+  },
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
   "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build",
     "typecheck": "tsc -p .",
-    "size": "node scripts/size.mjs"
+    "size": "pnpm run build && node scripts/size.mjs"
   },
   "dependencies": {
-    "@flightdeckhq/schema": "workspace:*"
+    "@flightdeckhq/schema": "workspace:^"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

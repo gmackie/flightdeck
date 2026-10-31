@@ -1,8 +1,8 @@
 import type { IngestRpc, RequestContext } from "@flightdeckhq/schema";
-import { type PrivacyOptions, withPrivacy } from "./privacy";
+import { type PrivacyOptions, withPrivacy } from "./privacy.js";
 
 export type { ClientEventInput, IngestResult, IngestRpc } from "@flightdeckhq/schema";
-export type { PrivacyOptions } from "./privacy";
+export type { PrivacyOptions } from "./privacy.js";
 
 export type FlightdeckOptions = PrivacyOptions & {
   /** Env binding name of the Flightdeck service binding. Default `FLIGHTDECK`. */
