@@ -76,6 +76,26 @@ init({ redactProps: ["email"], beforeSend: (event) => event });
 track("search.submitted", { results: 3 });
 identify("user_1");
 EOF
+cat >src/lifecycle-insights.ts <<'EOF'
+import { compareVariants, evaluateRule, type AlertEvaluation, type Comparison } from "@flightdeckhq/lifecycle-insights";
+import { syntheticContext, syntheticFixture } from "@flightdeckhq/lifecycle-insights/fixtures";
+
+const { snapshot, comparison, rule } = syntheticFixture("release");
+const alert: AlertEvaluation = evaluateRule({ rule, current: snapshot, context: syntheticContext });
+const observed: Comparison = compareVariants({
+  spec: comparison, left: snapshot, right: snapshot, context: syntheticContext,
+});
+void [alert, observed];
+EOF
+cat >tsconfig.insights.json <<'EOF'
+{
+  "compilerOptions": {
+    "target": "es2022", "module": "nodenext", "moduleResolution": "nodenext",
+    "lib": ["es2022"], "types": [], "strict": true, "noEmit": true
+  },
+  "files": ["src/lifecycle-insights.ts"]
+}
+EOF
 cat >tsconfig.worker.json <<'EOF'
 {
   "compilerOptions": {
@@ -108,6 +128,7 @@ for tsc in node_modules/typescript/bin/tsc node_modules/ts5/bin/tsc; do
   echo "typecheck with TypeScript $(node "$tsc" -v)"
   node "$tsc" -p tsconfig.worker.json
   node "$tsc" -p tsconfig.browser.json
+  node "$tsc" -p tsconfig.insights.json
 done
 
 # The libraries load as plain Node ESM (no bundler extension resolution).
@@ -120,7 +141,18 @@ for (const name of ["flightdeck", "handleFlightdeck", "withFlightdeck"])
 const browser = await import("@flightdeckhq/browser");
 for (const name of ["init", "track", "identify"])
   if (typeof browser[name] !== "function") throw new Error(`browser: ${name} missing`);
-console.log("libraries import in Node");
+const insights = await import("@flightdeckhq/lifecycle-insights");
+const { syntheticContext, syntheticFixture } = await import("@flightdeckhq/lifecycle-insights/fixtures");
+for (const domain of ["hiring", "release", "incidents"]) {
+  const { snapshot, rule, comparison } = syntheticFixture(domain);
+  const alert = insights.evaluateRule({ rule, current: snapshot, context: syntheticContext });
+  if (alert.status !== "evaluated" || alert.transition !== "opened" || alert.value !== 0.9)
+    throw new Error(`insights: ${domain} alert`);
+  const result = insights.compareVariants({ spec: comparison, left: snapshot, right: snapshot, context: syntheticContext });
+  if (result.status !== "compared" || result.differences.length !== 5 || result.coverage.matchedStrata !== 2)
+    throw new Error(`insights: ${domain} comparison`);
+}
+console.log("libraries import in Node; synthetic lifecycle evaluations pass");
 '
 
 node node_modules/@flightdeckhq/create/dist/cli.js --help | grep -q "@flightdeckhq/create apps add"
