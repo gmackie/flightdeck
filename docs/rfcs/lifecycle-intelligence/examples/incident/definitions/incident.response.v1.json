@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "processId": "incident.response",
+  "version": 1,
+  "name": "Incident response",
+  "caseType": "incident",
+  "sensitivity": "standard",
+  "stages": [
+    {
+      "stageId": "triage",
+      "name": "Triage",
+      "kind": "work",
+      "group": "respond",
+      "canonicalStageId": "triage",
+      "ageLimitMs": 1800000
+    },
+    {
+      "stageId": "investigating",
+      "name": "Investigating",
+      "kind": "work",
+      "group": "respond",
+      "canonicalStageId": "investigating",
+      "ageLimitMs": 14400000
+    },
+    {
+      "stageId": "mitigating",
+      "name": "Mitigating",
+      "kind": "work",
+      "group": "respond",
+      "canonicalStageId": "mitigating",
+      "ageLimitMs": 7200000
+    },
+    {
+      "stageId": "monitoring",
+      "name": "Monitoring",
+      "kind": "wait",
+      "group": "recover",
+      "canonicalStageId": "monitoring",
+      "ageLimitMs": 86400000
+    },
+    {
+      "stageId": "resolved",
+      "name": "Resolved",
+      "kind": "terminal",
+      "outcome": "success",
+      "group": "outcome",
+      "canonicalStageId": "resolved"
+    },
+    {
+      "stageId": "closed_duplicate",
+      "name": "Closed as duplicate",
+      "kind": "terminal",
+      "outcome": "neutral",
+      "group": "outcome",
+      "canonicalStageId": "closed_duplicate"
+    }
+  ],
+  "dimensions": [
+    {
+      "key": "severity",
+      "values": [
+        "sev1",
+        "sev2",
+        "sev3"
+      ],
+      "breakdown": true
+    },
+    {
+      "key": "service_tier",
+      "values": [
+        "tier1",
+        "tier2",
+        "tier3"
+      ],
+      "breakdown": true
+    }
+  ],
+  "relations": [
+    {
+      "type": "caused_by",
+      "objectType": "deploy"
+    },
+    {
+      "type": "duplicates",
+      "objectType": "incident"
+    },
+    {
+      "type": "affects",
+      "objectType": "service"
+    }
+  ],
+  "failureReasons": [
+    "failed"
+  ],
+  "maxDepth": 2,
+  "calendar": "wall"
+}
