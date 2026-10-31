@@ -15,11 +15,24 @@ function isApp(value: unknown): value is App {
   return typeof id === "string" && typeof name === "string" && typeof created_at === "number";
 }
 
-/** Lists the apps the signed-in user can see. Never throws. */
-export async function fetchApps(fetcher: typeof fetch = fetch): Promise<AppsResult> {
+/** A dashboard API read. `not-found` is a 404, e.g. an app that is no longer registered. */
+export type Loaded<T> =
+  | { status: "ok"; data: T }
+  | { status: "signed-out" }
+  | { status: "forbidden" }
+  | { status: "not-found" }
+  | { status: "error"; message: string };
+
+/** GETs a same-origin `/api/*` JSON resource and checks its shape. Never throws. */
+export async function getJson<T>(
+  url: string,
+  valid: (body: unknown) => body is T,
+  what: string,
+  fetcher: typeof fetch = fetch,
+): Promise<Loaded<T>> {
   let res: Response;
   try {
-    res = await fetcher("/api/apps", {
+    res = await fetcher(url, {
       headers: { Accept: "application/json" },
       credentials: "same-origin",
       // An expired Access session answers with a 302 to the team's login domain. Following it
@@ -33,11 +46,24 @@ export async function fetchApps(fetcher: typeof fetch = fetch): Promise<AppsResu
     return { status: "signed-out" };
   }
   if (res.status === 403) return { status: "forbidden" };
-  if (!res.ok) return { status: "error", message: `Loading apps failed (HTTP ${res.status}).` };
+  if (res.status === 404) return { status: "not-found" };
+  if (!res.ok) return { status: "error", message: `Loading ${what} failed (HTTP ${res.status}).` };
   const body: unknown = await res.json().catch(() => null);
-  const apps = (body as { apps?: unknown } | null)?.apps;
-  if (!Array.isArray(apps) || !apps.every(isApp)) {
+  if (!valid(body))
     return { status: "error", message: "Flightdeck returned an unexpected response." };
-  }
-  return { status: "ok", apps };
+  return { status: "ok", data: body };
+}
+
+const isAppList = (body: unknown): body is { apps: App[] } => {
+  const apps = (body as { apps?: unknown } | null)?.apps;
+  return Array.isArray(apps) && apps.every(isApp);
+};
+
+/** Lists the apps the signed-in user can see. Never throws. */
+export async function fetchApps(fetcher: typeof fetch = fetch): Promise<AppsResult> {
+  const result = await getJson("/api/apps", isAppList, "apps", fetcher);
+  if (result.status === "ok") return { status: "ok", apps: result.data.apps };
+  if (result.status === "not-found")
+    return { status: "error", message: "Loading apps failed (HTTP 404)." };
+  return result;
 }
