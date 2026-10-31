@@ -14,13 +14,13 @@
     {
       "binding": "DB",
       "database_name": "flightdeck",
-      "database_id": "<d1 id>",
+      "database_id": "fa1402e6-0f7a-4ba0-ba1b-348d0dee8ae1",
       "migrations_dir": "migrations"
     }
   ],
   "pipelines": [
-    { "binding": "EVENTS", "stream": "<fd_events stream id>" },
-    { "binding": "SESSIONS", "stream": "<fd_sessions stream id>" }
+    { "binding": "EVENTS", "stream": "ff8610cd69224104bafad28a00accabd" },
+    { "binding": "SESSIONS", "stream": "a8da4675e9bc42bf838cf3fc2b8fd947" }
   ],
   "vars": { "ACCESS_TEAM_DOMAIN": "", "FLIGHTDECK_DEV": "0" }
 }
