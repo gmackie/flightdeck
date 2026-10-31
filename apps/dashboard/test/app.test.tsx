@@ -19,6 +19,7 @@ describe("shell", () => {
     for (const [label, id] of [
       ["Live", "live"],
       ["Trends", "trends"],
+      ["Workflows", "workflows"],
       ["Journeys", "journeys"],
       ["Funnels", "funnels"],
       ["Retention", "retention"],
