@@ -271,3 +271,61 @@ describe("apps key", () => {
     expect(await main(["apps", "revoke-key", "app_bob", "nothex"], bad.deps)).toBe(1);
   });
 });
+
+describe("lifecycle administration", () => {
+  it("mints a lifecycle-scoped key with --scope", async () => {
+    const t = setup({ env: SERVICE_TOKEN, response: reply(201, {}) });
+    const argv = ["apps", "key", "app_bob", "--scope", "lifecycle.write", "--json"];
+    expect(await main(argv, t.deps)).toBe(0);
+    expect(t.call().body).toEqual({
+      token_hash: DIGEST,
+      expires_at: NOW + 90 * DAY,
+      scopes: ["lifecycle.write"],
+    });
+    expect(JSON.parse(t.out())).toMatchObject({ scopes: ["lifecycle.write"], key: KEY });
+    expect(t.err()).toContain("scopes lifecycle.write");
+  });
+
+  it("rejects unknown scopes before contacting the server", async () => {
+    const t = setup({ env: SERVICE_TOKEN });
+    expect(await main(["apps", "key", "app_bob", "--scope", "admin"], t.deps)).toBe(1);
+    expect(t.deps.fetch).not.toHaveBeenCalled();
+    expect(t.err()).toContain("Unknown scope admin");
+  });
+
+  it("sets key scopes by digest", async () => {
+    const t = setup({ env: SERVICE_TOKEN, response: reply(200, {}) });
+    const argv = ["apps", "key-scopes", "app_bob", DIGEST, "--scope", "lifecycle.write"];
+    expect(await main(argv, t.deps)).toBe(0);
+    expect(t.call()).toMatchObject({
+      url: `${URL_}/api/apps/app_bob/server-keys/${DIGEST}/scopes`,
+      init: { method: "PUT" },
+      body: { scopes: ["lifecycle.write"] },
+    });
+    const none = setup({ env: SERVICE_TOKEN });
+    expect(await main(["apps", "key-scopes", "app_bob", DIGEST], none.deps)).toBe(1);
+    expect(none.deps.fetch).not.toHaveBeenCalled();
+  });
+
+  it("grants and revokes lifecycle.write", async () => {
+    const grant = setup({ env: SERVICE_TOKEN, response: reply(201, {}) });
+    expect(await main(["apps", "grant-lifecycle", "app_bob"], grant.deps)).toBe(0);
+    expect(grant.call()).toMatchObject({
+      url: `${URL_}/api/apps/app_bob/capabilities/lifecycle.write`,
+      init: { method: "PUT" },
+    });
+    expect(grant.err()).toContain("Granted lifecycle.write for app_bob");
+    const revoke = setup({ env: SERVICE_TOKEN, response: new Response(null, { status: 204 }) });
+    expect(await main(["apps", "revoke-lifecycle", "app_bob"], revoke.deps)).toBe(0);
+    expect(revoke.call().init).toMatchObject({ method: "DELETE" });
+  });
+
+  it("reports a 403 from a principal outside LIFECYCLE_ADMINS", async () => {
+    const t = setup({
+      env: SERVICE_TOKEN,
+      response: reply(403, { error: "Lifecycle administration requires LIFECYCLE_ADMINS" }),
+    });
+    expect(await main(["apps", "grant-lifecycle", "app_bob"], t.deps)).toBe(1);
+    expect(t.err()).toContain("403 Lifecycle administration requires LIFECYCLE_ADMINS");
+  });
+});
