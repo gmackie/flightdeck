@@ -1,7 +1,8 @@
 # Lifecycle read authorization (Workstream E / FLIG-18)
 
-This foundation is proposed in a **draft PR only**. No migrations, rollout flags,
-merge, or deployment have been applied to production by this workstream.
+Deploy the authorization foundation with the migration and compatibility rollout
+below. Keep `READ_AUTHZ_MODE=legacy` until grants are provisioned and enforcement
+has been verified. Lifecycle reads always require configured Access and grants.
 
 ## Trust boundary and roles
 
