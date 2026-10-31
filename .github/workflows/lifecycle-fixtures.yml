@@ -1,0 +1,32 @@
+name: lifecycle-fixtures
+# Dependency-free tests for examples/lifecycle-fixtures; runs only when that directory changes.
+on:
+  push:
+    branches: [main]
+    paths: ["examples/lifecycle-fixtures/**", ".github/workflows/lifecycle-fixtures.yml"]
+  pull_request:
+    paths: ["examples/lifecycle-fixtures/**", ".github/workflows/lifecycle-fixtures.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: lifecycle-fixtures-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/lifecycle-fixtures
+    steps:
+      - uses: actions/checkout@v5
+      # The fixtures need only Node. The repo's `packageManager: pnpm` field would make setup-node
+      # try to use pnpm for caching, so turn the package-manager cache off.
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, package-manager-cache: false }
+      - run: node --test "test/*.test.mjs"
+      - run: node cli.mjs validate --fixtures
+      - name: Generate and validate a 100k dataset (not committed)
+        run: |
+          node cli.mjs generate --seed ci --size 100k --out out/ci-100k
+          node cli.mjs validate out/ci-100k --scope --coverage
+          node cli.mjs simulate out/ci-100k/events.ndjson

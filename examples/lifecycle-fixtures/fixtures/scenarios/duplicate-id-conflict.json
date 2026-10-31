@@ -1,0 +1,74 @@
+{
+  "schema": "flightdeck.lifecycle-fixture/v1",
+  "name": "duplicate-id-conflict",
+  "description": "A second delivery reuses an eventId with different content. Fixture semantics: the first delivery wins and the conflict is counted, not applied.",
+  "covers": ["duplicate_event_id"],
+  "assumptions": [
+    "First delivery of an (appId, eventId) wins; later conflicting payloads are rejected and counted."
+  ],
+  "asOf": "2026-04-01T09:00:00.000Z",
+  "records": [
+    {
+      "receivedAt": "2026-03-02T09:00:01.000Z",
+      "event": {
+        "eventId": "kg1k11hb0089cul0n58k",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.opened",
+        "entity": {
+          "kind": "ticket",
+          "id": "dp64oowj2n9a08z8xk3q"
+        },
+        "version": 1,
+        "occurredAt": "2026-03-02T09:00:00.000Z"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T10:00:01.000Z",
+      "event": {
+        "eventId": "aeb6omgroeqri6p41lqk",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "ticket",
+          "id": "dp64oowj2n9a08z8xk3q"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T10:00:00.000Z",
+        "outcome": "resolved"
+      }
+    },
+    {
+      "receivedAt": "2026-03-02T10:00:02.000Z",
+      "event": {
+        "eventId": "aeb6omgroeqri6p41lqk",
+        "appId": "app_support",
+        "process": "incident_response",
+        "type": "entity.closed",
+        "entity": {
+          "kind": "ticket",
+          "id": "dp64oowj2n9a08z8xk3q"
+        },
+        "version": 2,
+        "occurredAt": "2026-03-02T10:00:00.000Z",
+        "outcome": "cancelled"
+      }
+    }
+  ],
+  "expected": {
+    "totals": {
+      "deliveries": 3,
+      "duplicateDeliveries": 0,
+      "duplicateConflicts": 1,
+      "appliedEvents": 2
+    },
+    "entities": [
+      {
+        "id": "dp64oowj2n9a08z8xk3q",
+        "status": "closed",
+        "outcome": "resolved"
+      }
+    ]
+  }
+}

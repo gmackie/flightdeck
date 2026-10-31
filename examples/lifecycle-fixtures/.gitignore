@@ -1,0 +1,2 @@
+# Generated datasets (100k/1M events) are never committed; see README.
+out/
