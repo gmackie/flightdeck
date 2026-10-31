@@ -24,7 +24,7 @@ For each target repo, follow the `kanbanger-workflow` skill: resolve the repo's 
 
 ## 3. Dispatch
 
-Per repo, one worktree (`worktrunk-worktrees` skill) and a brief from [references/agent-brief.md](references/agent-brief.md).
+Register each wave's apps first (`create-flightdeck`, see `flightdeck-instrument-worker/references/registration.md`) and put the production and staging appIds, plus the SDK install source, in each brief. Per repo, one worktree (`worktrunk-worktrees` skill) and a brief from [references/agent-brief.md](references/agent-brief.md).
 
 - **Default: one agent per repo**, running `flightdeck-instrument-worker` then `flightdeck-instrument-frontend` on the same branch. Single-package apps (TanStack Start, Next.js) put both SDKs in the same `package.json` and lockfile, the frontend needs the wrapped Worker to work at all, and the event names must agree; one PR avoids all three conflicts.
 - **Two agents with separate branches** only when the frontend is a separate package with its own `package.json` (Vite SPA + API Worker, school-os `workshop-frontend` vs `workshop-backend`) or the UI is large enough that tagging is a job of its own. Ownership: backend agent owns the worker entry, wrangler config(s), server code and Durable Objects; frontend agent owns the client entry and components (plus `assets.run_worker_first`). Merge and deploy the backend PR first. Agree the event list (worker skill's report) before the frontend agent tags.

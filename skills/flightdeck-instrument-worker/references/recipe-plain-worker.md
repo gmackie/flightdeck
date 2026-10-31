@@ -53,6 +53,7 @@ Pass `{ fetch: app.fetch }` (Hono's documented Worker export), not `app` itself.
 ```ts
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { handleFlightdeck } from "@flightdeckhq/worker";
+import { fdOptions } from "./flightdeck";
 
 export default class extends WorkerEntrypoint<Env> {
   async fetch(request: Request) {
@@ -79,10 +80,10 @@ export class Room extends DurableObject<Env> {
 }
 ```
 
-If a DO itself serves pages that post events (the browser talks to the DO URL directly), serve the endpoint from the DO with `handleFlightdeck(request, this.env, { ...fdOptions, path: "/room/_fd/e" })` and init the browser SDK with `endpoint: "/room/_fd/e"` (see `examples/demo-app/src/counter.ts`).
+If a DO itself serves pages that post events (the browser talks to the DO URL directly), serve the endpoint from the DO with `handleFlightdeck(request, this.env, (env) => ({ ...fdOptions(env), path: "/room/_fd/e" }))` and init the browser SDK with `endpoint: "/room/_fd/e"` (see `examples/demo-app/src/counter.ts`).
 
 Emit lifecycle events (created, joined, finished, closed), never per message, tick or alarm.
 
 ## Options worth knowing
 
-`FlightdeckOptions` (all optional): `binding` (default `"FLIGHTDECK"`), `path` (default `"/_fd/e"`), `allowedOrigins` (extra page origins allowed to post, for routers/proxies that rewrite the host), `maxBodyBytes` (default 64 KiB), `beforeSend`, `hashUserId`. `flightdeck(env, options)` uses `binding`, `beforeSend` and `hashUserId`.
+`FlightdeckOptions` (all optional): `binding` (default `"FLIGHTDECK"`), `path` (default `"/_fd/e"`), `allowedOrigins` (extra page origins allowed to post, for routers/proxies that rewrite the host), `maxBodyBytes` (default 64 KiB), `beforeSend`, `hashUserId`. `flightdeck(env, options)` uses `binding`, `beforeSend` and `hashUserId`. All three SDK functions accept either an options object or a function of `env` (the helper module's `fdOptions`), resolved per request. Set options such as `allowedOrigins` inside `fdOptions`, so one value serves every call.

@@ -66,35 +66,33 @@ What Flightdeck already does:
 
 ## Sensitive apps (school-os / educateos, anything with student, health or customer records)
 
-Required configuration, in both SDKs. The salt is a Worker secret, so build the options from `env` per request and serve the endpoint with `handleFlightdeck` (which takes options per call) instead of `withFlightdeck`:
+Required configuration, in both SDKs. On the Worker it is only the body of the standard `fdOptions(env)` in the helper module (SKILL.md step 4); `withFlightdeck(handler, fdOptions)` and the `trackEvent`/`identifyUser` helpers stay exactly as for any other app, so existing `scheduled`/`queue` handlers and DO exports are untouched.
 
 ```ts
-// Worker: src/server/flightdeck.ts
-import { type FlightdeckOptions, flightdeck, handleFlightdeck } from "@flightdeckhq/worker";
+// Worker: the helper module (src/server/flightdeck.ts)
+import { type ClientEventInput, type FlightdeckOptions, flightdeck } from "@flightdeckhq/worker";
 
 const PERSON_PATH = /\/(students|guardians|staff)\/[^/]+/g;
-export const scrubPath = (path: string) => path.replace(PERSON_PATH, "/$1/:id");
+const scrubPath = (path: string) => path.replace(PERSON_PATH, "/$1/:id");
 
-export const fdOptions = (env: Env): FlightdeckOptions => ({
-  // SHA-256 hex of salt + userId, applied after beforeSend, before the event leaves the Worker.
-  hashUserId: { salt: env.FLIGHTDECK_USER_SALT },
-  beforeSend: (event) => ({
-    ...event,
-    path: event.path ? scrubPath(event.path) : event.path,
-    name: event.kind === "page" ? scrubPath(event.name) : event.name,
-  }),
-});
+export function fdOptions(env: Env): FlightdeckOptions {
+  const salt = env.FLIGHTDECK_USER_SALT;
+  // Guard: never send events from a sensitive app without its salt. The SDK contains the
+  // throw: the app keeps serving, /_fd/e answers 500 and drops the batch, server calls are
+  // logged and dropped, and the logs say why.
+  if (typeof salt !== "string" || !salt) throw new Error("FLIGHTDECK_USER_SALT is not set");
+  return {
+    // userId -> SHA-256 hex of salt + userId, after beforeSend, before it leaves the Worker.
+    hashUserId: { salt },
+    beforeSend: (event: ClientEventInput) => ({
+      ...event,
+      path: event.path ? scrubPath(event.path) : event.path,
+      name: event.kind === "page" ? scrubPath(event.name) : event.name,
+    }),
+  };
+}
 
-// Worker entry
-export default {
-  async fetch(request, env, ctx) {
-    const fd = await handleFlightdeck(request, env, fdOptions(env));
-    if (fd) return fd;
-    return app.fetch(request, env, ctx);
-  },
-} satisfies ExportedHandler<Env>;
-
-// Server events: flightdeck(env, fdOptions(env)).track(...), through the fail-open helper.
+// trackEvent / identifyUser / send: unchanged from SKILL.md step 4.
 ```
 
 ```ts
@@ -105,7 +103,7 @@ const PERSON_PATH = /\/(students|guardians|staff)\/[^/]+/g;
 const scrubPath = (path: string) => path.replace(PERSON_PATH, "/$1/:id");
 
 init({
-  redactProps: ["email", "name", "studentId", "query"],
+  redactProps: ["email", "name", "studentId", "query"], // applied before beforeSend
   beforeSend: (event) => ({
     ...event,
     path: event.path ? scrubPath(event.path) : event.path,
@@ -115,7 +113,8 @@ init({
 ```
 
 - Adjust `PERSON_PATH` to the app's real routes: list every route with a person- or record-identifying segment that is not a numeric/UUID id.
-- Store the salt as a Worker secret (`FLIGHTDECK_USER_SALT`, via `forge secret set` or `wrangler secret put`) in every stage, and declare it for `wrangler types`. Changing it changes every hashed id. Use the same salt across stages only if ids should match across them.
+- Store the salt as a Worker secret (`FLIGHTDECK_USER_SALT`, via `forge secret set` or `wrangler secret put`) in **every** stage, and declare it for `wrangler types` so `env.FLIGHTDECK_USER_SALT` typechecks. Before each deploy, confirm it exists: `wrangler secret list --env <env>` must list `FLIGHTDECK_USER_SALT`. Changing it changes every hashed id. Use the same salt across stages only if ids should match across them.
+- Never use `hashUserId: true` (no salt) for a sensitive app. Unsalted SHA-256 of a guessable id (sequential numbers, emails, short codes) is reversed by hashing candidates. If `{ salt }` is missing or empty at runtime, the SDK drops `userId` (and warns once) rather than hash with a coerced salt.
 - Hashing happens in the app Worker, so browser `identify()` and server events end up with the same hashed id.
 - Do not `identify()` students or minors at all. Identify staff/teacher/admin accounts only, if needed.
 - No `data-flightdeck-*` props on elements that render student data; tag the control, not the record.
@@ -124,11 +123,11 @@ init({
 
 ## Self-check on your diff
 
-Run the bundled check before opening the PR:
+Run the bundled check from the repo before opening the PR:
 
 ```bash
-~/.agents/skills/flightdeck-instrument-worker/scripts/pii-check.sh            # diff against origin/main
-~/.agents/skills/flightdeck-instrument-worker/scripts/pii-check.sh main...HEAD
+~/.agents/skills/flightdeck-instrument-worker/scripts/pii-check.sh               # since the merge base with origin/HEAD, incl. uncommitted and untracked files
+~/.agents/skills/flightdeck-instrument-worker/scripts/pii-check.sh main...HEAD   # an explicit range
 ```
 
-It greps the added lines for `track(`, `identify(`, `data-flightdeck` and `props` near email/name/phone/token/id-like keys, string interpolation in event names, and email literals. Every hit must be fixed or explained in the PR. It is a tripwire, not a proof: also read your own event list once against the rules above.
+It scans every added line in files that import `@flightdeckhq/*`, contain `data-flightdeck`, or gain a `track`/`identify`/`trackEvent`/`identifyUser` call (so multi-line props objects are covered) for PII-like keys, free-text fields as props, dynamic event names, email-derived user ids and email literals. Exit 1 means hits: fix each one or explain it in the PR. Exit 2 means it could not find the default branch (`git remote set-head origin --auto`, or pass a range). It is a tripwire, not a proof: also read your own event list once against the rules above.

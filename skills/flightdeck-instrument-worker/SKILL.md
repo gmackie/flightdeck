@@ -12,10 +12,12 @@ Work in a worktree (`worktrunk-worktrees` skill). You own the worker entry, wran
 ## 1. Preconditions
 
 - Find the deployable Worker: the `wrangler.*` whose `main` serves the app, and every env/stage config (top-level `env.*` blocks, `wrangler.<stage>.*` files, or generated configs). See [references/wrangler-bindings.md](references/wrangler-bindings.md).
-- `npm view @flightdeckhq/worker version` must succeed. If it 404s, the SDKs are not published yet: stop and report to the coordinator (FLIG-13). Never vendor copies of the SDK.
-- Install: `pnpm add @flightdeckhq/worker` in the Worker's package.
+- SDK: `npm view @flightdeckhq/worker version` must succeed, or the coordinator (FLIG-13) must have given you a tarball or workspace path to install from. Otherwise stop and report. Never vendor copies of the SDK.
+- Install: `pnpm add @flightdeckhq/worker` (or `pnpm add <tarball-or-path>` as the coordinator says) in the Worker's package.
 
 ## 2. Register the app
+
+Use the appIds in your brief if the coordinator already registered the app. Otherwise run the registration CLI ([references/registration.md](references/registration.md) covers installing it, `FLIGHTDECK_URL` and Cloudflare Access auth):
 
 ```bash
 create-flightdeck apps add <name> --stage production --json
@@ -28,28 +30,20 @@ Each returns `{ app: { id, name, created_at }, binding: { binding: "FLIGHTDECK",
 
 Paste `binding` into `services` for each env (wrangler does not inherit `services` into `env.*` blocks). Exact toml/jsonc forms and generated-config handling: [references/wrangler-bindings.md](references/wrangler-bindings.md). Then run `wrangler types` (add `--strict-vars false` if the repo does) and commit the regenerated types.
 
-## 4. Wrap the fetch handler
+## 4. The helper module
 
-Wrap the outermost exported handler so `/_fd/e` is answered before routing, middleware, auth or tracing:
-
-```ts
-import { withFlightdeck } from "@flightdeckhq/worker";
-export default withFlightdeck(handler, fdOptions);
-```
-
-`withFlightdeck` only touches `POST /_fd/e`; every other request, and `scheduled`/`queue`, pass through. A missing binding or a Flightdeck outage only fails `/_fd/e`. Backend-only Workers with no browser traffic can skip the wrapper and only use `track()`.
-
-Recipes from real repos: [TanStack Start](references/recipe-tanstack-start.md), [OpenNext / Next.js](references/recipe-opennext.md), [plain Worker, Hono, Durable Objects](references/recipe-plain-worker.md).
-
-## 5. Server events and identify
-
-Put the fail-open helpers in one server module (e.g. `src/server/flightdeck.ts`) and call them at domain events, always under `waitUntil`:
+Every app gets the same module, e.g. `src/server/flightdeck.ts` (`src/lib/flightdeck.ts` in Next.js). `Env` is the repo's generated env type (`Env`, `Cloudflare.Env`, or `CloudflareEnv` with OpenNext).
 
 ```ts
 import { type ClientEventInput, type FlightdeckOptions, flightdeck } from "@flightdeckhq/worker";
 
-/** Shared by withFlightdeck (browser batches) and server calls. */
-export const fdOptions: FlightdeckOptions = {};
+/**
+ * Options for both withFlightdeck (browser batches) and server calls, built per request.
+ * Sensitive apps fill this in (references/events.md); everyone else returns {}.
+ */
+export function fdOptions(_env: Env): FlightdeckOptions {
+  return {};
+}
 
 type WaitUntil = (promise: Promise<unknown>) => void;
 export type ServerEvent = Omit<ClientEventInput, "kind" | "ts"> & { ts?: number };
@@ -63,17 +57,32 @@ function send(waitUntil: WaitUntil, call: () => Promise<unknown>): void {
   }
 }
 
-export const trackEvent = (env: object, waitUntil: WaitUntil, event: ServerEvent) =>
+export const trackEvent = (env: Env, waitUntil: WaitUntil, event: ServerEvent) =>
   send(waitUntil, () => flightdeck(env, fdOptions).track(event));
 
-export const identifyUser = (env: object, waitUntil: WaitUntil, userId: string) =>
+export const identifyUser = (env: Env, waitUntil: WaitUntil, userId: string) =>
   send(waitUntil, () => flightdeck(env, fdOptions).identify({ userId }));
 ```
 
-- Call sites: `trackEvent(env, (p) => ctx.waitUntil(p), { name: "issue.created", props: { source: "web" } })`, after the write succeeded. In a Durable Object pass `this.env` and `(p) => this.ctx.waitUntil(p)`; DOs see the same `FLIGHTDECK` binding.
+Always pass `fdOptions` itself (the function) to `withFlightdeck`, `handleFlightdeck` and `flightdeck`; the SDK calls it with each request's `env`. If it throws, other requests are untouched, `/_fd/e` answers 500 and drops the batch, and server calls are logged and dropped.
+
+## 5. Wrap the fetch handler and add events
+
+Wrap the outermost exported handler, keeping every existing handler (`scheduled`, `queue`, DO re-exports), so `/_fd/e` is answered before routing, middleware, auth or tracing:
+
+```ts
+import { withFlightdeck } from "@flightdeckhq/worker";
+import { fdOptions } from "./flightdeck";
+
+export default withFlightdeck(handler, fdOptions);
+```
+
+`withFlightdeck` only touches `POST /_fd/e`; every other request, and `scheduled`/`queue`, pass through to `handler`. A missing binding or a Flightdeck outage only fails `/_fd/e`. Backend-only Workers with no browser traffic can skip the wrapper and only use `trackEvent`. Recipes from real repos: [TanStack Start](references/recipe-tanstack-start.md), [OpenNext / Next.js](references/recipe-opennext.md), [plain Worker, Hono, Durable Objects](references/recipe-plain-worker.md).
+
+- Domain events: `trackEvent(env, (p) => ctx.waitUntil(p), { name: "issue.created", props: { source: "web" } })`, after the write succeeded. In a Durable Object pass `this.env` and `(p) => this.ctx.waitUntil(p)`; DOs see the same `FLIGHTDECK` binding.
 - After sign-in completes: `identifyUser(env, waitUntil, user.id)`. `userId` is your internal stable user id (1-128 chars), never an email.
 - Name events `object.verb` in past tense for server facts (`issue.created`, `deployment.verified`). Read [references/events.md](references/events.md) before adding any event: it has the shared taxonomy and the PII rules.
-- Sensitive apps (student, health, customer records): `hashUserId` with a secret salt plus a path-scrubbing `beforeSend`, built per request as `fdOptions(env)` and served with `handleFlightdeck`. Follow the sensitive-apps section of events.md exactly.
+- Sensitive apps (student, health, customer records): fill in `fdOptions` exactly as the sensitive-apps section of events.md shows (secret salt with a guard, `hashUserId`, path-scrubbing `beforeSend`). Nothing else changes.
 
 ## 6. Verify
 

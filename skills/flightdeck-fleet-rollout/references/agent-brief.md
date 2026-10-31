@@ -12,13 +12,15 @@ You are instrumenting `<app>` in `<repo>` with Flightdeck analytics. Kanbanger i
 
 **Target Worker:** `<worker name>`, config `<path to wrangler config>`, stage configs `<env blocks / files / generator>`. Framework: `<TanStack Start | OpenNext | Vite SPA | Hono | plain Worker>`; recipe: `<references/recipe-*.md>`.
 
-**Registration:** run `create-flightdeck apps add <app> --stage production --json` and `--stage staging --json`, or use these already-registered ids: production `<app_slug>`, staging `<app_slug_staging>`. Staging, beta, previews and one-boxes bind the staging id.
+**SDK install source:** `<npm | tarball or workspace path from the coordinator>`.
+
+**Registration:** production `<app_slug>`, staging `<app_slug_staging>` (already registered). If these are blank, register with `create-flightdeck` per `flightdeck-instrument-worker/references/registration.md`. Staging, beta, previews and one-boxes bind the staging id.
 
 **Ownership:** `<one agent: everything above>` / `<backend: worker entry, wrangler config(s), server code, Durable Objects>` / `<frontend: client entry, components, assets.run_worker_first only>`. Do not edit files outside your ownership; if you need a change there, report it.
 
 **Events:** follow `flightdeck-instrument-worker/references/events.md`. Proposed domain events for this app: `<e.g. issue.created, project.created, member.invited>`; adjust to what the code actually does and list the final set in the PR.
 
-**Sensitive:** `<no>` / `<yes: hashUserId with FLIGHTDECK_USER_SALT secret, path-scrubbing beforeSend for routes <list>, redactProps <list>, no identify() for students; list every event and prop in the PR for review>`.
+**Sensitive:** `<no>` / `<yes: fill in fdOptions per the sensitive-apps section of events.md (FLIGHTDECK_USER_SALT secret in every stage, path-scrubbing beforeSend for routes <list>), browser redactProps <list>, no identify() for students; list every event and prop in the PR for review>`.
 
 **Done when:**
 - repo typecheck, lint and tests pass; `pii-check.sh` clean or every hit explained in the PR

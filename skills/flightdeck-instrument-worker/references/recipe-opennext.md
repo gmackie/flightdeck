@@ -29,7 +29,7 @@ const worker = {
 export default withFlightdeck(worker, fdOptions);
 ```
 
-Keep the DO re-exports (`export { RepositoryCoordinator } ...`) as they are. Wrapping outermost means `/_fd/e` skips the maintenance freeze (it is not a data write), the page cache and the budget wrapper.
+Keep the DO re-exports (`export { RepositoryCoordinator } ...`) as they are. `fdOptions` is the helper module's function (SKILL.md step 4; `Env` is `CloudflareEnv`); a JS wrapper passes it unchanged, so sensitive-app options apply here too. Wrapping outermost means `/_fd/e` skips the maintenance freeze (it is not a data write), the page cache and the budget wrapper.
 
 If the repo prebundles the wrapper (ForgeGraph: `scripts/bundle-worker.mjs`, `no_bundle = true`), rebuild with the repo's script (`pnpm build:worker`) and run its bundle tests; the new import must survive bundling.
 

@@ -42,27 +42,42 @@ Stub `sendBeacon`, render the component, interact, then flush by hiding the docu
 ```ts
 // @vitest-environment happy-dom
 import { _reset, init } from "@flightdeckhq/browser";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 
 const sent: { kind: string; name: string }[] = [];
-Object.defineProperty(navigator, "sendBeacon", {
-  configurable: true,
-  value: (url: string, blob: Blob) => {
-    expect(url).toBe("/_fd/e");
-    void blob.text().then((t) => sent.push(...JSON.parse(t).events));
-    return true;
-  },
+const setVisibility = (value: DocumentVisibilityState) =>
+  Object.defineProperty(document, "visibilityState", { configurable: true, value });
+
+beforeEach(() => {
+  sent.length = 0;
+  setVisibility("visible");
+  Object.defineProperty(navigator, "sendBeacon", {
+    configurable: true,
+    value: (url: string, blob: Blob) => {
+      expect(url).toBe("/_fd/e");
+      void blob.text().then((t) => sent.push(...JSON.parse(t).events));
+      return true;
+    },
+  });
 });
-afterEach(() => _reset());
+afterEach(() => {
+  _reset();
+  setVisibility("visible");
+});
+
+/** Hiding the page flushes the queue; the beacon body is read asynchronously. */
+async function flush() {
+  setVisibility("hidden");
+  document.dispatchEvent(new Event("visibilitychange"));
+  await new Promise((r) => setTimeout(r, 0));
+  return sent.map((e) => `${e.kind}:${e.name}`);
+}
 
 it("tags the create button", async () => {
   document.body.innerHTML = `<button data-flightdeck="issue.create">New issue</button>`; // or render(<Toolbar />)
   init({ trackPages: false });
   document.querySelector("button")?.click();
-  Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
-  document.dispatchEvent(new Event("visibilitychange"));
-  await new Promise((r) => setTimeout(r, 0));
-  expect(sent.map((e) => `${e.kind}:${e.name}`)).toEqual(["click:issue.create"]);
+  expect(await flush()).toEqual(["click:issue.create"]);
 });
 ```
 

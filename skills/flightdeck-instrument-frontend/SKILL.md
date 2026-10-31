@@ -11,7 +11,7 @@ You own the client entry and components. Do not edit the worker entry or wrangle
 
 ## 1. Install
 
-`npm view @flightdeckhq/browser version` must succeed; if it 404s, stop and report to the coordinator (FLIG-13). Then `pnpm add @flightdeckhq/browser` in the web app's package.
+`npm view @flightdeckhq/browser version` must succeed, or the coordinator (FLIG-13) must have given you a tarball or workspace path; otherwise stop and report. Then `pnpm add @flightdeckhq/browser` (or the coordinator's tarball/path) in the web app's package.
 
 ## 2. Init once in the client entry
 

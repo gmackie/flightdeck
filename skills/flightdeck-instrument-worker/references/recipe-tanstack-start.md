@@ -36,7 +36,7 @@ export default withFlightdeck(
 
 `withFlightdeck` keeps `scheduled` (and any other handler) working, and it sits outside Sentry/effect-cf tracing, so `/_fd/e` posts don't create spans.
 
-Put `fdOptions` and the `trackEvent` helper from SKILL.md in `src/server/flightdeck.ts`.
+The helper module from SKILL.md step 4 (`fdOptions`, `trackEvent`, `identifyUser`) lives in `src/server/flightdeck.ts`; `Env` there is `Cloudflare.Env`.
 
 ## track() from route handlers and server functions
 
