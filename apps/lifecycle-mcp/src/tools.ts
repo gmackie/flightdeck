@@ -37,6 +37,8 @@ type ErrorCode =
   | "invalid_argument"
   | "source_unavailable"
   | "result_too_large"
+  | "budget_exceeded"
+  | "insufficient_evidence"
   | "internal";
 
 /** A tool failure with a fixed, safe message: never an upstream error text or an input value. */
@@ -67,7 +69,7 @@ const FORBIDDEN = "Not authorized for this app, or the app does not exist";
 export const definitionUri = (appId: string, workflowKey: string) =>
   `lifecycle://apps/${appId}/workflows/${workflowKey}/definition`;
 
-async function scopeFor(ctx: ToolContext, appId: string, capability: Capability) {
+export async function scopeFor(ctx: ToolContext, appId: string, capability: Capability) {
   const scope = await ctx.authorizer.authorize(appId, capability);
   if ("code" in scope) {
     throw scope.code === "forbidden"
@@ -82,6 +84,7 @@ async function call<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (error) {
+    if (error instanceof ToolError) throw error;
     if (error instanceof SourceUnavailableError) {
       throw new ToolError("source_unavailable", "The lifecycle read source is unavailable");
     }
@@ -155,7 +158,11 @@ async function definitionFor(
   version: number | null,
 ): Promise<PublicDefinition> {
   const res = await call(() => ctx.source.getWorkflowDefinition(scope, workflowKey, version));
-  if (!res.data || res.data.workflow_key !== workflowKey) {
+  if (
+    !res.data ||
+    res.data.workflow_key !== workflowKey ||
+    (version !== null && res.data.version !== version)
+  ) {
     throw new ToolError("not_found", "Unknown workflow or version");
   }
   return projectDefinition(res.data);
@@ -494,7 +501,13 @@ const handlers: { [K in ToolName]: Handler<K> } = {
       privacy: {
         min_cohort: ctx.minCohort,
         // Pooled rare paths count as withheld detail too.
-        any_suppressed: cohorts.some((c) => c.suppressed || c.other !== null),
+        any_suppressed: cohorts.some(
+          (c) =>
+            c.suppressed ||
+            c.other !== null ||
+            c.completed_n === null ||
+            c.variants.some((v) => v.completed_n === null),
+        ),
       },
       provenance: provenance(ctx, meta, "compare_workflow_variants", query),
       interpretation: interpretation(ctx, "observed_process_pattern", [
@@ -618,17 +631,24 @@ export async function runTool<K extends ToolName>(
   ctx: ToolContext,
   args: Args<K>,
 ): Promise<CallToolResult> {
+  return formatToolResult(() => (handlers[name] as Handler<K>)(ctx, args));
+}
+
+export async function formatToolResult(
+  operation: () => Promise<object>,
+  summary?: string,
+): Promise<CallToolResult> {
   try {
-    const structured = await (handlers[name] as Handler<K>)(ctx, args);
+    const structured = await operation();
     const text = JSON.stringify(structured);
-    if (text.length > LIMITS.maxResultChars) {
+    if (text.length + (summary?.length ?? 0) > LIMITS.maxResultChars) {
       throw new ToolError(
         "result_too_large",
         "The result exceeds the output budget; narrow the date range, filters or limit",
       );
     }
     return {
-      content: [{ type: "text", text }],
+      content: [{ type: "text", text: summary ?? text }],
       structuredContent: structured as Record<string, unknown>,
     };
   } catch (error) {
@@ -648,4 +668,13 @@ export async function runTool<K extends ToolName>(
       ],
     };
   }
+}
+
+/** Typed in-process bridge to the existing read handlers, not arbitrary MCP tool dispatch. */
+export async function executeReadTool<K extends ToolName>(
+  name: K,
+  ctx: ToolContext,
+  args: Args<K>,
+): Promise<Out<K>> {
+  return (handlers[name] as Handler<K>)(ctx, args);
 }

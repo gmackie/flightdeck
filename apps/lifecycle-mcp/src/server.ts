@@ -8,10 +8,19 @@ import {
 } from "@modelcontextprotocol/server";
 import { LIMITS } from "./bounds";
 import { METRICS, WORKFLOW_DEFINITION_SPEC } from "./glossary";
+import { investigationInput, investigationOutputs } from "./investigation-contract";
+import { BoundedReadInvestigationBridge, withInvestigationDeadline } from "./investigations";
 import { projectDefinition } from "./privacy";
+import { registerAnalysisPrompts } from "./prompts";
 import { inputs, outputs, type ToolName } from "./schemas";
 import { SourceUnavailableError } from "./source";
-import { definitionUri, runTool, SERVER_VERSION, type ToolContext } from "./tools";
+import {
+  definitionUri,
+  formatToolResult,
+  runTool,
+  SERVER_VERSION,
+  type ToolContext,
+} from "./tools";
 
 /** Every tool only reads: no side effects, same answer for the same data, no outside world. */
 export const READ_ONLY: ToolAnnotations = {
@@ -77,12 +86,45 @@ export function createLifecycleServer(ctx: ToolContext): McpServer {
   const server = new McpServer(
     { name: "flightdeck-lifecycle", version: SERVER_VERSION },
     {
-      // Static surface: no list-changed notifications, no subscriptions, no prompts, no tasks.
-      capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
+      // Static surface; no subscriptions, sampling or async tasks.
+      capabilities: {
+        tools: { listChanged: false },
+        resources: { listChanged: false },
+        prompts: { listChanged: false },
+      },
       instructions: INSTRUCTIONS,
       maxToolInputElements: LIMITS.maxToolInputElements,
     },
   );
+
+  registerAnalysisPrompts(server);
+  for (const name of ["plan_investigation", "collect_investigation_evidence"] as const) {
+    server.registerTool(
+      name,
+      {
+        title:
+          name === "plan_investigation" ? "Plan investigation" : "Collect investigation evidence",
+        description:
+          name === "plan_investigation"
+            ? "Build a bounded, typed aggregate-read plan for explicit cohorts. Checks analyst grants, executes no data queries, invokes no model."
+            : "Collect a finite set of existing aggregate reads with each snapshot, suppression, sample and quality checks. No raw cases, SQL, model reasoning or causal conclusions. Retain the returned content-addressed pack; refs are not stored resources.",
+        inputSchema: investigationInput,
+        outputSchema: investigationOutputs[name],
+        annotations: READ_ONLY,
+      },
+      (args) =>
+        formatToolResult(
+          () =>
+            withInvestigationDeadline(async (active) => {
+              const bridge = new BoundedReadInvestigationBridge(ctx, active);
+              return name === "plan_investigation" ? bridge.plan(args) : bridge.collect(args);
+            }),
+          name === "plan_investigation"
+            ? "Typed read plan in structuredContent. No data queries or model reasoning performed. Cohort matching and child dependency graphs are unsupported."
+            : "Typed evidence pack in structuredContent. Check checks.status, source_refs, snapshots and warnings before using numbers. Observational only; coverage and matching are unverified, open work is censored, suppressed cells must not be inferred. Synthetic fixtures are invented; production is not wired.",
+        ),
+    );
+  }
 
   for (const name of Object.keys(DESCRIPTIONS) as ToolName[]) {
     server.registerTool(

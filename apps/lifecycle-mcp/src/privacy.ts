@@ -215,9 +215,15 @@ export function suppressFunnel(
     let previous: number | null = null;
     const steps = stages.map((stageKey): ReleasedFunnelStep => {
       const reached = count(row.steps.find((step) => step.stage_key === stageKey)?.reached_n);
-      if (reached > 0 && reached < k) {
+      // Also hide the complementary cases that did not reach this step.
+      const missing = row.n - reached;
+      if ((reached > 0 && reached < k) || (missing > 0 && missing < k)) {
         previous = null;
-        return { stage_key: stageKey, suppressed: true, reason: "small_cohort" };
+        return {
+          stage_key: stageKey,
+          suppressed: true,
+          reason: reached > 0 && reached < k ? "small_cohort" : "complementary",
+        };
       }
       const step: ReleasedFunnelStep = {
         stage_key: stageKey,
@@ -263,17 +269,20 @@ export function suppressVariants(
   if (total < k) return { suppressed: true, reason: "small_cohort" };
   const stages = stageKeys(def);
   const completed = count(stats.completed_n);
+  const releaseCompleted =
+    (completed === 0 || completed >= k) && (total - completed === 0 || total - completed >= k);
   const released: ReleasedVariant[] = [];
   for (const row of stats.variants) {
     const n = count(row.n);
     const validPath = Array.isArray(row.path) && row.path.every((key) => stages.has(key));
     if (n < k || !validPath) continue;
     const done = count(row.completed_n);
+    const releaseDone = (done === 0 || done >= k) && (n - done === 0 || n - done >= k);
     released.push({
       path: [...row.path],
       n,
       share: ratio(n, total),
-      completed_n: done >= k || done === 0 ? done : null,
+      completed_n: releaseDone ? done : null,
       median_cycle_ms: done >= k ? duration(row.median_cycle_ms) : null,
     });
   }
@@ -288,8 +297,8 @@ export function suppressVariants(
   return {
     suppressed: false,
     total_n: total,
-    completed_n: completed >= k || completed === 0 ? completed : null,
-    completion_rate: completed >= k || completed === 0 ? ratio(completed, total) : null,
+    completed_n: releaseCompleted ? completed : null,
+    completion_rate: releaseCompleted ? ratio(completed, total) : null,
     median_cycle_ms: completed >= k ? duration(stats.median_cycle_ms) : null,
     variants: released,
     other:

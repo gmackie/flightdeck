@@ -17,8 +17,8 @@ and its only real data path, the `read-api` source, fails closed until the Works
   and the v1 `@modelcontextprotocol/sdk` are not used.
 - Endpoint: `POST /mcp` only. `legacy: "reject"` answers 2025-era `initialize` traffic with `-32022`.
   `GET`/`DELETE` return 405.
-- Capabilities: `tools` and `resources`, with `listChanged: false`. There are no prompts,
-  completions, logging, resource subscriptions, `subscriptions/listen` streams or MCP Tasks. A
+- Capabilities: `tools`, `resources` and `prompts`, with `listChanged: false`. There are no
+  completions, logging, resource subscriptions, `subscriptions/listen` streams or async tasks. A
   method allowlist on the trusted `Mcp-Method` header refuses everything else before dispatch.
   A task-augmented `tools/call` runs synchronously and creates no task.
 
@@ -39,12 +39,14 @@ rejected, and an output field the server did not add on purpose fails validation
 | `list_bottlenecks` | `process:read` | Stages ranked by an observed waiting signal |
 | `describe_metric` | authenticated | Definition, computation and caveats of a metric |
 | `get_data_freshness` | `lifecycle:read` | Watermark, lag and status per workflow |
+| `plan_investigation` | `process:read` | Typed bounded aggregate-read plan; no data queries or model invocation |
+| `collect_investigation_evidence` | `process:read` | Immutable aggregate evidence pack, source snapshots, sample/quality checks and citations |
 
 Resources: `lifecycle://glossary/metrics`, `lifecycle://spec/workflow-definition` and the template
 `lifecycle://apps/{app_id}/workflows/{workflow_key}/definition`. The template lists and reads only
 apps the caller holds a grant for.
 
-Every result carries `provenance` (source, `synthetic` flag, source version, `as_of`, freshness and
+Existing read-tool results carry `provenance` (source, `synthetic` flag, source version, `as_of`, freshness and
 the normalized query) and `interpretation` (`causal: false` plus caveats). Aggregates are labelled
 observed process patterns. Comparisons always state that differences are not caused by the version
 alone, and bottlenecks are `evidence: "observed_association"`.
@@ -76,6 +78,7 @@ alone, and bottlenecks are `evidence: "observed_association"`.
      withheld without counts.
    - Complementary suppression: when exactly one group in a breakdown is withheld, the next smallest
      is withheld too.
+   - Funnel reach and completion counts/rates also withhold rare complementary non-reached/open cohorts.
    - Rare path variants are pooled into `other`, which is never left recoverable.
    - Percentiles need at least k completed intervals, and open counts between 1 and k-1 are null.
 6. **Bounds** (`src/bounds.ts`):
@@ -88,7 +91,7 @@ alone, and bottlenecks are `evidence: "observed_association"`.
 7. **No arbitrary queries.** There is no SQL, expression or free-text search input. The source of
    truth is the future read API's derived read model, never Basin/R2 raw events.
 8. **Errors** use fixed messages and codes (`forbidden`, `not_found`, `invalid_argument`,
-   `source_unavailable`, `result_too_large`, `internal`). Upstream error text and input values are
+   `source_unavailable`, `result_too_large`, `budget_exceeded`, `insufficient_evidence`, `internal`). Upstream error text and input values are
    never echoed. Responses are `Cache-Control: no-store`.
 
 ## Configuration
@@ -139,3 +142,172 @@ Each item is unverified today:
   from a keyed hash upstream.
 - The bottleneck score is a heuristic for where to look, not a diagnosis.
 - No rate limiting or per-caller query budget.
+
+## Analysis prompts (FLIG-29; stacked follow-up to PR #44)
+
+The stable v2 `McpServer.registerPrompt(name, {title, description, argsSchema}, callback)` registers
+`investigate_bottleneck`, `explain_dwell_change`, `compare_process_variants`,
+`evaluate_intervention`, `process_health_review` and `capacity_risk`. `prompts/list` and
+`prompts/get` are allowlisted. Each requires only `app_id` and `workflow_key`, validated with a
+strict object schema; no free-text instruction parameter exists. Unknown/extra arguments fail.
+
+MCP prompt messages have user/assistant roles, not a system role. The first message contains only
+static server-authored safety and analysis guidance. The second contains validated scope identifiers
+serialized as untrusted JSON data. No producer-authored label, description or source result is
+promoted into instructions. Templates do not access lifecycle data; tool calls separately authorize
+the exact app. They direct the **client's model** to collect evidence, verify freshness, check matched
+cohorts and case mix, cite quantitative sources and report alternatives, censoring, suppression and
+uncertainty. They cannot guarantee a client's model will obey, and never invoke a model themselves.
+
+## Bounded deterministic evidence UX
+
+Call `plan_investigation` or `collect_investigation_evidence` with the same strict input:
+
+```json
+{
+  "app_id": "synthetic-release",
+  "workflow_key": "change-rollout",
+  "goal": "compare_process_variants",
+  "dependency_scope": "workflow_only",
+  "cohorts": [
+    { "version": 1, "from": "2026-06-01T00:00:00.000Z", "to": "2026-10-30T00:00:00.000Z" },
+    { "version": 2, "from": "2026-06-01T00:00:00.000Z", "to": "2026-10-30T00:00:00.000Z" }
+  ]
+}
+```
+
+Goals use the six prompt names. Variant comparison requires two different explicit versions with
+the same start window. Dwell-change and intervention goals require two same-version, disjoint,
+equal-duration windows. Other goals allow one cohort or two temporal cohorts. Windows select
+**case start times**, not event observation cutoffs. Equal windows are a basic comparability gate;
+they do not match case mix or follow-up, and the result always says matching is unverified.
+
+Both tools require a person with `process:read`/analyst on the exact app. An owner/admin grant on a
+service token is still capped at reader and denied. They never forward dashboard tokens, exchange
+audiences, elevate service tokens or fall back to single-case reads. CloudflareOS OAuth delegated
+user identity is a separate, unimplemented production release gate.
+
+Planning resolves grants but makes no lifecycle data queries; workflow/version existence is checked
+when evidence is collected. Collection executes a fixed finite recipe: app freshness, then dwell,
+funnel and path/completion stats for each cohort, using the **existing read handlers and privacy
+projections**, including their definition reads. No arbitrary tool chain, SQL, model, process write,
+raw event/case, assessment, score, compensation or producer free text enters the pack. No filters
+or group breakdowns are accepted by this initial bridge. No query/result/PII logging was added.
+Future audit must record only redacted query metadata, never results, tokens or PII.
+
+Bounds: at most two cohorts, 14 source calls (current recipe uses 7/13), 256 source-returned array
+elements including nested rows, a 3-second whole-operation deadline, 366 days per cohort and the
+configured k floor of five. Structured JSON plus concise text caveats must fit the existing 48,000
+character budget. Oversized results fail rather than truncate. Timeout prevents more reads but
+cannot cancel an already-started source call: `LifecycleReadSource` has no abort signal. Production
+integration must enforce upstream scan/time/row limits as well; none is claimed here.
+
+Successful calls return the exact typed plan/pack in **structuredContent**, plus concise static text
+caveats. A pack contains:
+
+- Content-derived `evidence_id` and `evidence_ref`, and an entry for each bounded tool/cohort.
+- Deterministic `query_id` per entry, normalized `provenance.query`, quantitative observations,
+  suppression and original aggregate provenance. Each entry's `source_refs` identifies both its
+  definition and aggregate source reads.
+- **Every** source read's `as_of`, source revision (`source_version`), watermark, lag and status;
+  definition and second-cohort snapshots are preserved. Differing metadata sets top-level `as_of`
+  to null and yields `insufficient_evidence`; the minimum watermark is reported conservatively.
+- Sample/completed/open counts only when releasable, freshness/window coverage checks and explicit
+  completed-interval/right-censoring, unknown upstream coverage and unverified cohort matching.
+  Outcome detail is completion only: no source endpoint for outcome breakdowns is invented.
+- Fixed warnings about synthetic data, stale/missing watermarks, unprojected window tails, withheld
+  cells and insufficient released sample/dwell evidence. Even a source claiming fresh is checked
+  against a maximum 15-minute watermark lag. Future/inconsistent timestamp metadata fails closed.
+
+`bounded_evidence` means the finite reads passed basic checks, not that a hypothesis is proven.
+No confidence intervals, causal effect, counterfactual, matched comparison, staffing requirement or
+forecast is computed. Synthetic fixtures have a fixed 2026-10-30 watermark and become honestly stale
+when run later. `as_of`/`asOf` inputs are rejected: this source cannot time-travel.
+
+Citation verification: `query_id` is `sha256:` plus the lowercase full SHA-256 of UTF-8
+`JSON.stringify({app_id, tool, query})`, in that key order, with the entry's tool and provenance query.
+`evidence_id` hashes the complete payload before adding `evidence_id`/`evidence_ref` and expanding
+local refs. To verify a received pack, remove those two fields and replace each entry/source ref
+and entry `source_refs` prefix `evidence_ref + "#"` with the local suffix; serialize the remaining
+schema-ordered object with `JSON.stringify` and SHA-256. Timestamps and warnings are part of the
+hash. These hashes provide integrity/content identity, **not signed authenticity or source trust**.
+Refs are URN citations, not dereferenceable MCP resources or durable status handles. Retain the pack.
+
+## Nested workflows and package integration boundary
+
+`LifecycleReadSource` cannot expose parent/child relations or concurrent dependency graphs. Plans
+always report `dependency_graph: "unsupported"`. Requests with
+`dependency_scope: "child_dependencies"` return `insufficient_evidence` after authorization and
+before any data reads. Never infer requisition/application/interview/assessment or
+rollout/region parent blockers or critical paths by summing child/stage medians. Future
+`aggregate_child_rollup` or `get_case_relations` capability needs its own authorized, privacy-safe
+source contract and tests before these questions can be answered.
+
+`src/investigation-contract.ts` defines a versioned `InvestigationBridge` seam; the temporary
+`BoundedReadInvestigationBridge` only plans/collects existing reads and checks their bounds and
+metadata. `@flightdeckhq/lifecycle-investigations` is not a dependency and was not published as a
+PR when implementation began. Its concurrent worktree is untouched. When its reviewed contract is
+available, replace this bridge with package calls, keeping app authorization, fixed read bounds,
+privacy projection and provenance at the MCP boundary. No second statistics/LLM engine was built.
+
+## Deferred progressive enhancements (unimplemented)
+
+- **MCP Apps:** no `ui://` resource or `_meta.ui.resourceUri` is advertised. A follow-up can reuse
+  this typed pack with the dashboard `src/workflows/model.ts` and accessible segmented bars/dwell/
+  outcomes/filters. It must negotiate the host's Apps capability, register standalone sandboxed
+  HTML, enforce restrictive CSP/no unvetted external access, reauthorize filtered reads and retain
+  structured/text fallback. No fake UI or external iframe was inserted here.
+- **Tasks:** no durable task/status storage or scheduler exists. Only consider the 2026-07-28
+  `io.modelcontextprotocol/tasks` extension as a capability-negotiated enhancement after those
+  exist. Authorize every durable status retrieval/update/cancel (`tasks/get`, `tasks/update`,
+  `tasks/cancel`), bind ownership and app grants, expire retained evidence, enforce cancellation
+  and restart recovery, and retain synchronous fallback. Do not implement the obsolete
+  `tasks/list` API or deprecated sampling. All task methods remain denied, as does
+  `subscriptions/listen`. Task metadata on a tool call does not create a task.
+
+## End-to-end synthetic MCP client example
+
+With the local synthetic Worker running as above, run this from `apps/lifecycle-mcp` with the
+installed `@modelcontextprotocol/client` 2.4.0. Staging requires a token for the MCP host's own
+Access AUD; the local synthetic bypass needs no token. Never substitute a dashboard token.
+
+```js
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+
+const client = new Client(
+  { name: "synthetic-investigation-demo", version: "1" },
+  { versionNegotiation: { mode: { pin: "2026-07-28" } } },
+);
+await client.connect(new StreamableHTTPClientTransport(new URL("http://localhost:8787/mcp")));
+const scope = { app_id: "synthetic-release", workflow_key: "change-rollout" };
+const input = {
+  ...scope,
+  goal: "compare_process_variants",
+  cohorts: [1, 2].map(version => ({
+    version, from: "2026-06-01T00:00:00.000Z", to: "2026-10-30T00:00:00.000Z",
+  })),
+};
+await client.listPrompts();
+const prompt = await client.getPrompt({ name: "compare_process_variants", arguments: scope });
+const plan = await client.callTool({ name: "plan_investigation", arguments: input });
+const collected = await client.callTool({ name: "collect_investigation_evidence", arguments: input });
+if (collected.isError) throw new Error("Evidence collection refused; inspect the safe error code");
+const evidence = collected.structuredContent;
+// The client model receives `prompt.messages` and typed evidence, not a server-authored conclusion.
+// Inspect evidence.checks, source_reads, entries and warnings before citing any metric.
+// Expect synthetic:true and stale/insufficient_evidence when now is past the fixture watermark.
+await client.readResource({ uri: "lifecycle://glossary/metrics" });
+await client.close();
+```
+
+Automated end-to-end verification uses real 2026-07-28 clients and signed test Access assertions,
+calling the Worker in-process (no model/network/data service needed):
+
+```sh
+pnpm exec vitest run --project lifecycle-mcp
+```
+
+`test/prompts.test.ts` exercises list/get and malicious structured arguments;
+`test/investigations.test.ts` exercises planning/collection, content/query hash verification,
+readonly resources, grants/service ceiling/cross-app denial, fail-closed read API, stale/mixed
+snapshots, small cohorts, raw-field projection, child-graph refusal, deadlines and output bounds.

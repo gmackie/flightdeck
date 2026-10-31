@@ -7,6 +7,8 @@ import { syntheticCases } from "../src/sources/synthetic-data";
 import { call, connect, ENV, MCP_URL, RELEASE, raw, SUPPORT, serve, userToken } from "./helpers";
 
 const TOOLS = [
+  "plan_investigation",
+  "collect_investigation_evidence",
   "list_workflow_definitions",
   "get_case_summary",
   "get_case_timeline",
@@ -22,7 +24,7 @@ const TOOLS = [
 const READ_METHODS = Object.keys(PLANNED_ROUTES);
 
 describe("tool surface", () => {
-  it("exposes exactly the nine read-only tools with strict schemas", async () => {
+  it("exposes eleven read-only tools with strict schemas", async () => {
     const client = await connect();
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual(TOOLS);
@@ -47,11 +49,12 @@ describe("tool surface", () => {
     ]);
   });
 
-  it("advertises only tools and resources: no prompts, tasks, logging or subscriptions", async () => {
+  it("advertises tools, resources and prompts: no tasks, logging or subscriptions", async () => {
     const client = await connect();
     expect(client.getServerCapabilities()).toEqual({
       tools: { listChanged: false },
       resources: { listChanged: false },
+      prompts: { listChanged: false },
     });
   });
 });
@@ -70,15 +73,16 @@ describe("unsupported operations", () => {
     expect(sql.isError).toBe(true);
   });
 
-  it("refuses prompts, completions, tasks, logging and subscriptions on the server side", async () => {
+  it("refuses completions, tasks, logging and subscriptions on the server side", async () => {
     for (const [method, params] of [
-      ["prompts/list", {}],
       [
         "completion/complete",
         { ref: { type: "ref/prompt", name: "x" }, argument: { name: "a", value: "" } },
       ],
       ["tasks/list", {}],
       ["tasks/cancel", { taskId: "t1" }],
+      ["tasks/get", { taskId: "t1" }],
+      ["tasks/update", { taskId: "t1" }],
       ["resources/subscribe", { uri: "lifecycle://glossary/metrics" }],
       ["logging/setLevel", { level: "debug" }],
       ["subscriptions/listen", { notifications: { toolsListChanged: true } }],

@@ -65,7 +65,7 @@ describe("authentication", () => {
     for (const token of [await userToken(), await serviceToken()]) {
       const client = await connect({ token });
       const { tools } = await client.listTools();
-      expect(tools).toHaveLength(9);
+      expect(tools).toHaveLength(11);
     }
   });
 
@@ -93,7 +93,7 @@ describe("authentication", () => {
     expect(evil.status).toBe(403);
     const env = { ...ENV, LIFECYCLE_MCP_ALLOWED_ORIGINS: "https://console.example.com" };
     const client = await connect({ env });
-    expect((await client.listTools()).tools).toHaveLength(9);
+    expect((await client.listTools()).tools).toHaveLength(11);
     const listed = await raw(
       "tools/list",
       {},

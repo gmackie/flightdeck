@@ -33,6 +33,8 @@ const ALLOWED_METHODS = new Set([
   "ping",
   "tools/list",
   "tools/call",
+  "prompts/list",
+  "prompts/get",
   "resources/list",
   "resources/templates/list",
   "resources/read",

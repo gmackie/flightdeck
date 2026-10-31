@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodeCursor, encodeCursor, LIMITS } from "../src/bounds";
-import { suppressVariants } from "../src/privacy";
+import { suppressFunnel, suppressVariants } from "../src/privacy";
 import type { LifecycleReadSource, WorkflowDefinition } from "../src/source";
 import { SyntheticLifecycleSource } from "../src/sources/synthetic";
 import { syntheticCases } from "../src/sources/synthetic-data";
@@ -9,6 +9,42 @@ import { call, connect, ENV, now, RELEASE, SUPPORT, synthetic } from "./helpers"
 const rollout = { app_id: RELEASE, workflow_key: "change-rollout" };
 
 describe("small-cohort suppression", () => {
+  it("withholds reach/completion complements so rare non-completers cannot be subtracted", () => {
+    expect(
+      suppressFunnel(
+        [{ group: null, cohort_n: 20, steps: [{ stage_key: "done", reached_n: 18 }] }],
+        ["done"],
+        null,
+        null,
+        5,
+      ),
+    ).toEqual([
+      {
+        group: null,
+        suppressed: false,
+        cohort_n: 20,
+        steps: [{ stage_key: "done", suppressed: true, reason: "complementary" }],
+      },
+    ]);
+    const def = { stages: [{ key: "done" }] } as unknown as WorkflowDefinition;
+    const stats = suppressVariants(
+      {
+        total_n: 20,
+        completed_n: 18,
+        median_cycle_ms: 10,
+        variants: [{ path: ["done"], n: 20, completed_n: 18, median_cycle_ms: 10 }],
+      },
+      def,
+      5,
+    );
+    expect(stats).toMatchObject({
+      suppressed: false,
+      total_n: 20,
+      completed_n: null,
+      completion_rate: null,
+      variants: [{ completed_n: null }],
+    });
+  });
   it("withholds groups below k without counts, plus one complementary group", async () => {
     const client = await connect();
     const res = await call(client, "get_stage_dwell", { ...rollout, group_by: "service_tier" });
