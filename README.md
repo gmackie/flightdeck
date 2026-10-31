@@ -13,4 +13,4 @@ Design and implementation plans live in [`docs/plans/`](docs/plans/).
 
 ## License
 
-Apache-2.0; see [`LICENSE`](LICENSE).
+MIT; see [`LICENSE`](LICENSE).

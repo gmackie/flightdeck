@@ -31,4 +31,4 @@ Flightdeck's API sits behind Cloudflare Access. The CLI uses, first match wins:
 
 ## License
 
-Apache-2.0
+MIT

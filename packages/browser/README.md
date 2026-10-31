@@ -38,4 +38,4 @@ Clicks, form submits and views are captured from attributes, so components need 
 
 ## License
 
-Apache-2.0
+MIT

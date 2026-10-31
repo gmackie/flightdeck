@@ -46,4 +46,4 @@ The package ships ESM and type declarations. It uses your project's Workers type
 
 ## License
 
-Apache-2.0
+MIT

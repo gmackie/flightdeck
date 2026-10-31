@@ -24,4 +24,4 @@ normalizeRoute("/users/123"); // "/users/:id"
 
 ## License
 
-Apache-2.0
+MIT

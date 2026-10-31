@@ -10,7 +10,7 @@ Four packages are published to the public npm registry, all at the same version:
 | `create-flightdeck` | The CLI, one bundled `dist/cli.js` with a shebang (Node 24+) |
 
 Everything else in the workspace is `private` and never published. The code is
-licensed Apache-2.0 (`LICENSE` at the root, copied into each package).
+licensed MIT (`LICENSE` at the root, copied into each package).
 
 ## How the packages are built
 
@@ -82,11 +82,9 @@ job writes `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` to `~/.npmrc`;
 pnpm expands the variable when it reads the file, so the token is never written
 to disk or logged. The `id-token: write` permission lets npm sign provenance.
 
-One-time setup before the first release:
-
-1. Create the npm organization `flightdeckhq` (free plan; public packages).
-2. Create the granular token above and store it as the `NPM_TOKEN` secret.
-3. Push `v0.1.0`.
+The npm organization `flightdeckhq` and the `NPM_TOKEN` secret are set up. To
+publish 0.1.0, run the workflow once with `dry_run`, then push `v0.1.0`. If the
+token expires or is revoked, create a new one as above and replace the secret.
 
 ## Switching to trusted publishing (OIDC)
 

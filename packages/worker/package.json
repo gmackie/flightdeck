@@ -19,7 +19,7 @@
     "url": "git+https://github.com/gmackie/flightdeck.git",
     "directory": "packages/worker"
   },
-  "license": "Apache-2.0",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
