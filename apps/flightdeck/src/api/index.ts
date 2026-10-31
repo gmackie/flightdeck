@@ -3,7 +3,9 @@ import * as v from "valibot";
 import { forgetApp } from "../apps";
 import { trackDogfood } from "../dogfood";
 import { authenticate } from "./auth";
+import { authorizeApp, legacyReadMode } from "./authorization";
 import { fail, json, readJson } from "./http";
+import { lifecycleRead } from "./lifecycle";
 import { liveSocket, liveView, parseHours } from "./live";
 import {
   appIdentity,
@@ -21,6 +23,7 @@ const KEYS_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/server-keys$/;
 const KEY_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/server-keys\/([^/]+)$/;
 /** Read routes for one app: `live`, `live/ws` and `trends`. */
 const QUERY_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/(live|live\/ws|trends)$/;
+const LIFECYCLE_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/lifecycle(?:\/(.*))?$/;
 
 /** The Access-protected admin API; `keys` lets tests verify tokens against a local JWKS. */
 export async function apiRoutes(
@@ -34,6 +37,11 @@ export async function apiRoutes(
   const url = new URL(request.url);
   const { pathname } = url;
   const { method } = request;
+
+  const lifecycle = pathname.match(LIFECYCLE_ROUTE);
+  if (lifecycle?.[1]) {
+    return lifecycleRead(request, env, principal, lifecycle[1], lifecycle[2] ?? "");
+  }
 
   if (pathname === "/api/me") {
     return method === "GET" ? json({ principal }) : notAllowed("GET");
@@ -51,6 +59,12 @@ export async function apiRoutes(
   }
   const query = pathname.match(QUERY_ROUTE);
   if (query?.[1] && query[2]) {
+    const mode = legacyReadMode(env);
+    if (mode instanceof Response) return mode;
+    if (mode === "enforce") {
+      const scope = await authorizeApp(env, principal, query[1], "app:read");
+      if (scope instanceof Response) return scope;
+    }
     if (method !== "GET") return notAllowed("GET");
     return queryApp(request, url, env, ctx, query[1], query[2]);
   }

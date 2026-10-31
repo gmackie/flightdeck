@@ -56,11 +56,12 @@ export async function verifyAccessPrincipal(
   const payload = await verifyAccessToken(token, opts);
   if (!payload) return null;
   const { sub, email, common_name: commonName } = payload;
-  if (typeof sub === "string" && sub && typeof email === "string" && email) {
-    return { sub, email, serviceToken: false };
-  }
+  // A service claim wins over person-like claims: it must never inherit a person's grants.
   if (typeof commonName === "string" && commonName) {
     return { sub: commonName, serviceToken: true };
+  }
+  if (typeof sub === "string" && sub && typeof email === "string" && email) {
+    return { sub, email, serviceToken: false };
   }
   return null;
 }

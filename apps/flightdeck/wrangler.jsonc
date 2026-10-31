@@ -34,6 +34,9 @@
     "ACCESS_TEAM_DOMAIN": "",
     // The dashboard's Access application audience (AUD tag); /api/* requires it.
     "ACCESS_AUD": "",
+    // Explicit compatibility rollout for live/live/ws/trends only. Lifecycle always requires grants.
+    // Apply 0010 + provision grants, then set to "enforce". Unknown values fail closed.
+    "READ_AUTHZ_MODE": "legacy",
     // This Worker's name, echoed in the service bindings /api/apps hands out.
     "FLIGHTDECK_WORKER_NAME": "flightdeck",
     "FLIGHTDECK_DEV": "0"
