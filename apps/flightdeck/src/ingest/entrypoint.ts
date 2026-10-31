@@ -1,17 +1,26 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import type { EventSource, IngestResult, IngestRpc, StoredEvent } from "@flightdeckhq/schema";
+import type {
+  EventSource,
+  IngestResult,
+  IngestRpc,
+  LifecycleIngestResult,
+  LifecycleRpc,
+  StoredEvent,
+} from "@flightdeckhq/schema";
 import { ulid } from "ulid";
 import { verifyAccessUser } from "../access";
 import { type AppRecord, getApp } from "../apps";
 import { appShard, sessionStub } from "../do/shards";
 import { DOGFOOD_APP_ID } from "../dogfood";
 import { sinks } from "../sinks";
+import { ingestLifecycle, type LifecycleDeps, LifecycleForbidden } from "./lifecycle";
+import { lifecycleGranted } from "./server-auth";
 import { type IngestDeps, IngestError, ingestBatch } from "./service";
 
 export type IngestProps = { appId?: string };
 
 /** Service binding target for app Workers: `env.FLIGHTDECK.ingest(...)`, `.track(...)`, `.identify(...)`. */
-export class Ingest extends WorkerEntrypoint<Env, IngestProps> implements IngestRpc {
+export class Ingest extends WorkerEntrypoint<Env, IngestProps> implements IngestRpc, LifecycleRpc {
   ingest(batch: unknown): Promise<IngestResult> {
     return this.run(batch, "browser");
   }
@@ -29,12 +38,34 @@ export class Ingest extends WorkerEntrypoint<Env, IngestProps> implements Ingest
     );
   }
 
+  /** One lifecycle event; see `ingestLifecycleBatch`. */
+  trackLifecycle(event: unknown): Promise<LifecycleIngestResult> {
+    return this.lifecycle({ events: [event] });
+  }
+
+  /**
+   * A lifecycle batch, accepted or rejected whole. Server-only: the bound app needs an
+   * operator-granted `lifecycle.write`, checked on every call. There is no browser path.
+   */
+  ingestLifecycleBatch(batch: unknown): Promise<LifecycleIngestResult> {
+    return this.lifecycle(batch);
+  }
+
   private async run(input: unknown, source: EventSource): Promise<IngestResult> {
     const appId = this.ctx.props?.appId;
     if (!appId) throw new IngestError("service binding is missing props.appId");
     const app = await getApp(this.env.DB, appId);
     if (!app) throw new IngestError(`unknown app ${appId}`);
     return ingestBatch(appId, input, source, deps(this.env, this.ctx, app));
+  }
+
+  private async lifecycle(input: unknown): Promise<LifecycleIngestResult> {
+    const appId = this.ctx.props?.appId;
+    if (!appId) throw new IngestError("service binding is missing props.appId");
+    const app = await getApp(this.env.DB, appId);
+    if (!app) throw new IngestError(`unknown app ${appId}`);
+    if (!(await lifecycleGranted(this.env.DB, appId))) throw new LifecycleForbidden();
+    return ingestLifecycle(appId, input, "binding", lifecycleDeps(this.env));
   }
 }
 
@@ -71,3 +102,8 @@ export function deps(env: Env, ctx: ExecutionContext, app: AppRecord): IngestDep
     defer: (work) => ctx.waitUntil(work),
   };
 }
+
+export const lifecycleDeps = (env: Env): LifecycleDeps => ({
+  now: Date.now,
+  send: (rows) => sinks.lifecycle(env, rows),
+});
