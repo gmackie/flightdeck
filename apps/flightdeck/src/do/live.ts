@@ -16,25 +16,35 @@ export type DeltaBody = {
   minutes: Minute[];
   /** True when more counters changed than the delta itemizes; clients should refetch. */
   truncated: boolean;
+  /** The shard sequence this delta starts from; it covers writes `since + 1` to `seq`. */
+  since: number;
 };
 
 /** The WebSocket message an AppDO broadcasts. `sessions` and `active` are absolute. */
 export type LiveDelta = DeltaBody & {
   type: "delta";
   hour: string;
+  /** The shard's write sequence after this delta; snapshots carry the same counter. */
+  seq: number;
   sessions: number;
   active: number;
   at: number;
 };
 
+/** The first message on a live socket: the hour end by the server clock, not the client's. */
+export type LiveHello = { type: "hello"; hour: string; hour_end: number; seq: number; now: number };
+
 /** Accumulates increments between pushes. */
 export class DeltaBuffer {
   private events = 0;
+  private since = 0;
   private truncated = false;
   private readonly counters = new Map<string, Counter>();
   private readonly minutes = new Map<number, Minute>();
 
-  add(e: { kind: string; name: string; minute: number }): void {
+  /** `seqBefore` is the shard sequence before the write; the first add since a take keeps it. */
+  add(e: { kind: string; name: string; minute: number }, seqBefore: number): void {
+    if (this.events === 0) this.since = seqBefore;
     this.events++;
     const key = `${e.kind}\u0000${e.name}`;
     const counter = this.counters.get(key);
@@ -55,6 +65,7 @@ export class DeltaBuffer {
       counters: [...this.counters.values()],
       minutes: [...this.minutes.values()],
       truncated: this.truncated,
+      since: this.since,
     };
     this.events = 0;
     this.truncated = false;

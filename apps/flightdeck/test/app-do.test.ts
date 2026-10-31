@@ -1,16 +1,21 @@
 import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { hourKey } from "@flightdeckhq/schema";
-import { expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import {
   ACTIVE_WINDOW_MS,
+  type AppDO,
   type CounterRow,
   FLUSH_GRACE_MS,
+  HOUR_CLOSED,
   ROLLUP_LIMIT,
   SNAPSHOT_LIMIT,
 } from "../src/do/app";
 import { appShard } from "../src/do/shards";
+import { rollups } from "../src/rollups";
 import { sid, T0 } from "./fixtures";
+
+afterEach(() => vi.restoreAllMocks());
 
 const HOUR = "2026-10-30T14";
 const HOUR_MS = 3_600_000;
@@ -69,6 +74,7 @@ it("counts events by kind and name, totals by kind, unique sessions and minutes"
       { minute: T0 + 2 * MIN, count: 1 },
     ],
     active: 0,
+    seq: 1,
   });
 });
 
@@ -244,24 +250,74 @@ it("answers non-upgrade requests with 426", async () => {
   expect(res.status).toBe(426);
 });
 
-it("broadcasts coalesced deltas to connected WebSockets", async () => {
+const connect = async (shard: ReturnType<typeof appShard>, appId: string, hour: string) => {
+  const res = await shard.fetch(`https://do/live?app=${appId}&hour=${hour}`, {
+    headers: { Upgrade: "websocket" },
+  });
+  const ws = res.webSocket;
+  const messages: Record<string, unknown>[] = [];
+  let closed: number | null = null;
+  if (ws) {
+    ws.accept();
+    ws.addEventListener("message", (e) => messages.push(JSON.parse(e.data as string)));
+    ws.addEventListener("close", (e) => {
+      closed = e.code;
+    });
+  }
+  return { res, ws, messages, closed: () => closed };
+};
+
+it("greets a live client with the server's hour end and sequence", async () => {
+  const now = Date.now();
+  const hour = hourKey(now);
+  const shard = appShard(env, "app_hello", hour);
+  await shard.recordEvents("app_hello", hour, [counter({ ts: now })]);
+  const { res, ws, messages } = await connect(shard, "app_hello", hour);
+  expect(res.status).toBe(101);
+  await expect.poll(() => messages.length).toBe(1);
+  expect(messages[0]).toEqual({
+    type: "hello",
+    hour,
+    hour_end: Date.parse(`${hour}:00:00.000Z`) + HOUR_MS,
+    seq: 1,
+    now: expect.any(Number),
+  });
+  ws?.close();
+});
+
+it("refuses live clients once its hour is over, and closes them at the hour end", async () => {
+  const past = hourKey(Date.now() - HOUR_MS);
+  const late = await connect(appShard(env, "app_past", past), "app_past", past);
+  expect(late.res.status).toBe(410);
+
+  const hour = hourKey(Date.now());
+  const shard = appShard(env, "app_close", hour);
+  const { ws, closed } = await connect(shard, "app_close", hour);
+  const end = Date.parse(`${hour}:00:00.000Z`) + HOUR_MS;
+  // Connecting arms an alarm for the end of the hour.
+  expect(await alarmOf(shard)).toBe(end);
+  // Pretend the hour is over: the alarm closes the socket with the hour-closed code.
+  vi.spyOn(Date, "now").mockReturnValue(end + 1);
+  await runDurableObjectAlarm(shard);
+  vi.restoreAllMocks();
+  await expect.poll(closed).toBe(HOUR_CLOSED);
+  ws?.close();
+});
+
+it("broadcasts coalesced deltas with sequence numbers", async () => {
   const hour = hourKey(Date.now());
   const shard = appShard(env, "app_ws", hour);
-  const res = await shard.fetch("https://do/live", { headers: { Upgrade: "websocket" } });
+  const { res, ws, messages } = await connect(shard, "app_ws", hour);
   expect(res.status).toBe(101);
-  const ws = res.webSocket;
-  if (!ws) throw new Error("no webSocket");
-  ws.accept();
-  const messages: unknown[] = [];
-  ws.addEventListener("message", (e) => messages.push(JSON.parse(e.data as string)));
+  await expect.poll(() => messages.length).toBe(1);
 
   const now = Date.now();
   await shard.recordEvents("app_ws", hour, [
     counter({ ts: now }),
     counter({ ts: now, kind: "click", name: "cta", path: null, session_id: sid("b") }),
   ]);
-  await expect.poll(() => messages.length).toBe(1);
-  expect(messages[0]).toEqual({
+  await expect.poll(() => messages.length).toBe(2);
+  expect(messages[1]).toEqual({
     type: "delta",
     hour,
     events: 2,
@@ -271,6 +327,8 @@ it("broadcasts coalesced deltas to connected WebSockets", async () => {
     ],
     minutes: [{ minute: Math.floor(now / MIN) * MIN, count: 2 }],
     truncated: false,
+    since: 0,
+    seq: 1,
     sessions: 2,
     active: 2,
     at: expect.any(Number),
@@ -279,7 +337,89 @@ it("broadcasts coalesced deltas to connected WebSockets", async () => {
   // Writes inside the throttle interval arrive together in one trailing message.
   await shard.recordEvents("app_ws", hour, [counter({ ts: now })]);
   await shard.recordEvents("app_ws", hour, [counter({ ts: now })]);
-  await expect.poll(() => messages.length, { timeout: 3_000 }).toBe(2);
-  expect(messages[1]).toMatchObject({ events: 2, counters: [{ name: "/", count: 2 }] });
-  ws.close();
+  await expect.poll(() => messages.length, { timeout: 3_000 }).toBe(3);
+  expect(messages[2]).toMatchObject({
+    events: 2,
+    counters: [{ name: "/", count: 2 }],
+    since: 1,
+    seq: 3,
+  });
+  expect((await shard.snapshot()).seq).toBe(3);
+  ws?.close();
+});
+
+it("re-arms a prompt flush when events land while the D1 write is in flight", async () => {
+  const hour = hourKey(Date.now() - 5 * HOUR_MS);
+  const ts = Date.parse(`${hour}:00:00.000Z`);
+  const shard = appShard(env, "app_race", hour);
+  await shard.recordEvents("app_race", hour, [counter({ ts })]);
+  const write = rollups.write;
+  await runInDurableObject(shard, async (instance: AppDO) => {
+    vi.spyOn(rollups, "write").mockImplementationOnce(async (...args) => {
+      // A late event arrives after rollup() read the counters, before the write commits.
+      await instance.recordEvents("app_race", hour, [counter({ ts })]);
+      return write(...args);
+    });
+    await instance.alarm();
+  });
+  expect(await rollupRows("app_race", hour)).toEqual([{ kind: "page", name: "/", count: 1 }]);
+  const expiry = Date.parse(`${hour}:00:00.000Z`) + HOUR_MS + 48 * HOUR_MS;
+  const alarm = await alarmOf(shard);
+  expect(alarm).toBeLessThan(expiry);
+  expect(alarm).toBeGreaterThan(Date.now());
+  // The re-armed flush picks the late event up.
+  expect(await runDurableObjectAlarm(shard)).toBe(true);
+  expect(await rollupRows("app_race", hour)).toEqual([{ kind: "page", name: "/", count: 2 }]);
+  expect(await alarmOf(shard)).toBe(expiry);
+});
+
+it("merges a real $other name into the folded row instead of failing the flush", async () => {
+  const hour = hourKey(Date.now() - 6 * HOUR_MS);
+  const ts = Date.parse(`${hour}:00:00.000Z`);
+  const shard = appShard(env, "app_realother", hour);
+  await shard.recordEvents("app_realother", hour, [
+    ...Array.from({ length: ROLLUP_LIMIT + 1 }, (_, i) =>
+      counter({ kind: "click", name: `c${String(i).padStart(5, "0")}`, path: null, ts }),
+    ),
+    counter({ kind: "click", name: "$other", path: null, ts }),
+  ]);
+  const rollup = await shard.rollup();
+  const others = rollup.counters.filter((c) => c.name === "$other");
+  expect(others).toEqual([{ kind: "click", name: "$other", count: 3 }]);
+  expect(await runDurableObjectAlarm(shard)).toBe(true);
+  const rows = await rollupRows("app_realother", hour);
+  expect(rows).toHaveLength(ROLLUP_LIMIT);
+  expect(rows.reduce((n, r) => n + (r.count as number), 0)).toBe(ROLLUP_LIMIT + 2);
+});
+
+it("indexes sessions by last activity and keeps a running session count", async () => {
+  const shard = appShard(env, "app_sessidx", HOUR);
+  await shard.recordEvents("app_sessidx", HOUR, [
+    counter({ session_id: sid("a") }),
+    counter({ session_id: sid("a"), ts: T0 + MIN }),
+    counter({ session_id: sid("b") }),
+  ]);
+  await shard.recordEvents("app_sessidx", HOUR, [counter({ session_id: sid("b") })]);
+  expect((await shard.snapshot()).sessions).toBe(2);
+  const plan = await runInDurableObject(shard, (_, state) =>
+    state.storage.sql
+      .exec<{ detail: string }>(
+        "EXPLAIN QUERY PLAN SELECT count(*) FROM sessions WHERE last_ts >= 0",
+      )
+      .toArray()
+      .map((r) => r.detail)
+      .join(" "),
+  );
+  expect(plan).toMatch(/INDEX sessions_last_ts/);
+});
+
+it("counts the union of its active sessions and another shard's", async () => {
+  const shard = appShard(env, "app_union", HOUR);
+  await shard.recordEvents("app_union", HOUR, [
+    counter({ session_id: sid("a"), ts: T0 + MIN }),
+    counter({ session_id: sid("b"), ts: T0 + MIN }),
+    counter({ session_id: sid("c"), ts: T0 - 10 * MIN }),
+  ]);
+  // b is active on both sides; c is here but too old, so it counts only via the other shard.
+  expect(await shard.activeUnion(T0, [sid("b"), sid("c"), sid("d")])).toBe(4);
 });

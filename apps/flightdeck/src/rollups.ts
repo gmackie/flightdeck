@@ -21,9 +21,12 @@ export async function writeHourlyRollup(
     statements.push(
       db
         .prepare(
+          // Duplicate names in one rollup add up rather than failing the whole batch.
           `INSERT INTO hourly_rollups (app_id, hour, kind, name, count) VALUES ${chunk
             .map(() => "(?, ?, ?, ?, ?)")
-            .join(", ")}`,
+            .join(
+              ", ",
+            )} ON CONFLICT (app_id, hour, kind, name) DO UPDATE SET count = count + excluded.count`,
         )
         .bind(...chunk.flatMap((c) => [appId, hour, c.kind, c.name, c.count])),
     );
@@ -37,3 +40,6 @@ export async function writeHourlyRollup(
   );
   await db.batch(statements);
 }
+
+/** The AppDO writes through this object so tests can interpose on the D1 write. */
+export const rollups = { write: writeHourlyRollup };

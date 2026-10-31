@@ -139,6 +139,7 @@ describe("GET /api/apps/:id/live", () => {
       transitions: [],
       sessions: 1,
       minutes: [{ minute: Math.floor(now / MIN) * MIN, count: 2 }],
+      seq: 1,
     });
     expect((await get("/api/apps/app_live/live?hours=1")).status).toBe(200);
   });
@@ -210,8 +211,9 @@ describe("GET /api/apps/:id/live/ws", () => {
     await appShard(env, "app_live_ws", hourKey(now)).recordEvents("app_live_ws", hourKey(now), [
       counter({ ts: now }),
     ]);
-    await expect.poll(() => messages.length).toBe(1);
-    expect(messages[0]).toMatchObject({ type: "delta", events: 1 });
+    await expect.poll(() => messages.length).toBe(2);
+    expect(messages[0]).toMatchObject({ type: "hello", hour: hourKey(now) });
+    expect(messages[1]).toMatchObject({ type: "delta", events: 1, seq: 1 });
     ws.close();
   });
 });

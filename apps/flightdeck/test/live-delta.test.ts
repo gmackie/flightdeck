@@ -12,9 +12,10 @@ it("buckets timestamps by UTC minute", () => {
 it("coalesces counter and minute increments until taken", () => {
   const buf = new DeltaBuffer();
   expect(buf.take()).toBeNull();
-  buf.add({ kind: "page", name: "/", minute: minuteOf(T) });
-  buf.add({ kind: "page", name: "/", minute: minuteOf(T) });
-  buf.add({ kind: "click", name: "cta", minute: minuteOf(T + MIN) });
+  buf.add({ kind: "page", name: "/", minute: minuteOf(T) }, 4);
+  // Only the first add after a take sets `since`: the sequence the delta continues from.
+  buf.add({ kind: "page", name: "/", minute: minuteOf(T) }, 5);
+  buf.add({ kind: "click", name: "cta", minute: minuteOf(T + MIN) }, 4);
   expect(buf.take()).toEqual({
     events: 3,
     counters: [
@@ -26,16 +27,19 @@ it("coalesces counter and minute increments until taken", () => {
       { minute: minuteOf(T + MIN), count: 1 },
     ],
     truncated: false,
+    since: 4,
   });
   expect(buf.take()).toBeNull();
+  buf.add({ kind: "page", name: "/", minute: minuteOf(T) }, 9);
+  expect(buf.take()?.since).toBe(9);
 });
 
 it("stops itemizing counters past the cap but keeps counting", () => {
   const buf = new DeltaBuffer();
   for (let i = 0; i <= MAX_DELTA_COUNTERS; i++) {
-    buf.add({ kind: "click", name: `c${i}`, minute: minuteOf(T) });
+    buf.add({ kind: "click", name: `c${i}`, minute: minuteOf(T) }, 4);
   }
-  buf.add({ kind: "click", name: "c0", minute: minuteOf(T) });
+  buf.add({ kind: "click", name: "c0", minute: minuteOf(T) }, 4);
   const delta = buf.take();
   expect(delta?.events).toBe(MAX_DELTA_COUNTERS + 2);
   expect(delta?.counters).toHaveLength(MAX_DELTA_COUNTERS);

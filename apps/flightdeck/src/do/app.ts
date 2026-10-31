@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { StoredEvent, Transition } from "@flightdeckhq/schema";
-import { writeHourlyRollup } from "../rollups";
-import { DeltaBuffer, type LiveDelta, minuteOf, Throttle } from "./live";
+import { rollups } from "../rollups";
+import { DeltaBuffer, type LiveDelta, type LiveHello, minuteOf, Throttle } from "./live";
 
 /** The slice of a `StoredEvent` an AppDO counts. */
 export type CounterRow = Pick<StoredEvent, "kind" | "name" | "path" | "session_id" | "ts">;
@@ -18,6 +18,8 @@ export type AppSnapshot = {
   minutes: { minute: number; count: number }[];
   /** Sessions whose latest event in this hour is at or after `activeSince`. */
   active: number;
+  /** The shard's write sequence; live deltas with `seq <= this` are already included. */
+  seq: number;
 };
 
 /** What a finalized hour contributes to the D1 warm tier. */
@@ -50,7 +52,16 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, last_ts INTEGER NOT NULL DEFAULT 0);
   CREATE TABLE IF NOT EXISTS minutes (minute INTEGER PRIMARY KEY, count INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS stats (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
 `;
+
+/**
+ * Running counters, so hot paths never scan a table:
+ * - `writes`: every record call; the flush compares it to catch writes that race the D1 write.
+ * - `seq`: every `recordEvents` call; orders live deltas against snapshots.
+ * - `sessions`: unique sessions.
+ */
+type Stat = "writes" | "seq" | "sessions";
 
 /**
  * Live counters for one app and one UTC hour. Pushes deltas to WebSocket clients, flushes the
@@ -64,21 +75,18 @@ export class AppDO extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
-    this.sql.exec(SCHEMA);
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
-    // Shards created before minute buckets lack `last_ts`; they expire within 48h.
-    const columns = this.sql.exec<{ name: string }>(
-      "SELECT name FROM pragma_table_info('sessions')",
-    );
-    if (!columns.toArray().some((c) => c.name === "last_ts")) {
-      this.sql.exec("ALTER TABLE sessions ADD COLUMN last_ts INTEGER NOT NULL DEFAULT 0");
-    }
+    this.init();
   }
 
   async recordEvents(appId: string, hour: string, rows: CounterRow[]): Promise<void> {
     const start = hourStart(hour);
     const live = this.ctx.getWebSockets().length > 0;
     this.remember(appId, hour);
+    // Everything up to `armFlush` is synchronous, so a snapshot never sees half a batch and the
+    // sequence always matches the counters.
+    const seqBefore = this.stat("seq");
+    let newSessions = 0;
     for (const r of rows) {
       const name = r.kind === "page" ? (r.path ?? r.name) : r.name;
       // Rows belong to this hour; clamping keeps a stray timestamp from adding a 61st bucket.
@@ -93,14 +101,26 @@ export class AppDO extends DurableObject<Env> {
         minute,
       );
       if (r.session_id) {
-        this.sql.exec(
-          "INSERT INTO sessions (session_id, last_ts) VALUES (?, ?) ON CONFLICT (session_id) DO UPDATE SET last_ts = max(last_ts, excluded.last_ts)",
+        const inserted = this.sql.exec(
+          "INSERT OR IGNORE INTO sessions (session_id, last_ts) VALUES (?, ?)",
           r.session_id,
           r.ts,
-        );
+        ).rowsWritten;
+        if (inserted > 0) newSessions++;
+        else {
+          this.sql.exec(
+            "UPDATE sessions SET last_ts = ? WHERE session_id = ? AND last_ts < ?",
+            r.ts,
+            r.session_id,
+            r.ts,
+          );
+        }
       }
-      if (live) this.pending.add({ kind: r.kind, name, minute });
+      if (live) this.pending.add({ kind: r.kind, name, minute }, seqBefore);
     }
+    this.bump("seq");
+    this.bump("writes");
+    if (newSessions > 0) this.bump("sessions", newSessions);
     await this.armFlush(start);
     if (live) this.push.poke();
   }
@@ -116,6 +136,7 @@ export class AppDO extends DurableObject<Env> {
         t.count,
       );
     }
+    this.bump("writes");
     await this.armFlush(start);
   }
 
@@ -138,17 +159,21 @@ export class AppDO extends DurableObject<Env> {
           SNAPSHOT_LIMIT,
         )
         .toArray(),
-      sessions: this.sessionCount(),
+      sessions: this.stat("sessions"),
       minutes: this.sql
         .exec<{ minute: number; count: number }>(
           "SELECT minute, count FROM minutes ORDER BY minute",
         )
         .toArray(),
       active: this.activeCount(activeSince),
+      seq: this.stat("seq"),
     };
   }
 
-  /** Ids of sessions active since `since`, so a window spanning two hours can be de-duplicated. */
+  /**
+   * Ids of sessions active since `since`. Asked of the previous hour's shard only, early in an
+   * hour, so it returns at most the last few minutes of that hour's sessions.
+   */
   activeSessionIds(since: number): string[] {
     return this.sql
       .exec<{ session_id: string }>("SELECT session_id FROM sessions WHERE last_ts >= ?", since)
@@ -156,7 +181,22 @@ export class AppDO extends DurableObject<Env> {
       .map((r) => r.session_id);
   }
 
-  /** The hour's counters, capped at `ROLLUP_LIMIT` names with the rest folded into `$other`. */
+  /** Sessions active here since `since`, plus those of `others` that are not. */
+  activeUnion(since: number, others: string[]): number {
+    let count = this.activeCount(since);
+    for (const id of new Set(others)) {
+      const here = this.sql
+        .exec("SELECT 1 FROM sessions WHERE session_id = ? AND last_ts >= ?", id, since)
+        .toArray();
+      if (here.length === 0) count++;
+    }
+    return count;
+  }
+
+  /**
+   * The hour's counters, capped at `ROLLUP_LIMIT` names with the rest folded into `$other`.
+   * A real event named `$other` (recorded before ingest reserved `$` names) merges into it.
+   */
   rollup(): HourRollup {
     const counters = this.sql
       .exec<Counter>(
@@ -171,19 +211,39 @@ export class AppDO extends DurableObject<Env> {
          GROUP BY kind ORDER BY kind`,
         ROLLUP_LIMIT,
       );
-      for (const r of rest) counters.push({ kind: r.kind, name: OTHER, count: r.count });
+      for (const r of rest) {
+        const real = counters.find((c) => c.kind === r.kind && c.name === OTHER);
+        if (real) real.count += r.count;
+        else counters.push({ kind: r.kind, name: OTHER, count: r.count });
+      }
     }
-    return { counters, sessions: this.sessionCount() };
+    return { counters, sessions: this.stat("sessions") };
   }
 
-  /** Live clients connect here (via the Worker's Access-checked `/api/apps/:id/live/ws`). */
+  /**
+   * Live clients connect here through the Worker's Access-checked `/api/apps/:id/live/ws`,
+   * which names the app and hour in the query. The shard refuses once its hour is over.
+   */
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("Expected a WebSocket upgrade", { status: 426 });
     }
+    const params = new URL(request.url).searchParams;
+    const appId = params.get("app");
+    const hour = params.get("hour");
+    if (!appId || !hour) return new Response("Expected app and hour", { status: 400 });
+    const end = hourStart(hour) + HOUR_MS;
+    const now = Date.now();
+    if (now >= end) return new Response("This hour is over", { status: 410 });
+    this.remember(appId, hour);
     const { 0: client, 1: server } = new WebSocketPair();
     // Hibernation API: the shard can sleep between events without dropping the socket.
     this.ctx.acceptWebSocket(server);
+    const hello: LiveHello = { type: "hello", hour, hour_end: end, seq: this.stat("seq"), now };
+    server.send(JSON.stringify(hello));
+    // Wake at the end of the hour to close live sockets, even if no event arrives.
+    const alarm = await this.ctx.storage.getAlarm();
+    if (alarm === null || alarm > end) await this.ctx.storage.setAlarm(end);
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -199,31 +259,69 @@ export class AppDO extends DurableObject<Env> {
   }
 
   /**
-   * Flushes the finalized hour into D1 (re-run after late events; the write overwrites), then
-   * waits for expiry. At expiry it drops everything, keeping empty tables for late reads.
+   * At the end of the hour: close live sockets. After the grace period: flush the hour into D1
+   * (re-run after late events; the write overwrites), then wait for expiry. If a write lands
+   * while the flush is in flight, flush again soon instead. At expiry, drop everything.
    */
   async alarm(): Promise<void> {
     const meta = this.meta();
-    if (!meta || Date.now() >= hourStart(meta.hour) + HOUR_MS + RETENTION_MS) {
-      this.closeSockets();
-      await this.ctx.storage.deleteAll();
-      this.sql.exec(SCHEMA);
+    const now = Date.now();
+    const end = meta ? hourStart(meta.hour) + HOUR_MS : 0;
+    const expiry = end + RETENTION_MS;
+    if (now >= end) this.closeSockets();
+    if (!meta || now >= expiry) return this.clear();
+    if (now < end + FLUSH_GRACE_MS) {
+      await this.ctx.storage.setAlarm(end + FLUSH_GRACE_MS);
       return;
     }
-    const expiry = hourStart(meta.hour) + HOUR_MS + RETENTION_MS;
-    if (Date.now() >= hourStart(meta.hour) + HOUR_MS) this.closeSockets();
+    const writes = this.stat("writes");
+    // Only live clients ever came: nothing to flush or keep.
+    if (writes === 0) return this.clear();
     try {
-      await writeHourlyRollup(this.env.DB, meta.appId, meta.hour, this.rollup());
+      await rollups.write(this.env.DB, meta.appId, meta.hour, this.rollup());
     } catch (err) {
       console.error(`flightdeck: rollup flush failed for ${meta.appId} ${meta.hour}`, err);
       await this.ctx.storage.setAlarm(Math.min(Date.now() + FLUSH_RETRY_MS, expiry));
       return;
     }
-    await this.ctx.storage.setAlarm(expiry);
+    const raced = this.stat("writes") !== writes;
+    await this.ctx.storage.setAlarm(
+      raced ? Math.min(Date.now() + LATE_FLUSH_DELAY_MS, expiry) : expiry,
+    );
   }
 
-  private sessionCount(): number {
-    return this.sql.exec<{ n: number }>("SELECT count(*) AS n FROM sessions").one().n;
+  private init(): void {
+    this.sql.exec(SCHEMA);
+    // Shards created before minute buckets lack `last_ts`; they expire within 48h.
+    const columns = this.sql.exec<{ name: string }>(
+      "SELECT name FROM pragma_table_info('sessions')",
+    );
+    if (!columns.toArray().some((c) => c.name === "last_ts")) {
+      this.sql.exec("ALTER TABLE sessions ADD COLUMN last_ts INTEGER NOT NULL DEFAULT 0");
+    }
+    this.sql.exec("CREATE INDEX IF NOT EXISTS sessions_last_ts ON sessions (last_ts)");
+    // Older shards start their counters from what they already hold.
+    this.sql.exec(
+      `INSERT OR IGNORE INTO stats (key, value) VALUES
+         ('sessions', (SELECT count(*) FROM sessions)),
+         ('writes', (SELECT count(*) FROM counters) + (SELECT count(*) FROM transitions)),
+         ('seq', 0)`,
+    );
+  }
+
+  private async clear(): Promise<void> {
+    await this.ctx.storage.deleteAll();
+    // Keep empty tables for late reads.
+    this.init();
+  }
+
+  private stat(key: Stat): number {
+    return this.sql.exec<{ value: number }>("SELECT value FROM stats WHERE key = ?", key).one()
+      .value;
+  }
+
+  private bump(key: Stat, by = 1): void {
+    this.sql.exec("UPDATE stats SET value = value + ? WHERE key = ?", by, key);
   }
 
   private activeCount(since: number): number {
@@ -261,11 +359,17 @@ export class AppDO extends DurableObject<Env> {
     const meta = this.meta();
     if (!body || !meta) return;
     const now = Date.now();
+    // Live sockets belong to the current hour; a late event for a past one closes them.
+    if (now >= hourStart(meta.hour) + HOUR_MS) {
+      this.closeSockets();
+      return;
+    }
     const delta: LiveDelta = {
       type: "delta",
       hour: meta.hour,
       ...body,
-      sessions: this.sessionCount(),
+      seq: this.stat("seq"),
+      sessions: this.stat("sessions"),
       active: this.activeCount(now - ACTIVE_WINDOW_MS),
       at: now,
     };

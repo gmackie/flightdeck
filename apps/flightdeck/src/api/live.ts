@@ -43,15 +43,13 @@ export async function liveView(
   const current = keys[0] as string;
   const currentStart = Date.parse(`${current}:00:00.000Z`);
   let active = snapshots[0]?.active ?? 0;
-  // Early in an hour the window reaches into the previous shard; union ids so a session active
-  // on both sides counts once.
+  // Early in an hour the window reaches into the previous shard. Only its few in-window ids
+  // travel; the current shard counts the union, so a session active on both sides counts once.
   if (since < currentStart) {
-    const previous = hourKey(now - HOUR_MS);
-    const [a, b] = await Promise.all([
-      appShard(env, appId, current).activeSessionIds(since),
-      appShard(env, appId, previous).activeSessionIds(since),
-    ]);
-    active = new Set([...a, ...b]).size;
+    const previous = await appShard(env, appId, hourKey(now - HOUR_MS)).activeSessionIds(since);
+    if (previous.length > 0) {
+      active = await appShard(env, appId, current).activeUnion(since, previous);
+    }
   }
   return {
     app_id: appId,
@@ -78,8 +76,12 @@ export async function liveSocket(request: Request, env: Env, appId: string): Pro
   if (origin && originHost(origin) !== new URL(request.url).host) {
     return fail(403, "Cross-origin WebSocket");
   }
-  const forwarded = new Request(request.url, { headers: { Upgrade: "websocket" } });
-  return appShard(env, appId, hourKey(Date.now())).fetch(forwarded);
+  const hour = hourKey(Date.now());
+  // The shard learns its app and hour from the Worker, never from the client's query.
+  const target = new URL("https://app-do/live");
+  target.searchParams.set("app", appId);
+  target.searchParams.set("hour", hour);
+  return appShard(env, appId, hour).fetch(target, { headers: { Upgrade: "websocket" } });
 }
 
 function originHost(origin: string): string | null {
