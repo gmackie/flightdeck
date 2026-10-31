@@ -45,7 +45,9 @@ target instead of history being rewritten.
 **Fail closed.** Objects are strict, so unknown fields (`props`, `appId`, `email`, ...) reject
 the event. Keys that name personal or secret data (`email`, `phone`, `name`, `first_name`,
 `address`, `ip`, `ssn`, `password`, `token`, `api_key`, ...) are rejected anywhere in an event,
-in any spelling (`candidateEmail`, `e-mail`). Free text has no field to go in. Keep personal
+in common spellings (`candidateEmail`, `e-mail`, `useremail`, `phonenumber`). This is a
+best-effort denylist: it does not catch every spelling, and it cannot judge values (an id or
+dimension value could still be a phone number). Free text has no field to go in. Keep personal
 data in the source system and send opaque ids.
 
 `ProcessDefinitionV1` describes a process version: its stages, the allowed dimension keys with
@@ -66,6 +68,10 @@ revoking either takes effect at once:
    minted before migration 0005, or by `apps key`, hold `events.write` only and get **403** on
    the lifecycle endpoint. A key holding only `lifecycle.write` gets 403 on `/v1/server/events`.
    On the service binding, the credential is the binding's `props.appId`, as for `track`.
+   That id is written in the calling Worker's own wrangler config, so the trust boundary for
+   bindings is the Cloudflare account: any Worker someone can deploy there can bind `Ingest`
+   with a granted app id. Limit who can deploy Workers to the account, and use HTTP keys for
+   producers outside it.
 
 The app always comes from the credential or binding, never from the body. An `appId` in the
 envelope or in an event is rejected. There is no browser, cookie or Access path: a
@@ -182,7 +188,9 @@ Content-Type: application/json
 
 Issue codes: `invalid_envelope`, `unsupported_schema_version`, `prohibited_key`,
 `event_too_large` (8 KiB serialized), `invalid_event`, `future_occurred_at`,
-`duplicate_event_id` (within one batch). Use HTTPS and do not follow redirects.
+`duplicate_event_id` (within one batch). `future_occurred_at` comes from producer clock skew:
+retry it after a few minutes instead of quarantining (`isPermanentLifecycleError` treats it as
+retryable). Use HTTPS and do not follow redirects.
 
 ## Time
 

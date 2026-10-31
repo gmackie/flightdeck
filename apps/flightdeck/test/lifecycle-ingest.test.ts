@@ -357,6 +357,27 @@ describe("Ingest.trackLifecycle / ingestLifecycleBatch", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("rejects BigInt and cyclic events permanently instead of crashing", async () => {
+    const send = stub();
+    const cyclic: Record<string, unknown> = event();
+    cyclic.relations = [cyclic];
+    for (const bad of [event({ sourceSequence: 5n }), cyclic]) {
+      expect(await rpcError(() => rpc("app_lc_rpc").trackLifecycle(bad))).toMatch(
+        /^lifecycle rejected \(invalid_event\)/,
+      );
+    }
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("does not echo numeric values in messages", async () => {
+    stub();
+    const message = await rpcError(() =>
+      rpc("app_lc_rpc").trackLifecycle(event({ processVersion: 3.25 })),
+    );
+    expect(message).toMatch(/^lifecycle rejected \(invalid_event\)/);
+    expect(message).not.toContain("3.25");
+  });
+
   it("throws a retryable error while the stream is not bound", async () => {
     expect(await rpcError(() => rpc("app_lc_rpc").trackLifecycle(event()))).toMatch(
       /^lifecycle unavailable/,

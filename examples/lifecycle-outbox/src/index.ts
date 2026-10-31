@@ -27,49 +27,64 @@ type Draft = DistributiveOmit<LifecycleEventInput, "eventId" | "sourceSequence">
 
 const newEventId = () => `evt_${crypto.randomUUID().replaceAll("-", "")}`;
 
-function enqueue(db: D1Database, draft: Draft): D1PreparedStatement {
+/**
+ * Inserts the event only if this request's state change won: the deploy row must now hold
+ * `instance`, the stage instance this request wrote. A concurrent loser enqueues nothing.
+ */
+function enqueue(
+  db: D1Database,
+  deployId: string,
+  instance: string,
+  draft: Draft,
+): D1PreparedStatement {
   const eventId = newEventId();
   return db
-    .prepare("INSERT INTO lifecycle_outbox (event_id, payload) VALUES (?, ?)")
-    .bind(eventId, JSON.stringify({ ...draft, eventId }));
+    .prepare(
+      `INSERT INTO lifecycle_outbox (event_id, payload) SELECT ?, ?
+       WHERE EXISTS (SELECT 1 FROM deploys WHERE id = ? AND stage_instance = ?)`,
+    )
+    .bind(eventId, JSON.stringify({ ...draft, eventId }), deployId, instance);
 }
 
-/** Moves a deploy to `stage`: exits the current stage instance and enters a new one. */
-async function advance(db: D1Database, deployId: string, stage: string): Promise<void> {
+/**
+ * Moves a deploy to `stage`: exits the current stage instance and enters a new one. Returns
+ * false when a concurrent request changed the deploy first (the caller can retry).
+ */
+async function advance(db: D1Database, deployId: string, stage: string): Promise<boolean> {
   const current = await db
     .prepare("SELECT stage, stage_instance FROM deploys WHERE id = ?")
     .bind(deployId)
     .first<{ stage: string; stage_instance: string }>();
   const occurredAt = Date.now();
   const base = { schemaVersion: 1, ...PROCESS, caseId: `deploy:${deployId}`, occurredAt } as const;
-  const instance = `${deployId}:${stage}:${occurredAt}`;
-  const statements: D1PreparedStatement[] = [];
-  if (!current) {
-    statements.push(
-      db
-        .prepare("INSERT INTO deploys (id, stage, stage_instance) VALUES (?, ?, ?)")
-        .bind(deployId, stage, instance),
-      enqueue(db, { ...base, type: "case.created" }),
-    );
-  } else {
-    statements.push(
-      db
-        .prepare("UPDATE deploys SET stage = ?, stage_instance = ? WHERE id = ?")
-        .bind(stage, instance, deployId),
-      enqueue(db, {
-        ...base,
-        type: "stage.exited",
-        stageId: current.stage,
-        stageInstanceId: current.stage_instance,
-      }),
-    );
-  }
-  statements.push(
-    enqueue(db, { ...base, type: "stage.entered", stageId: stage, stageInstanceId: instance }),
-  );
-  if (stage === "done") statements.push(enqueue(db, { ...base, type: "case.completed" }));
+  const instance = `${deployId}:${stage}:${crypto.randomUUID()}`;
+  const write = (draft: Draft) => enqueue(db, deployId, instance, draft);
+  // The state change is conditional on what was read, so concurrent requests cannot both win.
+  const change = current
+    ? db
+        .prepare(
+          "UPDATE deploys SET stage = ?, stage_instance = ? WHERE id = ? AND stage_instance = ?",
+        )
+        .bind(stage, instance, deployId, current.stage_instance)
+    : db
+        .prepare("INSERT OR IGNORE INTO deploys (id, stage, stage_instance) VALUES (?, ?, ?)")
+        .bind(deployId, stage, instance);
+  const statements = [
+    change,
+    current
+      ? write({
+          ...base,
+          type: "stage.exited",
+          stageId: current.stage,
+          stageInstanceId: current.stage_instance,
+        })
+      : write({ ...base, type: "case.created" }),
+    write({ ...base, type: "stage.entered", stageId: stage, stageInstanceId: instance }),
+  ];
+  if (stage === "done") statements.push(write({ ...base, type: "case.completed" }));
   // One D1 batch is one transaction: the state change and its events commit together.
-  await db.batch(statements);
+  const [result] = await db.batch(statements);
+  return (result?.meta.changes ?? 0) > 0;
 }
 
 const toEvent = (row: Pending): unknown => ({
@@ -119,12 +134,17 @@ export async function drain(env: Env): Promise<void> {
 
 export default {
   async fetch(request, env) {
-    const match = new URL(request.url).pathname.match(/^\/deploys\/([\w-]{1,64})\/(\w+)$/);
+    // Deploy ids start alphanumeric, so derived case and stage instance ids stay valid.
+    const match = new URL(request.url).pathname.match(
+      /^\/deploys\/([A-Za-z0-9][\w-]{0,63})\/(\w+)$/,
+    );
     if (request.method !== "POST" || !match?.[1] || !match[2]) {
       return new Response("Not found", { status: 404 });
     }
     if (!STAGES.has(match[2])) return new Response("Unknown stage", { status: 400 });
-    await advance(env.DB, match[1], match[2]);
+    if (!(await advance(env.DB, match[1], match[2]))) {
+      return new Response("Deploy changed concurrently; retry", { status: 409 });
+    }
     return Response.json({ ok: true });
   },
   async scheduled(_controller, env) {

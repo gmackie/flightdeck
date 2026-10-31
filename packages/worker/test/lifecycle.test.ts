@@ -28,6 +28,7 @@ describe("isPermanentLifecycleError", () => {
       "lifecycle unavailable: LIFECYCLE_EVENTS is not bound",
       "lifecycle forbidden: lifecycle.write is not granted",
       "Network connection lost.",
+      "lifecycle rejected (future_occurred_at) at events[0]: occurredAt is ahead of the server clock",
     ]) {
       expect(isPermanentLifecycleError(new Error(message)), message).toBe(false);
     }
