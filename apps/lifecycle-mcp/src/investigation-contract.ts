@@ -1,3 +1,4 @@
+import { LIFECYCLE_READ_KEY } from "@flightdeckhq/schema";
 import { z } from "zod";
 import { ANALYSIS_GOALS } from "./prompts";
 import { AppId, outputs } from "./schemas";
@@ -23,7 +24,7 @@ const cohort = z.strictObject({
 
 export const investigationInput = z.strictObject({
   app_id: AppId,
-  workflow_key: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,63}$/),
+  workflow_key: z.string().regex(LIFECYCLE_READ_KEY),
   goal: z.enum(ANALYSIS_GOALS),
   dependency_scope: z
     .enum(["workflow_only", "child_dependencies"])
@@ -69,6 +70,8 @@ export const sourceSnapshot = z.strictObject({
     .min(1)
     .max(64)
     .regex(/^[a-zA-Z0-9@._/-]+$/),
+  event_time_completeness: z.literal("unknown").optional(),
+  projection: outputs.get_data_freshness.shape.provenance.shape.projection,
   freshness: z.strictObject({
     status: z.enum(["fresh", "stale", "unavailable"]),
     watermark: z.number().finite().int().nonnegative().nullable(),

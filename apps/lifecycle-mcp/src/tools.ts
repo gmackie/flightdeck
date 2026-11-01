@@ -1,3 +1,4 @@
+import { isLifecycleReadKey } from "@flightdeckhq/schema";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import type { z } from "zod";
 import type { Authorizer } from "./authorize";
@@ -60,7 +61,6 @@ type Envelope = Out<"describe_metric">;
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const isoOrNull = (ms: number | null) => (ms === null ? null : iso(ms));
-const WORKFLOW_KEY = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
 
 const SYNTHETIC_CAVEAT =
   "SYNTHETIC DATA: invented fixtures for testing and demos, not real operational data.";
@@ -118,6 +118,9 @@ function provenance(
     synthetic: ctx.source.kind === "synthetic",
     source_version: String(meta.source_version).slice(0, 64),
     ...(meta.projection ? { projection: meta.projection } : {}),
+    ...(ctx.source.kind === "lifecycle-read-api"
+      ? { event_time_completeness: "unknown" as const }
+      : {}),
     as_of: iso(meta.as_of),
     generated_at: iso(now),
     freshness: {
@@ -136,10 +139,16 @@ function interpretation(
   caveats: readonly string[],
 ): Envelope["interpretation"] {
   const synthetic = ctx.source.kind === "synthetic" && kind !== "reference";
+  const completeness =
+    ctx.source.kind === "lifecycle-read-api" && kind !== "reference"
+      ? [
+          "Event-time completeness is unknown. A fresh status means only a recent projection; producer delivery and event coverage are unverified.",
+        ]
+      : [];
   return {
     kind,
     causal: false,
-    caveats: synthetic ? [SYNTHETIC_CAVEAT, ...caveats] : [...caveats],
+    caveats: synthetic ? [SYNTHETIC_CAVEAT, ...caveats] : [...completeness, ...caveats],
   };
 }
 
@@ -233,7 +242,7 @@ const handlers: { [K in ToolName]: Handler<K> } = {
     );
     const definitions = res.data.items
       .slice(0, limit)
-      .filter((def) => WORKFLOW_KEY.test(def.workflow_key))
+      .filter((def) => isLifecycleReadKey(def.workflow_key))
       .map(projectDefinition)
       .map((def) => ({
         ...def,
@@ -576,7 +585,7 @@ const handlers: { [K in ToolName]: Handler<K> } = {
         watermark: isoOrNull(res.data.watermark),
         lag_ms: res.data.lag_ms,
         workflows: res.data.workflows
-          .filter((w) => WORKFLOW_KEY.test(w.workflow_key))
+          .filter((w) => isLifecycleReadKey(w.workflow_key))
           .slice(0, LIMITS.maxPageSize)
           .map((w) => ({
             workflow_key: w.workflow_key,
@@ -658,9 +667,11 @@ export async function formatToolResult(
     const failure =
       error instanceof ToolError
         ? error
-        : error instanceof BoundsError
-          ? new ToolError("invalid_argument", error.message)
-          : new ToolError("internal", "Internal error");
+        : error instanceof SourceUnavailableError
+          ? new ToolError("source_unavailable", "The lifecycle read source is unavailable")
+          : error instanceof BoundsError
+            ? new ToolError("invalid_argument", error.message)
+            : new ToolError("internal", "Internal error");
     return {
       isError: true,
       content: [

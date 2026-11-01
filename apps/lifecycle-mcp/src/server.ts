@@ -1,3 +1,4 @@
+import { isLifecycleReadKey } from "@flightdeckhq/schema";
 import {
   McpServer,
   ProtocolError,
@@ -200,7 +201,12 @@ export function createLifecycleServer(ctx: ToolContext): McpServer {
       if (!res.data || res.data.workflow_key !== workflowKey) {
         throw new ResourceNotFoundError(uri.href, "Resource not found");
       }
-      const def = projectDefinition(res.data);
+      let def: ReturnType<typeof projectDefinition>;
+      try {
+        def = projectDefinition(res.data);
+      } catch {
+        throw unavailable();
+      }
       const body = {
         app_id: appId,
         definition: { ...def, published_at: new Date(def.published_at).toISOString() },
@@ -234,7 +240,7 @@ async function listDefinitions(ctx: ToolContext) {
       .catch(() => null);
     const seen = new Set<string>();
     for (const def of res?.data.items ?? []) {
-      if (seen.has(def.workflow_key) || !/^[a-z0-9][a-z0-9_.-]{0,63}$/.test(def.workflow_key)) {
+      if (seen.has(def.workflow_key) || !isLifecycleReadKey(def.workflow_key)) {
         continue;
       }
       seen.add(def.workflow_key);

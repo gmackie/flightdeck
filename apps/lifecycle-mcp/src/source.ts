@@ -48,6 +48,8 @@ export type SourceMeta = {
   freshness: Freshness;
   /** The source's contract or projection version, e.g. `synthetic-fixtures@1`. */
   source_version: string;
+  /** Required by the live D1 contract; recent projection does not prove event coverage. */
+  event_time_completeness?: "unknown";
   /** Ingestion sequence, NOT an event-time completeness watermark. */
   projection?: {
     source_watermark: number;

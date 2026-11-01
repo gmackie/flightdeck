@@ -1,8 +1,12 @@
 import * as v from "valibot";
 
 /** Private, read-only RPC contract. Identity is ONLY the signed assertion, never caller claims. */
-export const WORKFLOW_KEY = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
-const key = v.pipe(v.string(), v.regex(WORKFLOW_KEY));
+/** Safe registered categorical names, never app ids, opaque ids, paths, URLs or expressions. */
+export const LIFECYCLE_READ_KEY = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
+export const WORKFLOW_KEY = LIFECYCLE_READ_KEY;
+export const isLifecycleReadKey = (value: unknown): value is string =>
+  typeof value === "string" && LIFECYCLE_READ_KEY.test(value);
+const key = v.pipe(v.string(), v.regex(LIFECYCLE_READ_KEY));
 const id = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{1,64}$/));
 const ms = v.pipe(v.number(), v.safeInteger(), v.minValue(0));
 const version = v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(1_000_000));
@@ -73,6 +77,7 @@ export const ReadMeta = v.strictObject({
   as_of: ms,
   freshness: v.strictObject(fresh),
   source_version: v.pipe(v.string(), v.maxLength(64)),
+  event_time_completeness: v.literal("unknown"),
   projection: v.strictObject({
     source_watermark: ms,
     generation: ms,

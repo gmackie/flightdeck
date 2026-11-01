@@ -1,3 +1,4 @@
+import { isLifecycleReadKey } from "@flightdeckhq/schema";
 import type {
   CaseSummary,
   DwellGroup,
@@ -6,13 +7,15 @@ import type {
   VariantStats,
   WorkflowDefinition,
 } from "./source";
+import { SourceUnavailableError } from "./source";
 
 /**
  * Privacy rules applied to every answer, whatever the source already did:
  *
  * - Only fields this module copies reach a tool result, so free text (notes, comments, names,
  *   emails) a source might return is dropped, never redacted in place.
- * - Categorical values must be declared in the workflow definition; anything else is dropped.
+ * - Categorical values must be declared. Invalid definitions or unregistered stage evidence
+ *   fail closed, so a malformed source cannot silently lose stages from the result.
  * - Aggregate groups with fewer than `k` distinct cases are withheld, with no count, and when
  *   exactly one group of a breakdown is withheld the next smallest is withheld too, so it cannot
  *   be recovered by subtracting the others from a total.
@@ -36,8 +39,6 @@ function label(value: unknown): string {
     : "";
 }
 
-const isSlug = (value: unknown): value is string =>
-  typeof value === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(value);
 const isTime = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 const count = (value: unknown): number =>
@@ -48,36 +49,54 @@ const duration = (value: unknown): number | null =>
 export type PublicDefinition = WorkflowDefinition;
 
 export function projectDefinition(def: WorkflowDefinition): PublicDefinition {
+  const validKeys = (keys: string[], max: number) =>
+    keys.length <= max && keys.every(isLifecycleReadKey) && new Set(keys).size === keys.length;
+  if (
+    !isLifecycleReadKey(def.workflow_key) ||
+    !validKeys(
+      def.stages.map((s) => s.key),
+      MAX_STAGES,
+    ) ||
+    !validKeys(def.outcomes, MAX_VALUES) ||
+    !validKeys(
+      def.dimensions.map((d) => d.key),
+      MAX_DIMENSIONS,
+    ) ||
+    def.dimensions.some((d) => !validKeys(d.values, MAX_VALUES))
+  )
+    throw new SourceUnavailableError();
   return {
     workflow_key: def.workflow_key,
     version: def.version,
     label: label(def.label),
     description: label(def.description),
-    stages: def.stages
-      .filter((stage) => isSlug(stage.key))
-      .slice(0, MAX_STAGES)
-      .map((stage) => ({
-        key: stage.key,
-        label: label(stage.label),
-        order: stage.order,
-        terminal: stage.terminal === true,
-      })),
-    outcomes: def.outcomes.filter(isSlug).slice(0, MAX_VALUES),
-    dimensions: def.dimensions
-      .filter((dim) => isSlug(dim.key))
-      .slice(0, MAX_DIMENSIONS)
-      .map((dim) => ({
-        key: dim.key,
-        label: label(dim.label),
-        values: dim.values.filter(isSlug).slice(0, MAX_VALUES),
-      })),
+    stages: def.stages.map((stage) => ({
+      key: stage.key,
+      label: label(stage.label),
+      order: stage.order,
+      terminal: stage.terminal === true,
+    })),
+    outcomes: [...def.outcomes],
+    dimensions: def.dimensions.map((dim) => ({
+      key: dim.key,
+      label: label(dim.label),
+      values: [...dim.values],
+    })),
     published_at: def.published_at,
   };
 }
 
 const stageKeys = (def: PublicDefinition) => new Set(def.stages.map((stage) => stage.key));
 
+function requireStages(keys: string[], def: PublicDefinition): void {
+  const declared = stageKeys(def);
+  if (keys.some((key) => !isLifecycleReadKey(key) || !declared.has(key))) {
+    throw new SourceUnavailableError();
+  }
+}
+
 export function projectCase(c: CaseSummary, def: PublicDefinition): CaseSummary {
+  if (c.current_stage !== null) requireStages([c.current_stage], def);
   const stages = stageKeys(def);
   const dimensions: Record<string, string> = {};
   for (const dim of def.dimensions) {
@@ -100,18 +119,20 @@ export function projectCase(c: CaseSummary, def: PublicDefinition): CaseSummary 
 
 const STATES = new Set(["active", "completed", "skipped", "interrupted"]);
 
-/** Entries for stages the definition does not declare are dropped. */
+/** Never silently omit an unregistered stage or an unsupported interval state. */
 export function projectTimeline(entries: TimelineEntry[], def: PublicDefinition): TimelineEntry[] {
-  const stages = stageKeys(def);
-  return entries
-    .filter((entry) => stages.has(entry.stage_key) && STATES.has(entry.state))
-    .map((entry) => ({
-      stage_key: entry.stage_key,
-      attempt: count(entry.attempt) || 1,
-      state: entry.state,
-      entered_at: entry.entered_at,
-      exited_at: isTime(entry.exited_at) ? entry.exited_at : null,
-    }));
+  requireStages(
+    entries.map((entry) => entry.stage_key),
+    def,
+  );
+  if (entries.some((entry) => !STATES.has(entry.state))) throw new SourceUnavailableError();
+  return entries.map((entry) => ({
+    stage_key: entry.stage_key,
+    attempt: count(entry.attempt) || 1,
+    state: entry.state,
+    entered_at: entry.entered_at,
+    exited_at: isTime(entry.exited_at) ? entry.exited_at : null,
+  }));
 }
 
 /** A breakdown cell that is either released with its values or withheld without any. */
@@ -152,6 +173,10 @@ export function suppressDwell(
   groupBy: string | null,
   k: number,
 ): ReleasedDwell[] {
+  requireStages(
+    groups.map((group) => group.stage_key),
+    def,
+  );
   const allowedGroups = groupBy
     ? new Set(def.dimensions.find((dim) => dim.key === groupBy)?.values ?? [])
     : null;

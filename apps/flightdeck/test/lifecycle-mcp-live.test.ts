@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import type { LifecycleEventInput } from "@flightdeckhq/schema";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -8,6 +9,7 @@ import { Authorizer } from "../../lifecycle-mcp/src/authorize";
 import type { AppScope, Principal } from "../../lifecycle-mcp/src/source";
 import { ReadApiLifecycleSource } from "../../lifecycle-mcp/src/sources/read-api";
 import { handleRequest } from "../../lifecycle-mcp/src/worker";
+import { processRegistration } from "../src/ingest/lifecycle-http";
 import { privateLifecycleRead } from "../src/lifecycle-mcp/entrypoint";
 import { LifecycleSnapshotRepository } from "../src/lifecycle-serving/repository";
 import { adaptFixtures } from "./support/fixture-adapter";
@@ -295,6 +297,10 @@ describe("private named entrypoint -> verified MCP assertion -> migrated D1 -> M
         lag_ms: null,
       });
       expect(res.data.data.watermark).toBeNull();
+      expect(res.data.provenance.event_time_completeness).toBe("unknown");
+      expect(res.data.interpretation.caveats).toContain(
+        "Event-time completeness is unknown. A fresh status means only a recent projection; producer delivery and event coverage are unverified.",
+      );
     } finally {
       await client.close();
     }
@@ -451,6 +457,15 @@ describe("private named entrypoint -> verified MCP assertion -> migrated D1 -> M
     await grant("live-analyst", "analyst", appId);
     await expect(source.getFreshness(scope(appId))).rejects.toThrow();
     await expect(new ReadApiLifecycleSource(undefined).getFreshness(scope())).rejects.toThrow();
+    const repo = new LifecycleSnapshotRepository(env.DB);
+    const generation = await repo.beginRebuild(appId);
+    await repo.commitRebuild(appId, {
+      generation,
+      source_watermark: 0,
+      as_of: Date.now(),
+      reducer_version: "lifecycle@1",
+    });
+    expect((await source.getFreshness(scope(appId))).data.status).toBe("fresh");
     await env.DB.prepare(
       "INSERT INTO lifecycle_projection_queue (app_id, case_id, enqueued_seq, next_attempt_at) VALUES (?, 'pending', 1, 0)",
     )
@@ -461,6 +476,165 @@ describe("private named entrypoint -> verified MCP assertion -> migrated D1 -> M
       expect((await call(client, "get_data_freshness", { app_id: appId })).error.code).toBe(
         "source_unavailable",
       );
+    } finally {
+      await client.close();
+    }
+  });
+  it("preserves build, qa.review and done through HTTP ingest, D1 and full MCP outputs", async () => {
+    const appId = "app_mcp_dotted_stages";
+    const key = await producerApp(appId);
+    await grant("live-analyst", "analyst", appId);
+    const definition = {
+      schemaVersion: 1,
+      processId: "delivery.deploy",
+      version: 1,
+      name: "Delivery",
+      caseType: "deploy",
+      stages: ["build", "qa.review", "done"].map((stageId) => ({
+        stageId,
+        name: stageId,
+        terminal: stageId === "done",
+      })),
+    };
+    const register = (body: unknown) =>
+      processRegistration(
+        new Request("https://flightdeck.test/v1/lifecycle/processes", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        env,
+      );
+    expect((await register(definition)).status).toBe(201);
+    for (const stageId of [
+      "../qa",
+      "qa/review",
+      "qa%2ereview",
+      "qa?notes=secret",
+      "qa@example.test",
+    ]) {
+      expect(
+        (
+          await register({
+            ...definition,
+            processId: "bad-stage",
+            stages: [{ stageId, name: "Bad" }],
+          })
+        ).status,
+      ).toBe(400);
+    }
+    const t0 = Date.parse("2026-03-10T00:00:00Z");
+    const events: LifecycleEventInput[] = [];
+    for (let n = 0; n < 9; n++) {
+      const base = {
+        schemaVersion: 1 as const,
+        processId: definition.processId,
+        processVersion: 1,
+        caseId: `dotted-case-${n}`,
+      };
+      events.push({
+        ...base,
+        sourceSequence: events.length + 1,
+        eventId: `dotted_${n}_created`,
+        type: "case.created",
+        occurredAt: t0,
+      });
+      for (const [stageId, entered, exited] of [
+        ["build", 0, 1000],
+        ["qa.review", 1000, 4000],
+        ["done", 4000, 5000],
+      ] as const) {
+        const stageInstanceId = `${n}-${stageId}`;
+        events.push({
+          ...base,
+          sourceSequence: events.length + 1,
+          eventId: `dotted_${n}_${entered}_enter`,
+          type: "stage.entered",
+          stageId,
+          stageInstanceId,
+          occurredAt: t0 + entered,
+        });
+        events.push({
+          ...base,
+          sourceSequence: events.length + 1,
+          eventId: `dotted_${n}_${entered}_exit`,
+          type: "stage.exited",
+          stageId,
+          stageInstanceId,
+          occurredAt: t0 + exited,
+        });
+      }
+      events.push({
+        ...base,
+        sourceSequence: events.length + 1,
+        eventId: `dotted_${n}_complete`,
+        type: "case.completed",
+        occurredAt: t0 + 5000,
+      });
+    }
+    await deliver(key, events);
+    await project(appId);
+    const client = await connect();
+    try {
+      const args = {
+        app_id: appId,
+        workflow_key: definition.processId,
+        version: 1,
+        from: "2026-03-10",
+        to: "2026-03-11",
+      };
+      const defs = await call(client, "list_workflow_definitions", {
+        app_id: appId,
+        workflow_key: definition.processId,
+      });
+      expect(defs.error).toBeNull();
+      expect(defs.data.data.definitions[0].stages.map((s: Json) => s.key)).toEqual([
+        "build",
+        "qa.review",
+        "done",
+      ]);
+      const result = await call(client, "get_stage_dwell", args);
+      expect(result.error).toBeNull();
+      expect(result.data.data.stages).toHaveLength(3);
+      expect(result.data.provenance.event_time_completeness).toBe("unknown");
+      expect(result.data.provenance.freshness).toEqual({
+        status: "fresh",
+        watermark: null,
+        lag_ms: null,
+      });
+      expect(result.data.interpretation.caveats).toContain(
+        "Event-time completeness is unknown. A fresh status means only a recent projection; producer delivery and event coverage are unverified.",
+      );
+      expect(result.data.data.stages.find((s: Json) => s.stage_key === "qa.review")).toMatchObject({
+        n: 9,
+        open_n: 0,
+        p50_ms: 3000,
+        p90_ms: 3000,
+        mean_ms: 3000,
+        suppressed: false,
+      });
+      const timeline = await call(client, "get_case_timeline", {
+        app_id: appId,
+        case_id: "dotted-case-0",
+      });
+      expect(timeline.error).toBeNull();
+      expect(timeline.data.data.entries.map((e: Json) => e.stage_key)).toEqual([
+        "build",
+        "qa.review",
+        "done",
+      ]);
+      expect(timeline.data.data.entries[1].dwell_ms).toBe(3000);
+      // Valid-looking but unregistered stage evidence must fail, never silently disappear.
+      await env.DB.prepare(
+        "UPDATE lifecycle_stage_intervals SET stage_key = 'qa.unregistered' WHERE app_id = ? AND stage_key = 'qa.review'",
+      )
+        .bind(appId)
+        .run();
+      expect(
+        (await call(client, "get_case_timeline", { app_id: appId, case_id: "dotted-case-0" })).error
+          .code,
+      ).toBe("source_unavailable");
+      expect((await call(client, "get_stage_dwell", args)).error.code).toBe("source_unavailable");
     } finally {
       await client.close();
     }

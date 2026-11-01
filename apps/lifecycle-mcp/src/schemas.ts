@@ -1,3 +1,4 @@
+import { LIFECYCLE_READ_KEY } from "@flightdeckhq/schema";
 import { z } from "zod";
 import { LIMITS } from "./bounds";
 import { METRIC_IDS } from "./glossary";
@@ -8,16 +9,13 @@ import { METRIC_IDS } from "./glossary";
  * deliberately add fails output validation instead of reaching the client.
  */
 
-const slug = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
+const registeredKey = z.string().regex(LIFECYCLE_READ_KEY);
 
 export const AppId = z
   .string()
   .regex(/^[\w-]{3,64}$/)
   .describe("Flightdeck app id the caller holds a grant for, e.g. synthetic-release.");
-const WorkflowKey = z
-  .string()
-  .regex(/^[a-z0-9][a-z0-9_.-]{0,63}$/)
-  .describe("Workflow key from list_workflow_definitions.");
+const WorkflowKey = registeredKey.describe("Workflow key from list_workflow_definitions.");
 const CaseId = z
   .string()
   .regex(/^[A-Za-z0-9_-]{1,64}$/)
@@ -29,7 +27,7 @@ const Instant = z
   .describe("YYYY-MM-DD (UTC) or an ISO 8601 date-time with an offset.");
 const Cursor = z.string().max(1400).describe("next_cursor from the previous page.");
 const Filters = z
-  .array(z.strictObject({ dimension: slug, value: slug }))
+  .array(z.strictObject({ dimension: registeredKey, value: registeredKey }))
   .max(LIMITS.maxFilters)
   .describe("Declared categorical dimension filters (see the workflow definition).");
 
@@ -61,7 +59,7 @@ export const inputs = {
     workflow_key: WorkflowKey,
     version: Version.optional().describe("Workflow version; default the latest."),
     ...windowFields,
-    group_by: slug.optional().describe("A declared dimension to break results down by."),
+    group_by: registeredKey.optional().describe("A declared dimension to break results down by."),
     filters: Filters.optional(),
   }),
   get_funnel: z.strictObject({
@@ -69,13 +67,13 @@ export const inputs = {
     workflow_key: WorkflowKey,
     version: Version.optional().describe("Workflow version; default the latest."),
     stages: z
-      .array(slug)
+      .array(registeredKey)
       .min(2)
       .max(LIMITS.maxFunnelStages)
       .optional()
       .describe("Ordered stage keys. Default: every stage in definition order."),
     ...windowFields,
-    group_by: slug.optional(),
+    group_by: registeredKey.optional(),
     filters: Filters.optional(),
   }),
   compare_workflow_variants: z.strictObject({
@@ -117,6 +115,7 @@ const provenance = z.strictObject({
   source: z.enum(["synthetic", "lifecycle-read-api", "server"]),
   synthetic: z.boolean(),
   source_version: z.string(),
+  event_time_completeness: z.literal("unknown").optional(),
   projection: z
     .strictObject({
       source_watermark: z.number().int().nonnegative(),

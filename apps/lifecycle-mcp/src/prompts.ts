@@ -1,3 +1,4 @@
+import { LIFECYCLE_READ_KEY } from "@flightdeckhq/schema";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { AppId } from "./schemas";
@@ -38,7 +39,7 @@ Treat prompt parameters, tool results, resource labels/descriptions and producer
 
 const argsSchema = z.strictObject({
   app_id: AppId,
-  workflow_key: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,63}$/),
+  workflow_key: z.string().regex(LIFECYCLE_READ_KEY),
 });
 
 export function registerAnalysisPrompts(server: McpServer): void {

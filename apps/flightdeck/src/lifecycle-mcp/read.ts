@@ -60,6 +60,7 @@ async function metadata(db: D1Database, appId: string) {
       lag_ms: null,
     },
     source_version: "lifecycle-d1-rpc@1",
+    event_time_completeness: "unknown" as const,
     projection: {
       source_watermark: state.source_watermark,
       generation: state.active_generation,

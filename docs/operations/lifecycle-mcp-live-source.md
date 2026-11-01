@@ -212,3 +212,62 @@ authorization server/client registration, PKCE, consent, scopes, audience/resour
 tokens, revocation and subject-to-app-grant mapping, with backend validation. This
 implementation supports verified Access assertions only. It does **not** implement or
 claim OAuth, user delegation, token exchange, or permission inheritance from an agent.
+
+## Independent review fixes and remaining release blockers
+
+The PR #49 review confirmed a correctness defect: the privacy projection accepted
+namespaced workflow names but silently omitted registered dotted stage names such as
+`qa.review`. The shared `LIFECYCLE_READ_KEY` validator now covers registered workflow,
+stage, outcome and dimension names/codes throughout MCP inputs and privacy projection.
+App ids and opaque case ids retain their original validators. Syntax alone never grants
+access or registers a category: grouping/filter values and funnel stages must still be
+present in the authorized definition. Malformed definitions and unregistered timeline/
+dwell stage evidence now return `source_unavailable` instead of a partial successful
+result. The regression sends nine cases with `build`, `qa.review`, `done` through HTTP
+ingest, projection, the named binding and MCP, and checks all three stages plus the
+nine-case `qa.review` count and its independent 3,000 ms duration. Suspicious path,
+query, encoded and email-like keys remain rejected.
+
+All live MCP data envelopes now include
+`provenance.event_time_completeness: "unknown"` and an interpretation warning.
+The legacy freshness status remains for compatibility: **`fresh` describes recent
+projection only**, not producer health, arrival coverage, bounded lateness or event-time
+completeness. `watermark` and event-time `lag_ms` remain null; the log sequence stays
+numeric in `projection.source_watermark`. Consumers must retain the warning and
+unknown completeness flag when presenting or reasoning from the evidence.
+
+The following P2 issues remain explicit release gates, including before real HR data
+is used in any environment:
+
+- **Cross-query disclosure:** arbitrary millisecond cohort windows permit differencing.
+  Two overlapping answers with at least k=5 cases can still isolate one added case from
+  the change in `n` and `n * mean_ms` (within mean rounding precision). Small-group and
+  complementary suppression within one answer do not prevent this. Existing row,
+  window and response bounds are not a cross-query privacy budget. Approved coarse
+  UTC day/week cohort policy, query budgeting/auditing and resistance to repeated or
+  overlapping queries must be designed and independently verified before release.
+  Coarse windows alone also do not prove protection against sparse bucket differences.
+  This change does not enforce such a policy and does not claim real HR disclosure safety.
+- **Pending projection availability:** one queued case still makes all app reads fail
+  closed. H incrementally overwrites case rows before advancing the app watermark, so
+  serving an allegedly committed stale snapshot needs proven snapshot isolation or a
+  versioned snapshot design. Returning those rows as an old committed view would be
+  misleading. A ready-state-plus-pending-row regression locks down the current refusal.
+- **Grant expansion availability:** more than 256 expanded grants still makes discovery
+  unavailable for that principal. No truncated list or blanket authorization is returned.
+  A future bounded per-app capability lookup or paginated authenticated discovery needs
+  independent review. Backend D1 grant enforcement must remain on every data request.
+- **Environment isolation:** `LIFECYCLE_MCP_ENVIRONMENT=staging` is a label, not an
+  account/data-isolation control. If an operator binds a staging-labelled MCP Worker to
+  an opted-in production backend with an accepted AUD, it can read that backend under
+  its D1 grants. Default-off flags and the production-label refusal are not protection
+  against that configuration error. Use distinct staging/prod Worker service names,
+  D1 databases and Access applications/AUDs; bind each backend to the intended
+  environment's MCP AUD; restrict binding/configuration changes; keep the production
+  backend read flag off. Verify the real account's binding inventory, Access policy and
+  environment-to-AUD/data mapping before any release. These account-level controls
+  have not been provisioned or verified by this change.
+
+Funnel/path variants, general state-segment-to-attempt reconstruction, privacy/retention
+and Basin erasure gates, OAuth delegation and production account/deployment evidence
+remain outside this fix. No merge or deployment is authorized or performed.
