@@ -1,6 +1,7 @@
 import { ulid } from "ulid";
 import {
   CaseSnapshotInput,
+  OPAQUE_ID,
   ProcessDefinitionInput,
   Provenance,
   parseInput,
@@ -10,7 +11,7 @@ import {
 
 /**
  * Writes and maintains the derived lifecycle read model (migration 0020). Its only intended
- * caller is a projector that replays lifecycle evidence; none is connected yet.
+ * caller is the projector that replays lifecycle evidence (src/lifecycle-projection).
  *
  * Generations: `beginRebuild` issues generation N+1 and the projector writes every snapshot with
  * it; `commitRebuild` makes it the active generation and soft-deletes rows from older
@@ -20,6 +21,12 @@ import {
  * Idempotence: a write lands only when it is not older than the stored row, ordered by
  * (generation, source_watermark). Replaying the same snapshot rewrites identical values; an older
  * one is reported as `stale` and changes nothing.
+ *
+ * Deletion (migration 0031): `tombstoneCase` erases a case's rows and records a tombstone, even
+ * for a case never projected. Every later write for it is refused as `tombstoned`, whatever its
+ * generation or watermark, until `restoreCase` is approved by an injected authorizer; after that
+ * only snapshots strictly newer than the deletion watermark land. Tombstones survive rebuilds,
+ * `purgeDeleted` and `dropApp`.
  */
 
 export type ProjectionStatus = "empty" | "ready" | "rebuilding" | "failed";
@@ -40,7 +47,18 @@ export type ProjectionState = {
   updated_at: number;
 };
 
-export type WriteResult = "written" | "stale";
+export type WriteResult = "written" | "stale" | "tombstoned";
+
+/**
+ * Approves restoring one deleted case. There is no default: callers must inject a checker (e.g.
+ * an owner/admin grant from the RBAC module). Throwing or returning false refuses the restore.
+ */
+export type RestoreAuthorizer = (check: {
+  appId: string;
+  caseId: string;
+  reason: string;
+  approvalRef: string;
+}) => Promise<boolean>;
 
 export type ReplayRequest = {
   app_id: string;
@@ -67,6 +85,7 @@ const INTERVALS = "lifecycle_stage_intervals";
 const EDGES = "lifecycle_case_edges";
 const STATE = "lifecycle_projection_state";
 const REPLAYS = "lifecycle_replay_requests";
+const TOMBSTONES = "lifecycle_snapshot_tombstones";
 
 /** The write is for a generation the projection accepts: the active or the building one. */
 const ACCEPTS_GENERATION = `EXISTS (SELECT 1 FROM ${STATE} s WHERE s.app_id = ?
@@ -75,6 +94,12 @@ const ACCEPTS_GENERATION = `EXISTS (SELECT 1 FROM ${STATE} s WHERE s.app_id = ?
 const NOT_OLDER = (table: string) =>
   `excluded.generation > ${table}.generation OR (excluded.generation = ${table}.generation
    AND excluded.source_watermark >= ${table}.source_watermark)`;
+/**
+ * No tombstone blocks the write: none exists, or it was restored and the write is strictly newer
+ * than the deletion. Binds (app_id, case_id, source_watermark).
+ */
+const NOT_TOMBSTONED = `NOT EXISTS (SELECT 1 FROM ${TOMBSTONES} t WHERE t.app_id = ?
+  AND t.case_id = ? AND (t.restored_at IS NULL OR ? <= t.source_watermark))`;
 /** Children are rewritten only when the case row now holds exactly this write. */
 const CASE_HOLDS_WRITE = `EXISTS (SELECT 1 FROM ${CASES} c WHERE c.app_id = ? AND c.case_id = ?
   AND c.generation = ? AND c.source_watermark = ? AND c.deleted_at IS NULL)`;
@@ -258,7 +283,8 @@ export class LifecycleSnapshotRepository {
           `INSERT INTO ${CASES} (app_id, case_id, process_key, process_version, status, outcome,
              current_stage, parent_case_id, started_at, ended_at, last_event_at, generation,
              source_watermark, reducer_version, as_of, updated_at)
-           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${ACCEPTS_GENERATION}
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+           WHERE ${ACCEPTS_GENERATION} AND ${NOT_TOMBSTONED}
            ON CONFLICT (app_id, case_id) DO UPDATE SET
              process_key = excluded.process_key, process_version = excluded.process_version,
              status = excluded.status, outcome = excluded.outcome,
@@ -290,6 +316,9 @@ export class LifecycleSnapshotRepository {
           appId,
           p.generation,
           p.generation,
+          appId,
+          c.case_id,
+          p.source_watermark,
         ),
       this.db
         .prepare(
@@ -348,19 +377,64 @@ export class LifecycleSnapshotRepository {
       );
     }
     const [upsert] = await this.db.batch(statements);
-    return this.outcome(appId, p.generation, upsert?.meta.changes ?? 0);
+    return this.outcome(appId, p.generation, upsert?.meta.changes ?? 0, {
+      caseId: c.case_id,
+      sourceWatermark: p.source_watermark,
+    });
   }
 
   /**
-   * Soft-deletes a case the source no longer has (or has erased), at a watermark, so an older
-   * snapshot replayed later cannot resurrect it. Unknown cases are a no-op.
+   * Deletes a case for good: removes its row, intervals and outgoing relations, and records a
+   * tombstone so no later or replayed snapshot can recreate it. Works for cases never projected
+   * (out-of-order deletion) and regardless of generation state, so erasure cannot be refused.
+   * Re-deleting keeps the highest watermark and re-arms a restored tombstone.
    */
-  async tombstoneCase(appId: string, caseId: string, provenance: Provenance): Promise<WriteResult> {
+  async tombstoneCase(
+    appId: string,
+    caseId: string,
+    provenance: Provenance,
+    reason = "source_deleted",
+  ): Promise<WriteResult> {
     const p = parseInput(Provenance, provenance);
+    if (!OPAQUE_ID.test(caseId)) throw new SnapshotRejected("invalid", "case_id: opaque id");
+    if (!SLUG.test(reason)) throw new SnapshotRejected("invalid", "reason: slug");
+    const now = this.now();
+    await this.db.batch([
+      this.db
+        .prepare(`DELETE FROM ${INTERVALS} WHERE app_id = ? AND case_id = ?`)
+        .bind(appId, caseId),
+      this.db
+        .prepare(`DELETE FROM ${EDGES} WHERE app_id = ? AND from_case_id = ?`)
+        .bind(appId, caseId),
+      this.db.prepare(`DELETE FROM ${CASES} WHERE app_id = ? AND case_id = ?`).bind(appId, caseId),
+      this.db
+        .prepare(
+          `INSERT INTO ${TOMBSTONES} (app_id, case_id, reason, source_watermark, as_of, deleted_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (app_id, case_id) DO UPDATE SET
+             reason = excluded.reason,
+             source_watermark = max(source_watermark, excluded.source_watermark),
+             as_of = max(as_of, excluded.as_of), deleted_at = excluded.deleted_at,
+             restored_at = NULL, restore_reason = NULL, restore_ref = NULL`,
+        )
+        .bind(appId, caseId, reason, p.source_watermark, p.as_of, now),
+    ]);
+    return "written";
+  }
+
+  /**
+   * Hides a case whose evidence no longer yields a servable snapshot (e.g. its start was
+   * retracted). Unlike `tombstoneCase` this is a reversible soft delete: it obeys the same
+   * (generation, source_watermark) ordering as `upsertCase`, and a later, not-older snapshot
+   * brings the case back.
+   */
+  async hideCase(appId: string, caseId: string, provenance: Provenance): Promise<WriteResult> {
+    const p = parseInput(Provenance, provenance);
+    if (!OPAQUE_ID.test(caseId)) throw new SnapshotRejected("invalid", "case_id: opaque id");
     const now = this.now();
     const result = await this.db
       .prepare(
-        `UPDATE ${CASES} SET deleted_at = ?, deleted_reason = 'source_deleted', generation = ?,
+        `UPDATE ${CASES} SET deleted_at = ?, deleted_reason = 'not_servable', generation = ?,
            source_watermark = ?, as_of = ?, updated_at = ?
          WHERE app_id = ? AND case_id = ? AND ${ACCEPTS_GENERATION}
            AND (? > generation OR (? = generation AND ? >= source_watermark))`,
@@ -382,6 +456,45 @@ export class LifecycleSnapshotRepository {
       )
       .run();
     return this.outcome(appId, p.generation, result.meta.changes);
+  }
+
+  /**
+   * Lifts a tombstone after the injected authorizer approves. Only snapshots strictly newer than
+   * the deletion watermark are admitted afterwards; the restore itself writes no case data.
+   * Returns false when the case has no active tombstone.
+   */
+  async restoreCase(
+    appId: string,
+    caseId: string,
+    approval: { reason: string; approval_ref: string },
+    authorize: RestoreAuthorizer,
+  ): Promise<boolean> {
+    if (!OPAQUE_ID.test(caseId)) throw new SnapshotRejected("invalid", "case_id: opaque id");
+    if (!SLUG.test(approval.reason)) throw new SnapshotRejected("invalid", "reason: slug");
+    if (!OPAQUE_ID.test(approval.approval_ref)) {
+      throw new SnapshotRejected("invalid", "approval_ref: opaque id");
+    }
+    let allowed = false;
+    try {
+      allowed =
+        (await authorize({
+          appId,
+          caseId,
+          reason: approval.reason,
+          approvalRef: approval.approval_ref,
+        })) === true;
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) throw new SnapshotRejected("unauthorized", "restore was not approved");
+    const result = await this.db
+      .prepare(
+        `UPDATE ${TOMBSTONES} SET restored_at = ?, restore_reason = ?, restore_ref = ?
+         WHERE app_id = ? AND case_id = ? AND restored_at IS NULL`,
+      )
+      .bind(this.now(), approval.reason, approval.approval_ref, appId, caseId)
+      .run();
+    return result.meta.changes > 0;
   }
 
   /** Retention: soft-deletes closed cases that ended before the cutoff. Open cases are kept. */
@@ -421,7 +534,10 @@ export class LifecycleSnapshotRepository {
     return { cases: cases?.meta.changes ?? 0 };
   }
 
-  /** Forgets everything derived for an app (not its replay history), ahead of a clean rebuild. */
+  /**
+   * Forgets everything derived for an app ahead of a clean rebuild. Keeps tombstones (so the
+   * rebuild cannot resurrect deleted cases) and replay history.
+   */
   async dropApp(appId: string): Promise<void> {
     await this.db.batch(
       [INTERVALS, EDGES, CASES, DEFINITIONS, STATE].map((table) =>
@@ -483,9 +599,12 @@ export class LifecycleSnapshotRepository {
       .run();
   }
 
-  /** Operator view of one app's projection: state, live/deleted row counts and the queue. */
+  /**
+   * Operator view of one app's projection: state, row counts and the queue. Counts and codes
+   * only: no case ids, approval references or snapshot content.
+   */
   async diagnostics(appId: string) {
-    const [state, rows, replays] = await Promise.all([
+    const [state, rows, tombstones, replays] = await Promise.all([
       this.state(appId),
       this.db
         .prepare(
@@ -496,6 +615,14 @@ export class LifecycleSnapshotRepository {
         .bind(appId)
         .first<{ live: number; deleted: number }>(),
       this.db
+        .prepare(
+          `SELECT count(*) FILTER (WHERE restored_at IS NULL) AS active,
+             count(*) FILTER (WHERE restored_at IS NOT NULL) AS restored
+           FROM ${TOMBSTONES} WHERE app_id = ?`,
+        )
+        .bind(appId)
+        .first<{ active: number; restored: number }>(),
+      this.db
         .prepare(`SELECT status, count(*) AS n FROM ${REPLAYS} WHERE app_id = ? GROUP BY status`)
         .bind(appId)
         .all<{ status: string; n: number }>(),
@@ -503,6 +630,7 @@ export class LifecycleSnapshotRepository {
     return {
       state,
       cases: { live: rows?.live ?? 0, deleted: rows?.deleted ?? 0 },
+      tombstones: { active: tombstones?.active ?? 0, restored: tombstones?.restored ?? 0 },
       replays: Object.fromEntries(replays.results.map((r) => [r.status, r.n])),
     };
   }
@@ -525,9 +653,24 @@ export class LifecycleSnapshotRepository {
     return !!hit && (hit.cycle === 1 || hit.depth >= MAX_DEPTH);
   }
 
-  /** No change means the write was older than the stored row, or its generation is not open. */
-  private async outcome(appId: string, generation: number, changes: number): Promise<WriteResult> {
+  /**
+   * No change means a tombstone refused the write, its generation is not open, or it was older
+   * than the stored row.
+   */
+  private async outcome(
+    appId: string,
+    generation: number,
+    changes: number,
+    blocked?: { caseId: string; sourceWatermark: number },
+  ): Promise<WriteResult> {
     if (changes > 0) return "written";
+    if (blocked) {
+      const refused = await this.db
+        .prepare(`SELECT NOT ${NOT_TOMBSTONED} AS hit`)
+        .bind(appId, blocked.caseId, blocked.sourceWatermark)
+        .first<{ hit: number }>();
+      if (refused?.hit) return "tombstoned";
+    }
     const state = await this.state(appId);
     if (
       !state ||

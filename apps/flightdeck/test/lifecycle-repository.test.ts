@@ -2,7 +2,15 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { SnapshotRejected } from "../src/lifecycle-serving/model";
 import { caseDetail, listCases } from "../src/lifecycle-serving/read";
+import type { RestoreAuthorizer } from "../src/lifecycle-serving/repository";
 import { DAY, HOUR, openSnap, prov, repo, seed, snap, T0 } from "./lifecycle-fixtures";
+
+const approve: RestoreAuthorizer = async () => true;
+const approval = { reason: "operator_restore", approval_ref: "apr_01" };
+const tombstone = (appId: string, caseId: string) =>
+  env.DB.prepare("SELECT * FROM lifecycle_snapshot_tombstones WHERE app_id = ? AND case_id = ?")
+    .bind(appId, caseId)
+    .first<Record<string, unknown>>();
 
 const ALL = {
   processKey: null,
@@ -221,17 +229,134 @@ describe("hierarchy", () => {
   });
 });
 
-describe("deletion and retention", () => {
-  it("tombstones a case so older replays cannot resurrect it", async () => {
-    const app = "app_tombstone";
+describe("tombstones", () => {
+  it("erases the case and refuses every later write, at any generation or watermark", async () => {
+    const app = "app_tomb_live";
+    const { repo: r } = repo(env.DB);
+    await seed(r, app, [snap("c1", { relations: [{ relation: "follows", to_case_id: "c0" }] })]);
+    expect(await r.tombstoneCase(app, "c1", prov(1, 200))).toBe("written");
+    // Content is removed at once, not soft-deleted: only the tombstone remains.
+    expect(await raw(app, "c1")).toBeNull();
+    expect(await intervalCount(app, "c1")).toBe(0);
+    expect(await tombstone(app, "c1")).toMatchObject({
+      reason: "source_deleted",
+      source_watermark: 200,
+      restored_at: null,
+    });
+    // Older, identical-watermark and newer snapshots, in the active and a rebuild generation.
+    for (const wm of [150, 200, 201, 10_000]) {
+      expect(await r.upsertCase(app, snap("c1"), prov(1, wm))).toBe("tombstoned");
+    }
+    const gen = await r.beginRebuild(app);
+    expect(await r.upsertCase(app, snap("c1"), prov(gen, 10_001))).toBe("tombstoned");
+    await r.commitRebuild(app, prov(gen, 10_001));
+    expect(await ids(app)).toEqual([]);
+    expect(await intervalCount(app, "c1")).toBe(0);
+  });
+
+  it("records deletions for cases never projected, so late snapshots stay dead", async () => {
+    const app = "app_tomb_absent";
+    const { repo: r } = repo(env.DB);
+    await seed(r, app, []);
+    expect(await r.tombstoneCase(app, "late", prov(1, 50), "erasure")).toBe("written");
+    expect(await r.upsertCase(app, snap("late"), prov(1, 40))).toBe("tombstoned");
+    expect(await r.upsertCase(app, snap("late"), prov(1, 60))).toBe("tombstoned");
+    expect(await ids(app)).toEqual([]);
+    // Even with no projection state at all, deletion is accepted.
+    expect(await r.tombstoneCase("app_tomb_nostate", "x1", prov(1, 1))).toBe("written");
+  });
+
+  it("survives dropApp and purge, so a clean rebuild cannot resurrect a case", async () => {
+    const app = "app_tomb_drop";
+    const { repo: r, clock } = repo(env.DB);
+    await seed(r, app, [snap("keep"), snap("gone")]);
+    await r.tombstoneCase(app, "gone", prov(1, 200));
+    clock.now += HOUR;
+    await r.purgeDeleted(app, clock.now);
+    await r.dropApp(app);
+    await seed(r, app, [snap("keep"), snap("gone")], { source_watermark: 900, as_of: T0 + DAY });
+    expect(await ids(app)).toEqual(["keep"]);
+  });
+
+  it("keeps the highest deletion watermark and stays app-scoped", async () => {
+    const { repo: r } = repo(env.DB);
+    await seed(r, "app_tomb_a", []);
+    await seed(r, "app_tomb_b", []);
+    await r.tombstoneCase("app_tomb_a", "same", prov(1, 300));
+    await r.tombstoneCase("app_tomb_a", "same", prov(1, 100));
+    expect(await tombstone("app_tomb_a", "same")).toMatchObject({ source_watermark: 300 });
+    expect(await r.upsertCase("app_tomb_b", snap("same"), prov(1, 1))).toBe("written");
+    expect(await ids("app_tomb_b")).toEqual(["same"]);
+  });
+
+  it("restores only with approval, then admits only snapshots newer than the deletion", async () => {
+    const app = "app_tomb_restore";
     const { repo: r } = repo(env.DB);
     await seed(r, app, [snap("c1")]);
-    expect(await r.tombstoneCase(app, "c1", prov(1, 200))).toBe("written");
-    expect(await ids(app)).toEqual([]);
-    expect(await r.upsertCase(app, snap("c1"), prov(1, 150))).toBe("stale");
-    expect(await ids(app)).toEqual([]);
+    await r.tombstoneCase(app, "c1", prov(1, 200));
+
+    const deny: RestoreAuthorizer = async () => false;
+    const broken: RestoreAuthorizer = async () => {
+      throw new Error("grant store down");
+    };
+    for (const authorize of [deny, broken]) {
+      expect((await rejection(r.restoreCase(app, "c1", approval, authorize))).reason).toBe(
+        "unauthorized",
+      );
+    }
+    expect(await r.upsertCase(app, snap("c1"), prov(1, 300))).toBe("tombstoned");
+    // Malformed approvals are refused before the authorizer is consulted.
+    const calls: unknown[] = [];
+    const spy: RestoreAuthorizer = async (check) => {
+      calls.push(check);
+      return true;
+    };
+    await rejection(r.restoreCase(app, "c1", { ...approval, approval_ref: "a@b.c" }, spy));
+    await rejection(r.restoreCase(app, "c1", { ...approval, reason: "Because I said" }, spy));
+    expect(calls).toEqual([]);
+
+    expect(await r.restoreCase(app, "c1", approval, spy)).toBe(true);
+    expect(calls).toEqual([
+      { appId: app, caseId: "c1", reason: "operator_restore", approvalRef: "apr_01" },
+    ]);
+    expect(await r.restoreCase(app, "c1", approval, approve)).toBe(false);
+    // Pre-deletion evidence, including an exact replay of the deletion watermark, stays refused.
+    expect(await r.upsertCase(app, snap("c1"), prov(1, 150))).toBe("tombstoned");
+    expect(await r.upsertCase(app, snap("c1"), prov(1, 200))).toBe("tombstoned");
     expect(await r.upsertCase(app, snap("c1"), prov(1, 201))).toBe("written");
     expect(await ids(app)).toEqual(["c1"]);
+    // After restore, a write newer than the deletion but older than the row is merely stale.
+    expect(await r.upsertCase(app, snap("c1"), prov(1, 250))).toBe("written");
+    expect(await r.upsertCase(app, snap("c1"), prov(1, 220))).toBe("stale");
+
+    // Deleting again re-arms the tombstone.
+    await r.tombstoneCase(app, "c1", prov(1, 400));
+    expect(await r.upsertCase(app, snap("c1"), prov(1, 500))).toBe("tombstoned");
+    expect(await tombstone(app, "c1")).toMatchObject({ restored_at: null, restore_ref: null });
+  });
+
+  it("refuses non-opaque ids and free-text reasons", async () => {
+    const { repo: r } = repo(env.DB);
+    await rejection(r.tombstoneCase("app_tomb_bad", "jane@example.com", prov(1, 1)));
+    await rejection(r.tombstoneCase("app_tomb_bad", "c1", prov(1, 1), "User asked"));
+  });
+});
+
+describe("deletion and retention", () => {
+  it("hides an unservable case reversibly, without a tombstone", async () => {
+    const app = "app_hide";
+    const { repo: r } = repo(env.DB);
+    await seed(r, app, [snap("c1")]);
+    expect(await r.hideCase(app, "c1", prov(1, 200))).toBe("written");
+    expect(await ids(app)).toEqual([]);
+    expect(await raw(app, "c1")).toMatchObject({ deleted_reason: "not_servable" });
+    expect(await tombstone(app, "c1")).toBeNull();
+    // An older snapshot cannot undo the hide; a newer one brings the case back.
+    expect(await r.upsertCase(app, snap("c1"), prov(1, 150))).toBe("stale");
+    expect(await r.upsertCase(app, snap("c1"), prov(1, 250))).toBe("written");
+    expect(await ids(app)).toEqual(["c1"]);
+    expect(await r.hideCase(app, "c1", prov(1, 240))).toBe("stale");
+    await rejection(r.hideCase(app, "jane@example.com", prov(1, 300)));
   });
 
   it("retires closed cases past retention, keeps open ones, then purges", async () => {
@@ -253,7 +378,10 @@ describe("deletion and retention", () => {
     expect(await r.purgeDeleted(app, clock.now)).toEqual({ cases: 1 });
     expect(await raw(app, "old")).toBeNull();
     expect(await intervalCount(app, "old")).toBe(0);
-    expect(await r.diagnostics(app)).toMatchObject({ cases: { live: 2, deleted: 0 } });
+    expect(await r.diagnostics(app)).toMatchObject({
+      cases: { live: 2, deleted: 0 },
+      tombstones: { active: 0, restored: 0 },
+    });
   });
 
   it("drops an app's derived rows for a clean rebuild", async () => {
@@ -303,5 +431,32 @@ describe("replay queue", () => {
     await expect(r.requestReplay(app, { reason: "Free text reason" })).rejects.toThrow(
       SnapshotRejected,
     );
+  });
+
+  it("reports diagnostics as counts and codes, never case ids or approval references", async () => {
+    const app = "app_diag_pii";
+    const { repo: r } = repo(env.DB);
+    await seed(r, app, [snap("case_visible_token"), snap("case_deleted_token")]);
+    await r.tombstoneCase(app, "case_deleted_token", prov(1, 200));
+    await r.tombstoneCase(app, "case_restored_token", prov(1, 200));
+    await r.restoreCase(
+      app,
+      "case_restored_token",
+      { ...approval, approval_ref: "apr_secret_ref" },
+      approve,
+    );
+    const failed = await r.beginRebuild(app);
+    await r.failRebuild(app, failed, "source_timeout");
+    const report = await r.diagnostics(app);
+    expect(report).toMatchObject({
+      cases: { live: 1, deleted: 0 },
+      tombstones: { active: 1, restored: 1 },
+      state: { last_error_code: "source_timeout" },
+    });
+    const text = JSON.stringify(report);
+    for (const secret of ["case_", "apr_secret_ref", "operator_restore"]) {
+      expect(text).not.toContain(secret);
+    }
+    await rejection(r.failRebuild(app, failed + 1, "Jane Doe timeout"));
   });
 });

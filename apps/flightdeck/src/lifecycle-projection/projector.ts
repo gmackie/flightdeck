@@ -168,7 +168,7 @@ export class LifecycleProjector {
       outcome = "projected";
     } else if (adapted.facts) {
       // Evidence no longer yields a servable case (e.g. its start was retracted): hide it.
-      await this.repo.tombstoneCase(appId, await servingId(caseId), provenance);
+      await this.repo.hideCase(appId, await servingId(caseId), provenance);
     }
     await this.finish(appId, caseId, maxSeq, mapped.diagnostics);
     return outcome;

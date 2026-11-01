@@ -69,13 +69,42 @@ type Freshness = {
   pending_cases: number;
 };
 
+/**
+ * How small-cohort suppression applied to this response. Only aggregates suppress: case lists
+ * and detail return individual (opaque) cases under `lifecycle:read` and say so explicitly.
+ */
+type Suppression = {
+  policy: "min_cohort" | "not_applicable";
+  /** Groups with fewer distinct cases than this are withheld; null when not applicable. */
+  min_cohort: number | null;
+  unit: "distinct_cases" | null;
+  /** True when at least one group was withheld. How many, and their sizes, are never disclosed. */
+  withheld: boolean;
+  /**
+   * What `sample_count` counts: cases in released groups only, rows returned, the one case, or
+   * nothing (operator diagnostics, where `sample_count` is always 0).
+   */
+  sample_count_of: "released_groups" | "returned_rows" | "case" | "none";
+};
+
+const unsuppressed = (of: "returned_rows" | "case" | "none"): Suppression => ({
+  policy: "not_applicable",
+  min_cohort: null,
+  unit: null,
+  withheld: false,
+  sample_count_of: of,
+});
+
 type Envelope = {
   app_id: string;
   as_of: number | null;
   data_freshness: Freshness;
+  /** The filters that define the population, echoed after normalization. */
   cohort: Record<string, string | number | null>;
   sample_count: number;
+  /** Shorthand for `suppression.withheld`. */
   suppressed: boolean;
+  suppression: Suppression;
   data: unknown;
   page?: { limit: number; next_cursor: string | null };
 };
@@ -210,6 +239,7 @@ async function processes(ctx: Ctx): Promise<Response> {
     cohort: { process_key: processKey },
     sample_count: items.length,
     suppressed: false,
+    suppression: unsuppressed("returned_rows"),
     data: items,
     page: {
       limit,
@@ -271,6 +301,7 @@ async function cases(ctx: Ctx): Promise<Response> {
     },
     sample_count: items.length,
     suppressed: false,
+    suppression: unsuppressed("returned_rows"),
     data: items,
     page: {
       limit,
@@ -289,6 +320,7 @@ async function detail(ctx: Ctx, caseId: string): Promise<Response> {
     cohort: { case_id: caseId },
     sample_count: 1,
     suppressed: false,
+    suppression: unsuppressed("case"),
     data: found,
   });
 }
@@ -323,10 +355,16 @@ async function summary(ctx: Ctx, kind: "stages" | "outcomes"): Promise<Response>
       status: cohort.status,
       started_after: iso(window.after),
       started_before: iso(window.before),
-      min_cohort: ctx.minCohort,
     },
     sample_count: result.sample_count,
     suppressed: result.suppressed,
+    suppression: {
+      policy: "min_cohort",
+      min_cohort: ctx.minCohort,
+      unit: "distinct_cases",
+      withheld: result.suppressed,
+      sample_count_of: "released_groups",
+    },
     data: result.groups,
   });
 }
@@ -338,7 +376,13 @@ async function diagnostics(ctx: Ctx): Promise<Response> {
     freshness(ctx),
     projectionDiagnostics(ctx.db, ctx.appId),
   ]);
-  return respond(ctx, fresh, { cohort: {}, sample_count: 0, suppressed: false, data: report });
+  return respond(ctx, fresh, {
+    cohort: {},
+    sample_count: 0,
+    suppressed: false,
+    suppression: unsuppressed("none"),
+    data: report,
+  });
 }
 
 function statusParam(params: URLSearchParams): "open" | "closed" | null {
