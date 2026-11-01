@@ -41,6 +41,7 @@ export async function privateLifecycleRead(
   const principal = await verifyAccessPrincipal(assertion, {
     teamDomain: env.ACCESS_TEAM_DOMAIN,
     audience: env.LIFECYCLE_MCP_ACCESS_AUD.trim(),
+    exclusiveAudience: true,
     keys,
   });
   if (!principal || principal.sub.length > 256) return { ok: false, code: "unauthorized" };

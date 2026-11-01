@@ -28,6 +28,7 @@ const config = {
   LIFECYCLE_MCP_SOURCE: "read-api",
   ACCESS_TEAM_DOMAIN: TEAM,
   ACCESS_AUD: AUD,
+  LIFECYCLE_MCP_RESOURCE: "https://mcp.test/mcp",
   LIFECYCLE_READ_API: env.TEST_LIFECYCLE_READ,
 };
 const jwt = (
@@ -272,6 +273,136 @@ describe("private named entrypoint -> verified MCP assertion -> migrated D1 -> M
       .run();
     await expect(source.getFreshness(authorized as AppScope)).rejects.toThrow();
     expect(await source.grantsFor(p)).toEqual([]);
+  });
+
+  it("preserves a mock OAuth edge identity through MCP v2 and independent private RPC validation", async () => {
+    await grant("oauth-person-reader", "reader", APP);
+    const edgeAssertion = await jwt("oauth-person-reader", AUD, {
+      email: "mock@example.test",
+      // These signed claims are not a D1 role or a documented Access scope bridge.
+      scope: "lifecycle:read process:read admin",
+      roles: ["admin"],
+    });
+    const received: string[] = [];
+    const binding = {
+      read: async (token: string, appId: string | null, request: unknown) => {
+        received.push(token);
+        return env.TEST_LIFECYCLE_READ.read(token, appId, request);
+      },
+    };
+    // Only a local model of the documented opaque-token -> Access-assertion edge bridge.
+    // This does not prove real Access token validation, consent, replay controls or browser OAuth.
+    const mockEdge = (input: Request) => {
+      const url = new URL(input.url);
+      if (
+        input.url !== config.LIFECYCLE_MCP_RESOURCE ||
+        input.headers.get("Authorization") !== "Bearer oauth:known-mock"
+      ) {
+        return Promise.resolve(
+          new Response(null, {
+            status: 401,
+            headers: {
+              "WWW-Authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp"`,
+              "Cache-Control": "no-store",
+            },
+          }),
+        );
+      }
+      const headers = new Headers(input.headers);
+      headers.delete("Authorization");
+      // The edge must replace any client-injected assertion header.
+      headers.set("Cf-Access-Jwt-Assertion", edgeAssertion);
+      return handleRequest(
+        new Request(input, { headers }),
+        { ...config, LIFECYCLE_READ_API: binding },
+        { keys },
+      );
+    };
+    for (const opaque of ["unknown", "expired", "revoked"]) {
+      const denied = await mockEdge(
+        new Request(config.LIFECYCLE_MCP_RESOURCE, {
+          headers: { Authorization: `Bearer oauth:${opaque}` },
+        }),
+      );
+      expect(denied.status).toBe(401);
+    }
+    const client = new Client(
+      { name: "managed-oauth-mock-client", version: "1" },
+      {
+        versionNegotiation: { mode: { pin: "2026-07-28" } },
+      },
+    );
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(config.LIFECYCLE_MCP_RESOURCE), {
+        requestInit: {
+          headers: {
+            Authorization: "Bearer oauth:known-mock",
+            "Cf-Access-Jwt-Assertion": assertion,
+          },
+        },
+        fetch: (url, init) => mockEdge(new Request(url, init)),
+      }),
+    );
+    try {
+      expect((await call(client, "list_workflow_definitions", { app_id: APP })).error).toBeNull();
+      for (const app_id of [OTHER, "unknown_app"]) {
+        expect((await call(client, "get_data_freshness", { app_id })).error.code).toBe("forbidden");
+      }
+      expect(
+        (
+          await call(client, "get_stage_dwell", {
+            app_id: APP,
+            workflow_key: "recruiting.assessment",
+          })
+        ).error.code,
+      ).toBe("forbidden");
+      expect(received.length).toBeGreaterThan(0);
+      expect(received.every((token) => token === edgeAssertion)).toBe(true);
+      // Replaying the same mock OAuth token/assertion cannot resurrect a revoked D1 grant.
+      await env.DB.prepare(
+        "UPDATE authz_grants SET revoked_at = ? WHERE principal_subject = 'oauth-person-reader'",
+      )
+        .bind(Date.now())
+        .run();
+      expect((await call(client, "list_workflow_definitions", { app_id: APP })).error.code).toBe(
+        "forbidden",
+      );
+      expect(
+        await env.TEST_LIFECYCLE_READ.read(edgeAssertion, APP, { method: "getFreshness" }),
+      ).toEqual({ ok: false, code: "forbidden" });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("denies Access/JWKS errors and multi-audience assertions at the private boundary", async () => {
+    const multiAud = await new SignJWT({ email: "mock@example.test" })
+      .setProtectedHeader({ alg: "RS256", kid: "live" })
+      .setSubject("live-analyst")
+      .setIssuer(TEAM)
+      .setAudience([AUD, "dashboard-aud"])
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(pair.privateKey);
+    const expired = await new SignJWT({ email: "mock@example.test" })
+      .setProtectedHeader({ alg: "RS256", kid: "live" })
+      .setSubject("live-analyst")
+      .setIssuer(TEAM)
+      .setAudience(AUD)
+      .setIssuedAt()
+      .setExpirationTime(1)
+      .sign(pair.privateKey);
+    for (const token of [multiAud, expired, "oauth:opaque"]) {
+      expect(await env.TEST_LIFECYCLE_READ.read(token, APP, { method: "getFreshness" })).toEqual({
+        ok: false,
+        code: "unauthorized",
+      });
+    }
+    expect(
+      await privateLifecycleRead(env, assertion, APP, { method: "getFreshness" }, async () => {
+        throw new Error("JWKS unavailable");
+      }),
+    ).toEqual({ ok: false, code: "unauthorized" });
   });
 
   it("keeps seq=17 separate from projection time and never claims event-time completeness", async () => {
