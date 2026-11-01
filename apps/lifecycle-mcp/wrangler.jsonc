@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Optional, separate, read-only lifecycle MCP server. See docs/operations/lifecycle-mcp.md.
+  "name": "flightdeck-lifecycle-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-30",
+  // No public endpoint: no workers.dev hostname, no preview URLs and no routes. An operator adds an
+  // Access-protected custom domain only after the read API and grants are wired (see the docs).
+  "workers_dev": false,
+  "preview_urls": false,
+  // The future Workstream H read API. Left unbound on purpose: `read-api` mode fails closed until
+  // the adapter is integrated (src/sources/read-api.ts).
+  // "services": [{ "binding": "LIFECYCLE_READ_API", "service": "flightdeck" }],
+  "vars": {
+    // `production` is refused outright by this build (src/config.ts); see the rollout checklist.
+    "LIFECYCLE_MCP_ENVIRONMENT": "production",
+    // disabled | synthetic | read-api. `disabled` answers every request with 503.
+    "LIFECYCLE_MCP_SOURCE": "disabled",
+    // The Cloudflare Access team and the AUD tag of the Access application for this Worker's hostname.
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+    // Groups with fewer distinct cases are withheld. Values below 5 are raised to 5.
+    "LIFECYCLE_MCP_MIN_COHORT": "5",
+    // Comma-separated browser origins allowed to call /mcp. Requests with any other Origin get 403.
+    "LIFECYCLE_MCP_ALLOWED_ORIGINS": "",
+    // "1" lets local `wrangler dev` skip Access, only with the development environment and synthetic data.
+    "LIFECYCLE_MCP_DEV": "0"
+  },
+  "observability": { "enabled": true }
+}

@@ -1,0 +1,4 @@
+# Local overrides for `wrangler dev`; only the example (no secrets) is committed.
+.env
+.env.*
+!.env.example
