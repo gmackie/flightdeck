@@ -1,5 +1,5 @@
-import { servingId } from "../lifecycle-projection/snapshot";
 import { canonical } from "../lifecycle-projection/identity";
+import { servingId } from "../lifecycle-projection/snapshot";
 import { eraseCaseStatements, RETIRED_REASON } from "../lifecycle-projection/store";
 import type { ErasureConfig } from "./config";
 import {

@@ -31,12 +31,15 @@ describe("manifest", () => {
     assert.equal(new Set(manifest.gates.map((g) => g.id)).size, manifest.gates.length);
   });
 
-  it("matches the migrations on current main exactly, with no duplicate numbers", () => {
+  it("matches the migrations in the tree exactly (required + integrated anticipated), with no duplicate numbers", () => {
     const files = readdirSync(join(REPO, manifest.migrations.dir))
       .filter((f) => f.endsWith(".sql"))
       .map((f) => f.replace(/\.sql$/, ""))
       .sort();
-    assert.deepEqual(files, manifest.migrations.required.map((m) => m.name).sort());
+    const expected = [...manifest.migrations.required, ...manifest.migrations.anticipated]
+      .map((m) => m.name)
+      .sort();
+    assert.deepEqual(files, expected);
     const numbers = files.map((f) => f.slice(0, 4));
     assert.equal(new Set(numbers).size, numbers.length);
   });
@@ -261,11 +264,11 @@ describe("d1-migrations", () => {
     assert.equal(gate(main, "d1-migrations").status, "pass");
     assert.match(
       gate(main, "query-budgets").reasons.join(),
-      /0040_lifecycle_privacy_budget not integrated/,
+      /0040_lifecycle_privacy_budget present in tree/,
     );
     assert.match(
       gate(main, "d1-retention").reasons.join(),
-      /0041_lifecycle_erasure_retention not integrated/,
+      /0041_lifecycle_erasure_retention present in tree/,
     );
   });
 

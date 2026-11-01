@@ -86,6 +86,10 @@
       {
         "name": "0031_lifecycle_snapshot_tombstones",
         "owner": "#36 FLIG-21"
+      },
+      {
+        "name": "0032_lifecycle_rebuild_staging",
+        "owner": "#56 FLIG-39"
       }
     ],
     "anticipated": [
@@ -143,6 +147,34 @@
       "default": "0",
       "allowed": ["0", "1"],
       "production": ["0"]
+    },
+    {
+      "file": "apps/flightdeck/wrangler.jsonc",
+      "name": "LIFECYCLE_PRIVACY_MODE",
+      "default": "disabled",
+      "allowed": ["disabled", "enforce"],
+      "production": ["enforce"]
+    },
+    {
+      "file": "apps/flightdeck/wrangler.jsonc",
+      "name": "LIFECYCLE_PRIVACY_RESTRICTED",
+      "default": "deny",
+      "allowed": ["deny", "reviewed"],
+      "production": ["deny", "reviewed"]
+    },
+    {
+      "file": "apps/flightdeck/wrangler.jsonc",
+      "name": "LIFECYCLE_ERASURE_MODE",
+      "default": "off",
+      "allowed": ["off", "dry_run", "enforce"],
+      "production": ["off", "dry_run", "enforce"]
+    },
+    {
+      "file": "apps/flightdeck/wrangler.jsonc",
+      "name": "LIFECYCLE_RETENTION_MODE",
+      "default": "off",
+      "allowed": ["off", "dry_run", "enforce"],
+      "production": ["off", "dry_run", "enforce"]
     },
     {
       "file": "apps/lifecycle-mcp/wrangler.jsonc",
