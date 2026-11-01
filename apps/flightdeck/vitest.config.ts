@@ -13,7 +13,11 @@ export default defineConfig(async () => {
     ],
     test: {
       name: "flightdeck",
-      exclude: [...configDefaults.exclude, "test/lifecycle-mcp-live.test.ts"],
+      exclude: [
+        ...configDefaults.exclude,
+        "test/lifecycle-mcp-live.test.ts",
+        "test/*.sqlite.test.*",
+      ],
       setupFiles: ["./test/setup.ts"],
     },
   };

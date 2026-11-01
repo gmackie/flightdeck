@@ -144,6 +144,44 @@ describe("terminal stages", () => {
 });
 
 describe("terminal outcomes", () => {
+  it("invalidates outcome-only duplicate conflicts in every delivery order", async () => {
+    const start = rec("case.started");
+    for (const type of ["case.completed", "case.terminated"] as const) {
+      const terminal = rec(type, {
+        occurred_at: T + MIN,
+        reason: type === "case.terminated" ? "failed" : null,
+        dimensions: { outcome: "shipped" },
+      });
+      const conflict = { ...terminal, dimensions: { outcome: "rolled_back" } };
+      const a = await project([start, terminal, conflict]);
+      const b = await project([conflict, terminal, start]);
+      expect(a.snapshot).toEqual(b.snapshot);
+      expect(a.result.cases).toEqual(b.result.cases);
+      expect(a.snapshot?.status).not.toBe("closed");
+      expect(a.snapshot?.outcome).toBeNull();
+      expect(a.diagnostics.get("duplicate_conflict")).toBe(1);
+      expect(b.diagnostics.get("duplicate_conflict")).toBe(1);
+      expect(a.result.uncertainEventIds).toContain(terminal.event_id);
+    }
+  });
+
+  it("deduplicates identical producer evidence across receipt metadata and dimension key order", async () => {
+    const start = rec("case.started");
+    const terminal = rec("case.completed", {
+      occurred_at: T + MIN,
+      dimensions: { outcome: "shipped", region: "us" },
+    });
+    const retry = {
+      ...terminal,
+      received_at: T + 2 * MIN,
+      channel: "http" as const,
+      dimensions: { region: "us", outcome: "shipped" },
+    };
+    const { snapshot, diagnostics } = await project([start, terminal, retry]);
+    expect(snapshot).toMatchObject({ status: "closed", outcome: "shipped" });
+    expect(diagnostics.get("duplicate_conflict")).toBeUndefined();
+  });
+
   it("needs an explicit terminal class on case.terminated", async () => {
     seq = 0;
     const { snapshot, diagnostics } = await project([

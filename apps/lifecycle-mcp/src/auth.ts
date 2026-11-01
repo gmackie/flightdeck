@@ -43,7 +43,7 @@ export async function authenticate(
 ): Promise<Principal | null> {
   if (!config.access) return DEV_PRINCIPAL;
   const token = request.headers.get("Cf-Access-Jwt-Assertion");
-  if (!token) return null;
+  if (!token || token.length > 16_384) return null;
   const teamDomain = normalizeTeamDomain(config.access.teamDomain);
   try {
     const { payload } = await jwtVerify(token, keys ?? teamKeys(teamDomain), {
@@ -54,6 +54,9 @@ export async function authenticate(
       requiredClaims: ["exp", "iat"],
     });
     const { sub, email, common_name: commonName } = payload;
+    // An Access assertion for multiple applications must not bridge the dashboard boundary.
+    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    if (audiences.length !== 1 || audiences[0] !== config.access.audience) return null;
     if (typeof commonName === "string" && commonName) {
       return { sub: commonName, serviceToken: true, assertion: token };
     }

@@ -27,13 +27,20 @@ export const ENV: WorkerEnv = {
   LIFECYCLE_MCP_MIN_COHORT: "5",
   LIFECYCLE_MCP_ALLOWED_ORIGINS: "",
   LIFECYCLE_MCP_DEV: "0",
+  LIFECYCLE_MCP_RESOURCE: MCP_URL,
 };
 
-type SignOpts = { sub?: string; aud?: string; iss?: string; exp?: number | string; alg?: "RS256" };
+type SignOpts = {
+  sub?: string;
+  aud?: string | string[];
+  iss?: string;
+  exp?: number | string;
+  kid?: string;
+};
 
 export function sign(claims: Record<string, unknown>, opts: SignOpts = {}) {
   return new SignJWT(claims)
-    .setProtectedHeader({ alg: "RS256", kid: "k1" })
+    .setProtectedHeader({ alg: "RS256", kid: opts.kid ?? "k1" })
     .setSubject(opts.sub ?? "user-uuid-1")
     .setIssuer(opts.iss ?? TEAM)
     .setAudience(opts.aud ?? AUD)

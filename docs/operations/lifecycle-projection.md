@@ -27,8 +27,11 @@ evidence log → replay engine (FLIG-16) → serving tables (FLIG-21) → read A
    writes it with provenance `(generation, source_watermark, as_of, reducer_version)`. Late,
    reordered and corrected events need no special path: the whole case is replayed.
 4. An app that was never projected is **rebuilt**: a new generation is written from the log and
-   activated at once. `LifecycleProjector.rebuild(appId)` repeats that on demand (for example
-   after bumping `REDUCER_VERSION`).
+   activated at once. Migration `0032` adds separate staging tables for cases, definitions,
+   intervals and edges. Readers keep the committed tables while a rebuild runs or fails;
+   one D1 batch transaction publishes all four tables and their generation metadata.
+   `LifecycleProjector.rebuild(appId)` repeats that on demand (for example after bumping
+   `REDUCER_VERSION`). Rebuild queue entries are acknowledged only after publication succeeds.
 5. A cron (`*/5 * * * *`, `src/lifecycle-projection/schedule.ts`) retries due projection work
    and forwards pending outbox rows.
 
@@ -80,6 +83,11 @@ One bad case never blocks the rest of its app, or a rebuild (during a rebuild it
 until its retry succeeds). A queue entry is only cleared if
 the projection covered the newest event for that case.
 
+Accepted future-dated evidence remains queued until its occurrence time. Eligible history is
+still projected, but the case is not acknowledged until all its evidence is eligible. The
+scheduled drain retries it without another producer delivery. The committed watermark stays
+below pending evidence, including when later eligible events have higher log sequence numbers.
+
 ## Basin outbox
 
 `lifecycle_event_log.forwarded_at IS NULL` marks pending rows. A failing send increments
@@ -94,15 +102,17 @@ case's evidence, queue entry, diagnostics and served rows, and records a tombsto
 deliveries or backfills of that case are accepted but never stored, forwarded or projected
 (counted as `erased_case_event`). This holds even if the erasure comes before the case was ever
 projected, which closes the serving model's tombstone-before-first-projection gap for this path.
-**Not covered:** rows already forwarded to Basin. A rebuild from Basin must consult
-`lifecycle_case_tombstones`, and Basin-side deletion needs its own procedure (release blocker
-for real personal-data processes).
+**Not covered by `eraseCase`:** rows already forwarded to Basin. A rebuild from Basin must consult
+`lifecycle_case_tombstones`. Basin-side deletion is tracked by the erasure job protocol (default
+off, receipt-gated, nothing verified against a real catalog) in
+[lifecycle-erasure-retention.md](lifecycle-erasure-retention.md), which is a release blocker for
+real personal-data processes.
 
 ## Known limits
 
-- The D1 evidence log keeps every accepted event (it is the replay input). Retention and size
-  limits (D1 database size) need a policy before production; compaction would require rebuilds
-  from Basin.
+- The D1 evidence log keeps every accepted event (it is the replay input). A default-off,
+  reconciliation-gated retention policy exists (see lifecycle-erasure-retention.md); D1 database
+  size limits still need a chosen policy before production.
 - A rebuild runs in one invocation. Large apps will need it moved to a Workflow or Durable
   Object, paging through cases.
 - The serving model's own limits (FLIG-21) still apply: per-group suppression only, with

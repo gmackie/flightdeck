@@ -16,7 +16,7 @@ import { backoff, caseLog } from "./store";
  */
 
 /** Stamped on every snapshot; bump when adapter or mapping semantics change, then rebuild. */
-export const REDUCER_VERSION = "lifecycle@0.1.1+fd.1";
+export const REDUCER_VERSION = "lifecycle@0.1.1+fd.2";
 /** Cases projected per drain call, and per rebuild page. */
 export const DRAIN_LIMIT = 50;
 const REBUILD_PAGE = 100;
@@ -31,6 +31,7 @@ export type DrainResult = {
   projected: number;
   removed: number;
   failed: number;
+  deferred: number;
   remaining: number;
 };
 
@@ -53,7 +54,18 @@ export class LifecycleProjector {
       const projected = await this.rebuild(appId);
       return { rebuilt: true, ...projected, remaining: await this.pending(appId) };
     }
-    const generation = state.building_generation ?? state.active_generation;
+    // Another invocation owns the staging generation. Leave its evidence queued until commit.
+    if (state.building_generation !== null) {
+      return {
+        rebuilt: false,
+        projected: 0,
+        removed: 0,
+        failed: 0,
+        deferred: 0,
+        remaining: await this.pending(appId),
+      };
+    }
+    const generation = state.active_generation;
     const { results: due } = await this.db
       .prepare(
         `SELECT case_id, attempts FROM ${QUEUE} WHERE app_id = ? AND next_attempt_at <= ?
@@ -61,7 +73,7 @@ export class LifecycleProjector {
       )
       .bind(appId, this.now(), limit)
       .all<{ case_id: string; attempts: number }>();
-    const totals = { rebuilt: false, projected: 0, removed: 0, failed: 0 };
+    const totals = { rebuilt: false, projected: 0, removed: 0, failed: 0, deferred: 0 };
     for (const item of due) {
       const outcome = await this.projectQueued(appId, item.case_id, item.attempts, generation);
       totals[outcome] += 1;
@@ -74,9 +86,12 @@ export class LifecycleProjector {
    * Rebuilds the app's whole projection into a new generation from the evidence log, then
    * activates it. Readers keep the previous generation until the commit.
    */
-  async rebuild(appId: string): Promise<{ projected: number; removed: number; failed: number }> {
+  async rebuild(
+    appId: string,
+  ): Promise<{ projected: number; removed: number; failed: number; deferred: number }> {
     const generation = await this.repo.beginRebuild(appId);
-    const totals = { projected: 0, removed: 0, failed: 0 };
+    const totals = { projected: 0, removed: 0, failed: 0, deferred: 0 };
+    const covered: string[] = [];
     try {
       const top = await this.db
         .prepare(`SELECT max(seq) AS seq FROM ${LOG} WHERE app_id = ?`)
@@ -94,7 +109,8 @@ export class LifecycleProjector {
           .all<{ case_id: string }>();
         for (const { case_id } of results) {
           try {
-            const outcome = await this.projectCase(appId, case_id, generation);
+            const outcome = await this.projectCase(appId, case_id, generation, false);
+            if (outcome !== "deferred") covered.push(case_id);
             totals[outcome] += 1;
           } catch (error) {
             // One bad case must not block the app: it is queued for retry, the rest commit.
@@ -105,14 +121,20 @@ export class LifecycleProjector {
         if (results.length < REBUILD_PAGE) break;
         after = results.at(-1)?.case_id ?? after;
       }
-      await this.repo.commitRebuild(appId, this.provenance(generation, watermark));
-      // Work the rebuild covered is done; anything that arrived during it stays queued.
+      await this.repo.commitRebuild(
+        appId,
+        this.provenance(generation, Math.min(watermark, await this.safeWatermark(appId))),
+      );
+      // Only acknowledge cases actually covered by the committed rebuild; future and failed
+      // cases remain pending, and evidence arriving after the captured watermark stays queued.
       await this.db
         .prepare(
-          `DELETE FROM ${QUEUE} WHERE app_id = ? AND enqueued_seq <= ? AND last_error_code IS NULL`,
+          `DELETE FROM ${QUEUE} WHERE app_id = ? AND enqueued_seq <= ?
+         AND case_id IN (SELECT value FROM json_each(?))`,
         )
-        .bind(appId, watermark)
+        .bind(appId, watermark, JSON.stringify(covered))
         .run();
+      await this.advance(appId);
       return totals;
     } catch (error) {
       await this.repo.failRebuild(appId, generation, errorCode(error));
@@ -125,7 +147,7 @@ export class LifecycleProjector {
     caseId: string,
     attempts: number,
     generation: number,
-  ): Promise<"projected" | "removed" | "failed"> {
+  ): Promise<"projected" | "removed" | "failed" | "deferred"> {
     try {
       return await this.projectCase(appId, caseId, generation);
     } catch (error) {
@@ -139,14 +161,34 @@ export class LifecycleProjector {
     appId: string,
     caseId: string,
     generation: number,
-  ): Promise<"projected" | "removed"> {
+    acknowledge = true,
+  ): Promise<"projected" | "removed" | "deferred"> {
     const asOf = this.now();
     const { rows, maxSeq } = await caseLog(this.db, appId, caseId);
-    const records = rows.map((r) => r.record);
+    // Project only eligible evidence and retain the queue entry for future events, including
+    // corrections whose replacement time may be earlier. Rebuilds still preserve the case's
+    // currently eligible history in their staging tables.
+    const future = rows.filter((r) => r.record.occurred_at > asOf);
+    if (future.length) {
+      const eligible = Math.min(...future.map((r) => r.record.occurred_at));
+      await this.db
+        .prepare(
+          `INSERT INTO ${QUEUE} (app_id, case_id, enqueued_seq, attempts, next_attempt_at)
+         VALUES (?, ?, ?, 0, ?)
+         ON CONFLICT (app_id, case_id) DO UPDATE SET
+           enqueued_seq = max(enqueued_seq, excluded.enqueued_seq),
+           next_attempt_at = CASE WHEN enqueued_seq <= excluded.enqueued_seq
+             THEN excluded.next_attempt_at ELSE next_attempt_at END`,
+        )
+        .bind(appId, caseId, maxSeq, eligible)
+        .run();
+    }
+    const records = rows.filter((r) => r.record.occurred_at <= asOf).map((r) => r.record);
     const keys = [...new Set(records.map((r) => processKey(r.process_id, r.process_version)))];
     const definitions = await getDefinitions(this.db, appId, keys);
     const adapted = adaptCase(caseId, records, definitions, asOf);
-    const provenance = this.provenance(generation, maxSeq, asOf);
+    const reflectedSeq = future.length ? Math.min(...future.map((r) => r.seq)) - 1 : maxSeq;
+    const provenance = this.provenance(generation, reflectedSeq, asOf);
     let mapped: Awaited<ReturnType<typeof toSnapshot>>;
     if (adapted.facts) {
       mapped = await toSnapshot(replay(adapted.input), adapted.facts, adapted.issues);
@@ -170,8 +212,8 @@ export class LifecycleProjector {
       // Evidence no longer yields a servable case (e.g. its start was retracted): hide it.
       await this.repo.hideCase(appId, await servingId(caseId), provenance);
     }
-    await this.finish(appId, caseId, maxSeq, mapped.diagnostics);
-    return outcome;
+    await this.finish(appId, caseId, maxSeq, mapped.diagnostics, acknowledge && !future.length);
+    return future.length ? "deferred" : outcome;
   }
 
   /** Records diagnostics and clears the queue entry if no newer event arrived meanwhile. */
@@ -180,6 +222,7 @@ export class LifecycleProjector {
     caseId: string,
     seq: number,
     diagnostics: Map<string, number>,
+    acknowledge: boolean,
   ): Promise<void> {
     const now = this.now();
     await this.db.batch([
@@ -195,8 +238,10 @@ export class LifecycleProjector {
           .bind(appId, caseId, code, count, now),
       ),
       this.db
-        .prepare(`DELETE FROM ${QUEUE} WHERE app_id = ? AND case_id = ? AND enqueued_seq <= ?`)
-        .bind(appId, caseId, seq),
+        .prepare(
+          `DELETE FROM ${QUEUE} WHERE app_id = ? AND case_id = ? AND enqueued_seq <= ? AND ?`,
+        )
+        .bind(appId, caseId, seq, acknowledge ? 1 : 0),
     ]);
   }
 
@@ -220,15 +265,23 @@ export class LifecycleProjector {
    * Moves the committed watermark to the highest seq below every still-queued case: all evidence
    * at or below it is reflected. `as_of` records when that was last confirmed.
    */
-  private async advance(appId: string): Promise<void> {
+  private async safeWatermark(appId: string): Promise<number> {
     const row = await this.db
       .prepare(
-        `SELECT coalesce((SELECT min(enqueued_seq) - 1 FROM ${QUEUE} WHERE app_id = ?),
+        `SELECT coalesce((SELECT min(l.seq) - 1 FROM ${LOG} l JOIN ${QUEUE} q
+           ON q.app_id = l.app_id AND q.case_id = l.case_id WHERE l.app_id = ?),
            (SELECT max(seq) FROM ${LOG} WHERE app_id = ?), 0) AS seq`,
       )
       .bind(appId, appId)
       .first<{ seq: number }>();
-    await this.repo.advanceWatermark(appId, { source_watermark: row?.seq ?? 0, as_of: this.now() });
+    return row?.seq ?? 0;
+  }
+
+  private async advance(appId: string): Promise<void> {
+    await this.repo.advanceWatermark(appId, {
+      source_watermark: await this.safeWatermark(appId),
+      as_of: this.now(),
+    });
   }
 
   private async pending(appId: string): Promise<number> {

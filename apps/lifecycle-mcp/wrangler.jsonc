@@ -18,6 +18,8 @@
     // The Cloudflare Access team and the AUD tag of the Access application for this Worker's hostname.
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
+    // Exact https://<isolated-staging-host>/mcp. Required for read-api; no inferred Host or aliases.
+    "LIFECYCLE_MCP_RESOURCE": "",
     // Groups with fewer distinct cases are withheld. Values below 5 are raised to 5.
     "LIFECYCLE_MCP_MIN_COHORT": "5",
     // Comma-separated browser origins allowed to call /mcp. Requests with any other Origin get 403.

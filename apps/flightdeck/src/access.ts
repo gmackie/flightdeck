@@ -23,7 +23,13 @@ function teamKeys(teamDomain: string): JWTVerifyGetKey {
 /** An authenticated Access caller: a person (`email`) or a service token (`common_name`). */
 export type AccessPrincipal = { sub: string; email?: string; serviceToken: boolean };
 
-type AccessOpts = { teamDomain: string; audience?: string | null; keys?: JWTVerifyGetKey };
+type AccessOpts = {
+  teamDomain: string;
+  audience?: string | null;
+  keys?: JWTVerifyGetKey;
+  /** MCP isolation: reject assertions issued for any additional application. */
+  exclusiveAudience?: boolean;
+};
 
 /** The token's claims when it is valid for this team and audience, else null. */
 async function verifyAccessToken(token: string, opts: AccessOpts): Promise<JWTPayload | null> {
@@ -36,6 +42,10 @@ async function verifyAccessToken(token: string, opts: AccessOpts): Promise<JWTPa
       requiredClaims: ["exp", "iat"],
       ...(opts.audience ? { audience: opts.audience } : {}),
     });
+    if (opts.exclusiveAudience) {
+      const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+      if (!opts.audience || audiences.length !== 1 || audiences[0] !== opts.audience) return null;
+    }
     return payload;
   } catch {
     return null;

@@ -257,7 +257,7 @@ export type StageGroup = {
 
 /**
  * Dwell per (stage, state) over the cohort's intervals. Groups with fewer than `minCohort`
- * distinct cases are dropped; `sample_count` counts distinct cases in the released groups only.
+ * distinct cases in either the completed or censored cohort are dropped (zero is safe); `sample_count` counts distinct cases in the released groups only.
  */
 export async function stageSummary(
   db: D1Database,
@@ -282,6 +282,8 @@ export async function stageSummary(
            FROM ranked GROUP BY stage_key, state)
          SELECT iv.stage_key, iv.state, count(DISTINCT iv.case_id) AS case_count,
            count(iv.value) AS closed_intervals, sum(iv.value IS NULL) AS open_intervals,
+           count(DISTINCT CASE WHEN iv.value IS NOT NULL THEN iv.case_id END) AS completed_cases,
+           count(DISTINCT CASE WHEN iv.value IS NULL THEN iv.case_id END) AS censored_cases,
            avg(iv.value) AS mean, min(iv.value) AS min, max(iv.value) AS max,
            pct.p50, pct.p90
          FROM iv LEFT JOIN pct ON pct.stage_key = iv.stage_key AND pct.state = iv.state
@@ -292,21 +294,41 @@ export async function stageSummary(
       .prepare(
         `WITH ${intervals},
          released AS (SELECT stage_key, state FROM iv GROUP BY stage_key, state
-           HAVING count(DISTINCT case_id) >= ?)
+           HAVING count(DISTINCT case_id) >= ?
+             AND (count(value) = 0 OR count(DISTINCT CASE WHEN value IS NOT NULL THEN case_id END) >= ?)
+             AND (sum(value IS NULL) = 0 OR count(DISTINCT CASE WHEN value IS NULL THEN case_id END) >= ?))
          SELECT count(DISTINCT iv.case_id) AS n FROM iv
          JOIN released ON released.stage_key = iv.stage_key AND released.state = iv.state`,
       )
-      .bind(...binds, minCohort),
+      .bind(...binds, minCohort, minCohort, minCohort),
   ]);
-  type Row = Omit<StageGroup, "dwell_ms"> &
-    Record<"mean" | "p50" | "p90" | "min" | "max", number | null>;
+  type Row = Omit<StageGroup, "dwell_ms"> & {
+    completed_cases: number;
+    censored_cases: number;
+  } & Record<"mean" | "p50" | "p90" | "min" | "max", number | null>;
   const all = (stats?.results ?? []) as Row[];
   const groups = all
-    .filter((g) => g.case_count >= minCohort)
-    .map(({ mean, p50, p90, min, max, ...g }) => ({
-      ...g,
-      dwell_ms: { mean: mean === null ? null : Math.round(mean), p50, p90, min, max },
-    }));
+    .filter(
+      (g) =>
+        g.case_count >= minCohort &&
+        (g.completed_cases === 0 || g.completed_cases >= minCohort) &&
+        (g.censored_cases === 0 || g.censored_cases >= minCohort),
+    )
+    .map(
+      ({
+        mean,
+        p50,
+        p90,
+        min,
+        max,
+        completed_cases: _completed,
+        censored_cases: _censored,
+        ...g
+      }) => ({
+        ...g,
+        dwell_ms: { mean: mean === null ? null : Math.round(mean), p50, p90, min, max },
+      }),
+    );
   const n = (sample?.results?.[0] as { n?: number } | undefined)?.n ?? 0;
   return { groups, sample_count: n, suppressed: groups.length < all.length };
 }
