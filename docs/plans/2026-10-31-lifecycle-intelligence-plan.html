@@ -1,0 +1,165 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Lifecycle intelligence: 12-PR delivery plan</title><style>
+*{box-sizing:border-box}body{margin:0;background:var(--background,#fff);color:var(--foreground,#202124);font:14px/1.5 var(--font-sans,system-ui,sans-serif)}
+main{width:100%;min-width:0}h1{font-size:1.2rem;margin:0 0 .25rem}h2{font-size:1rem;margin:1.6rem 0 .5rem}h3{font-size:.92rem;margin:0}
+p{max-width:78ch;margin:.5rem 0}a{color:var(--accent-surface-foreground,#2458ac)}.meta,.muted{color:var(--muted-foreground,#606773)}
+:focus-visible{outline:2px solid var(--ring,#2458ac);outline-offset:3px}
+code{font-family:var(--font-mono,Menlo,Consolas,monospace);background:var(--code-background,#f1f3f5);color:var(--code-foreground,#202124);padding:0 .2em;border-radius:3px;font-size:.92em}
+pre{font-family:var(--font-mono,Menlo,monospace);background:var(--code-background,#f1f3f5);padding:.6rem;overflow-x:auto;font-size:.8rem}
+.table-scroll{overflow-x:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;vertical-align:top;padding:.45rem;border-bottom:1px solid var(--border,#d8dce2)}th{font-size:.78rem;color:var(--muted-foreground,#606773)}
+.badge,.chip{display:inline-block;border-radius:999px;padding:.1rem .5rem;font-size:.72rem;font-weight:600;white-space:nowrap}
+.badge{background:var(--accent-surface,#eaf0ff);color:var(--accent-surface-foreground,#2458ac)}
+.chip.active{background:var(--accent-surface,#eaf0ff);color:var(--accent-surface-foreground,#2458ac)}
+.chip.todo{background:var(--muted,#f1f3f5);color:var(--muted-foreground,#606773)}
+.chip.risk{background:var(--warning-surface,#fff4d6);color:var(--warning-foreground,#7a5200)}
+.callout{border-left:3px solid var(--accent,#2458ac);background:var(--accent-surface,#eaf0ff);color:var(--accent-surface-foreground,#1a2b4d);border-radius:0 var(--radius,.6rem) var(--radius,.6rem) 0;padding:.65rem .85rem;margin:.75rem 0}
+.warn{border-left-color:var(--warning,#b26b00);background:var(--warning-surface,#fff4d6);color:var(--warning-foreground,#5c3d00)}
+.waves{list-style:none;margin:.75rem 0;padding:0;display:grid;gap:.4rem}
+.wave{display:grid;grid-template-columns:7.5rem 1fr;gap:.6rem;align-items:center;border:1px solid var(--border,#d8dce2);border-radius:var(--radius,.6rem);background:var(--card,#f7f8fa);padding:.45rem .6rem;opacity:0;animation:in .35s ease-out forwards}
+.wave strong{font-size:.8rem}.wave .lane{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center}
+.pill{border:1px solid var(--accent,#2458ac);border-radius:6px;padding:.05rem .4rem;font-size:.76rem;font-weight:600;color:var(--accent-surface-foreground,#2458ac);text-decoration:none;background:var(--background,#fff)}
+.wave.release{border-color:var(--accent,#2458ac)}
+@keyframes in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.wave{animation:none;opacity:1}}
+details{border:1px solid var(--border,#d8dce2);border-radius:var(--radius,.6rem);margin:.5rem 0;background:var(--card,#f7f8fa);color:var(--card-foreground,#202124)}
+summary{cursor:pointer;padding:.55rem .7rem;list-style-position:inside}summary h3{display:inline}
+details .body{padding:0 .7rem .7rem}.kv{display:grid;grid-template-columns:8.5rem 1fr;gap:.2rem .6rem;margin:.3rem 0 .6rem;font-size:.86rem}
+.kv dt{color:var(--muted-foreground,#606773)}.kv dd{margin:0}
+</style></head><body><main>
+<h1>Lifecycle intelligence: 12-PR delivery plan <span class='badge'>Draft for workshop</span></h1>
+<p class='meta'>2026-10-31 · gmackie/flightdeck · branch <code>docs/lifecycle-intelligence-rfc</code> · issue FLIG-17 · targets <code>main</code> only</p>
+<div class='callout'><strong>Recommendation.</strong> Land the contracts first (schema vocabulary and authorization), then the engine adapter, registry and ingest. The read model waits for a passing cross-branch contract test. Nothing is released until gates G1–G8 are green. The design is in the <a href='../rfcs/lifecycle-intelligence/README.md'>RFC</a>; this page is the implementation order.</div>
+<div class='callout warn'><strong>Integration gate.</strong> The current work-in-progress contracts of workstreams A (events, FLIG-19) and B (engine, FLIG-16) are <strong>not compatible</strong>: <code>case.created</code>/<code>case.started</code> vs <code>case.start</code>, <code>stage.entered</code> vs <code>stage.enter</code>, <code>event.corrected</code> vs <code>supersedes</code>, among others. G1 (one vocabulary) and G2 (cross-branch contract test) must pass before PR-07 merges and before any feature release.</div>
+<h2>Overview</h2><p>Twelve PRs deliver process intelligence for any lifecycle (hiring, deployments, incidents, …) on top of the existing Flightdeck Worker. Four of them continue work already in flight (A, B, C, E); the rest are new follow-ups. Old stacked drafts #1–#18 are <strong>not</strong> merged; their reusable concepts are listed in <a href='../rfcs/lifecycle-intelligence/appendix-a-reconciliation.md'>Appendix A</a>.</p>
+<h2>Goals and non-goals</h2><div class='table-scroll'><table><tr><th>Goals</th><th>Non-goals</th></tr><tr><td>One wire vocabulary; idempotent, server-only lifecycle ingest; deterministic fold; D1 read model rebuildable from Iceberg; an API with freshness, sample and comparability in every response; scoped reads with suppression; a read-only MCP; accessible segmented bars</td><td>A workflow engine; people analytics or actor identities; causal claims, simulation or experiments; changes to existing events/sessions/live/trends behavior; merging the old <code>feat/*</code> stack</td></tr></table></div>
+<h2>Dependency waves</h2><ol class='waves' aria-label='Delivery waves in order'>
+<li class='wave' style='animation-delay:0ms'><strong>Wave 0</strong><div class='lane'><span class='muted'>Workshop: D2, G1, G5 decisions</span></div></li>
+<li class='wave' style='animation-delay:70ms'><strong>Wave 1</strong><div class='lane'><a class='pill' href='#PR-01' title='Lifecycle schema contract: normalized vocabulary and definition additions'>PR-01</a><a class='pill' href='#PR-04' title='Read authorization (rebase of draft PR #31) mapped to lifecycle operations'>PR-04</a> <span class='muted'>Contracts</span></div></li>
+<li class='wave' style='animation-delay:140ms'><strong>Wave 2</strong><div class='lane'><a class='pill' href='#PR-02' title='Basin lifecycle stream, provisioning and capability matrix'>PR-02</a><a class='pill' href='#PR-03' title='Engine adapter and semantics vectors'>PR-03</a><a class='pill' href='#PR-05' title='Definitions registry: D1 table, publish/list API, CLI'>PR-05</a> <span class='muted'>Foundations</span></div></li>
+<li class='wave' style='animation-delay:210ms'><strong>Wave 3</strong><div class='lane'><a class='pill' href='#PR-06' title='Lifecycle ingest: RPC and HTTP, scopes, capability, mode flag, stream commit, CaseDO log'>PR-06</a> <span class='muted'>Write path</span></div></li>
+<li class='wave' style='animation-delay:280ms'><strong>Wave 4</strong><div class='lane'><a class='pill' href='#PR-07' title='CaseDO fold and D1 read-model projection'>PR-07</a> <span class='muted'>Read model (needs G2)</span></div></li>
+<li class='wave' style='animation-delay:350ms'><strong>Wave 5</strong><div class='lane'><a class='pill' href='#PR-08' title='Lifecycle query API v1 with the response envelope'>PR-08</a><a class='pill' href='#PR-09' title='Operations: aggregation, reconciliation, replay, retention, erasure, diagnostics'>PR-09</a><a class='pill' href='#PR-10' title='SDK helper, CLI producer commands, instrumentation skill'>PR-10</a> <span class='muted'>Serve and operate</span></div></li>
+<li class='wave' style='animation-delay:420ms'><strong>Wave 6</strong><div class='lane'><a class='pill' href='#PR-11' title='Dashboard: Processes page with nested segmented bars'>PR-11</a><a class='pill' href='#PR-12' title='Scorecards, alerts and the read-only MCP endpoint'>PR-12</a> <span class='muted'>Experience</span></div></li>
+<li class='wave release' style='animation-delay:490ms'><strong>Release</strong><div class='lane'><span class='muted'>G3–G8 green → LIFECYCLE_MODE=on</span></div></li>
+</ol>
+<details class='mermaid-source'><summary>Dependency graph source (Mermaid)</summary><pre>flowchart LR
+  W0[Workshop D2 G1 G5] --&gt; P01 &amp; P04
+  P01 --&gt; P02
+  P01 --&gt; P03
+  P01 --&gt; P05
+  P04 --&gt; P05
+  P01 --&gt; P06
+  P02 --&gt; P06
+  P05 --&gt; P06
+  P03 --&gt; P07
+  P06 --&gt; P07
+  G2 --&gt; P07
+  P04 --&gt; P08
+  P07 --&gt; P08
+  P02 --&gt; P09
+  P07 --&gt; P09
+  P05 --&gt; P10
+  P06 --&gt; P10
+  P08 --&gt; P11
+  P08 --&gt; P12
+  P09 --&gt; P12
+  P11 &amp; P12 --&gt; REL[Release: G3-G8]</pre></details>
+<h2>PRs</h2><p class='muted'>Status as of 2026-10-31. “In flight” means unmerged work exists; nothing here is shipped.</p>
+<details id='PR-01'><summary><h3>PR-01 · Lifecycle schema contract: normalized vocabulary and definition additions</h3> <span class='chip active'>In flight (A WIP, not compatible with B yet)</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>A · FLIG-19</dd><dt>Prerequisites</dt><dd>Workshop decisions on D2 (vocabulary and its three sub-decisions) and G5 (definition additions)</dd><dt>Acceptance</dt><dd>G1 items 1, 3, 4 and G5 green; the RFC example events parse; existing analytics schema tests unchanged; <code>pnpm lint typecheck test smoke:pack</code> pass.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td>Adopt the normalized transition and field names from RFC 03 §3.3 / 13 D2 as the single export (<code>LIFECYCLE_TRANSITIONS</code>, <code>LifecycleEventV1</code>)</td><td><code>packages/schema/src/lifecycle.ts</code><br><code>packages/schema/src/index.ts</code></td><td>Type tests; <code>rg 'case\.start\b|stage\.enter\b|supersedes'</code> finds nothing outside adapters</td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td>Make <code>reason</code> required on <code>stage.blocked|unblocked</code>; reserve relation type <code>parent</code>; decide <code>case.migrated</code></td><td><code>packages/schema/src/lifecycle.ts</code></td><td>Schema tests for each rule</td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td>Add the RFC 05 §5.1 definition fields, or record their deferral to <code>schemaVersion: 2</code></td><td><code>packages/schema/src/lifecycle.ts</code></td><td>RFC example definitions parse (<code>docs/rfcs/lifecycle-intelligence/examples/*/definitions</code>)</td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td>Protected-characteristic denylist for <code>restricted</code> definitions and dimensions</td><td><code>packages/schema/src/lifecycle.ts</code><br><code>packages/schema/test/lifecycle.test.ts</code></td><td>Denylist tests (G7 item 1)</td><td><span class='chip active'>In flight</span></td></tr>
+</table></div></div></details>
+<details id='PR-02'><summary><h3>PR-02 · Basin lifecycle stream, provisioning and capability matrix</h3> <span class='chip todo'>Not started</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>A + ops</dd><dt>Prerequisites</dt><dd>PR-01 record type (<code>LifecycleRecord</code>) agreed</dd><dt>Acceptance</dt><dd>G6 green: matrix committed, including the answer on row delete or rewrite (OQ-3). No Worker code change. No fake stream ids in <code>wrangler.jsonc</code>.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td>Add <code>fd_lifecycle_events</code> stream (binding only), sink to <code>flightdeck.lifecycle_events</code>, pipeline</td><td><code>scripts/provision-dev.sh</code><br><code>apps/flightdeck/pipelines/lifecycle_events.schema.json</code></td><td>Script is idempotent on a dev account; <code>wrangler basin pipelines streams get</code></td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td>Run every probe in RFC 08 §8.2 against a dev warehouse; record results, bytes scanned and timings</td><td><code>docs/operations/lifecycle-basin.md</code></td><td>Matrix committed; fallbacks marked needed or not</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td>Record current unit prices for the RFC 12 §12.3 cost model</td><td><code>docs/operations/lifecycle-costs.md</code></td><td>Reviewed by owner</td><td><span class='chip todo'>Todo</span></td></tr>
+</table></div></div></details>
+<details id='PR-03'><summary><h3>PR-03 · Engine adapter and semantics vectors</h3> <span class='chip active'>In flight (B WIP uses its own vocabulary)</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>B · FLIG-16</dd><dt>Prerequisites</dt><dd>PR-01</dd><dt>Acceptance</dt><dd>G1 item 2 green; the three RFC examples produce their <code>expected.json</code>; package stays dependency-free and passes <code>smoke:pack</code>.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td>Consume <code>LifecycleEventV1</code> directly, or ship an exhaustive <code>fromWire(events, definitions)</code></td><td><code>packages/lifecycle/src/*</code></td><td>Type-level exhaustiveness test fails when a transition is added</td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td>Implement RFC 04 rules with one test per <code>T-…</code> vector</td><td><code>packages/lifecycle/test/*</code></td><td>All vectors pass, including the 04 worked numbers</td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td>Property tests: permutation invariance, duplicate idempotence, correction before target, decomposition sums, attribution sums</td><td><code>packages/lifecycle/test/properties.test.ts</code></td><td>1,000 seeds each in CI</td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td>Fold benchmark: a 2,000-event case</td><td><code>packages/lifecycle/test/bench.test.ts</code></td><td>&lt; 20 ms CPU threshold in CI</td><td><span class='chip active'>In flight</span></td></tr>
+</table></div></div></details>
+<details id='PR-04'><summary><h3>PR-04 · Read authorization (rebase of draft PR #31) mapped to lifecycle operations</h3> <span class='chip active'>Draft PR #31 open</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>E · FLIG-18</dd><dt>Prerequisites</dt><dd>None beyond <code>main</code></dd><dt>Acceptance</dt><dd>E's own acceptance criteria plus the 06 §6.4 mapping; lifecycle routes always enforce regardless of <code>READ_AUTHZ_MODE</code>; live/trends behavior unchanged in <code>legacy</code>.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td>Rebase #31 onto <code>main</code>; renumber its migration to the next free number</td><td><code>apps/flightdeck/migrations/00NN_read_authorization.sql</code></td><td>Migration test on fresh D1 (G3)</td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td>Expose the RFC 06 §6.4 operation→role table as one function; restricted-process rules; shared suppression with complementary suppression</td><td><code>apps/flightdeck/src/api/authorization.ts</code><br><code>src/api/lifecycle-policy.ts</code></td><td>Adversarial tests extended for restricted k = 10 and complementary suppression</td><td><span class='chip active'>In flight</span></td></tr>
+</table></div></div></details>
+<details id='PR-05'><summary><h3>PR-05 · Definitions registry: D1 table, publish/list API, CLI</h3> <span class='chip todo'>Not started</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>RFC follow-up (new issue)</dd><dt>Prerequisites</dt><dd>PR-01, PR-04</dd><dt>Acceptance</dt><dd>Definitions publish behind E's owner role; published bodies immutable; comparability matches RFC 05 §5.3; <code>LIFECYCLE_MODE=off</code> hides the routes.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td>Migration with <code>li_definitions</code></td><td><code>apps/flightdeck/migrations/00NN_lifecycle_definitions.sql</code></td><td>Migration test</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td><code>POST /api/apps/:app/li/definitions</code> (owner), <code>GET …/processes/:p/definitions[/:v]</code>; immutability, comparability classes</td><td><code>apps/flightdeck/src/lifecycle/definitions.ts</code><br><code>src/api/index.ts</code></td><td>201 / 200 idempotent / 409 conflict tests; comparability class tests for the hiring v1→v2 split</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td>CLI <code>li definitions validate|publish|list|show|deprecate</code></td><td><code>packages/create-flightdeck/src/li-definitions.ts</code></td><td>CLI tests with the RFC example definitions</td><td><span class='chip todo'>Todo</span></td></tr>
+</table></div></div></details>
+<details id='PR-06'><summary><h3>PR-06 · Lifecycle ingest: RPC and HTTP, scopes, capability, mode flag, stream commit, CaseDO log</h3> <span class='chip active'>In flight (A WIP covers RPC/HTTP/scopes)</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>A · FLIG-19</dd><dt>Prerequisites</dt><dd>PR-01, PR-02, PR-05</dd><dt>Acceptance</dt><dd>Producers can write in <code>shadow</code>; existing <code>/v1/server/events</code> and browser ingest unchanged; p95 &lt; 250 ms for 100 events / 10 cases in the Workers pool test.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td><code>ingestLifecycleBatch</code> / <code>trackLifecycle</code>; <code>POST /v1/lifecycle/events</code>; key scopes and <code>app_capabilities</code> migration</td><td><code>apps/flightdeck/src/ingest/lifecycle*.ts</code><br><code>migrations/00NN_lifecycle_write.sql</code></td><td>Scope, capability, envelope and size tests</td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td>All-or-nothing validation against the registry; future-skew rejection; no clamping</td><td><code>apps/flightdeck/src/ingest/lifecycle-service.ts</code></td><td>Backfill keeps <code>occurredAt</code>; 400 carries <code>index</code></td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td>Stream commit, then awaited CaseDO <code>append</code> (log, dedupe, conflicts only; no fold yet); 503 on either failure</td><td><code>apps/flightdeck/src/lifecycle/case-do.ts</code></td><td>Retry converges: stream duplicate, CaseDO no-op</td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td><code>LIFECYCLE_MODE</code> var; <code>CaseDO</code> binding and <code>v2</code> DO migration; Access bypass docs</td><td><code>apps/flightdeck/wrangler.jsonc</code><br><code>docs/operations/lifecycle-ingestion.md</code></td><td><code>off</code> returns 404 / disabled; deploy dry-run</td><td><span class='chip active'>In flight</span></td></tr>
+</table></div></div></details>
+<details id='PR-07'><summary><h3>PR-07 · CaseDO fold and D1 read-model projection</h3> <span class='chip todo'>Not started</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>RFC follow-up + B</dd><dt>Prerequisites</dt><dd>PR-03, PR-06, <strong>G2 passing on the integration branch</strong></dd><dt>Acceptance</dt><dd>The three RFC examples, ingested through the real path, produce the <code>expected.json</code> projections in D1 and the CaseDO; G2 runs in CI.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td>Fold with the B engine; alarm-debounced projection with the <code>projection_seq</code> guard</td><td><code>apps/flightdeck/src/lifecycle/case-do.ts</code><br><code>src/lifecycle/project.ts</code></td><td>Stale-projection test; statement count ≤ 50 for 2,000 events</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td>Read-model migration: <code>li_cases</code>, <code>li_stage_instances</code>, <code>li_intervals</code>, <code>li_relations</code>, <code>li_diagnostics</code>, <code>li_dirty_days</code></td><td><code>apps/flightdeck/migrations/00NN_lifecycle_read_model.sql</code></td><td>Migration test</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td>Root contract project running A + B against F and the RFC examples</td><td><code>contract/lifecycle/*</code><br><code>vitest.config.ts</code></td><td>G2 in CI on <code>main</code></td><td><span class='chip todo'>Todo</span></td></tr>
+</table></div></div></details>
+<details id='PR-08'><summary><h3>PR-08 · Lifecycle query API v1 with the response envelope</h3> <span class='chip todo'>Not started (worktree empty)</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>RFC follow-up (unnamed serving-api worktree)</dd><dt>Prerequisites</dt><dd>PR-04, PR-07</dd><dt>Acceptance</dt><dd>API budgets from RFC 12 §12.4 met on a 100k-case F fixture; G4 green; restricted rules return 422 with the rule name.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td>Endpoints <code>processes, flow, stages, funnel, wip, throughput, cohorts, cases, cases/:case, children, diagnostics</code></td><td><code>apps/flightdeck/src/api/lifecycle/*.ts</code></td><td>Contract tests on <code>meta</code> keys for every route</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td>Exact versus histogram selection; Kaplan–Meier; Wilson intervals; canonical pooling with comparability splitting</td><td><code>apps/flightdeck/src/lifecycle/stats.ts</code></td><td>T-CEN-1 and comparability tests</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td>Every route through the authorization and suppression function</td><td><code>apps/flightdeck/src/api/lifecycle/index.ts</code></td><td>G4 route-table test</td><td><span class='chip todo'>Todo</span></td></tr>
+</table></div></div></details>
+<details id='PR-09'><summary><h3>PR-09 · Operations: aggregation, reconciliation, replay, retention, erasure, diagnostics</h3> <span class='chip todo'>Not started</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>RFC follow-up (+ query-analytics worktree)</dd><dt>Prerequisites</dt><dd>PR-02 (G6), PR-07</dd><dt>Acceptance</dt><dd>Reconciliation and replay pass against the Basin fake and one dev-warehouse run; the raw-tier erasure job contract is documented with the G6 outcome.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td><code>triggers.crons</code>; leases; dirty-day aggregation into <code>li_daily_*</code></td><td><code>apps/flightdeck/src/lifecycle/cron.ts</code><br><code>migrations/00NN_lifecycle_ops.sql</code></td><td>Cron tick &lt; 30 s wall in a test with seeded dirty days</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td>Reconciliation per receipt hour; replay jobs (verify, merge, rebuild) via Workflows or cron</td><td><code>apps/flightdeck/src/lifecycle/reconcile.ts</code><br><code>src/lifecycle/replay.ts</code></td><td>Basin fake with missing, duplicate and late rows</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td>Retention sweep, erasure API and tombstones, <code>/li/health</code>; CLI <code>li doctor|replay|reconcile|erase|export-case</code></td><td><code>apps/flightdeck/src/lifecycle/retention.ts</code><br><code>packages/create-flightdeck/src/li-ops.ts</code></td><td>Erasure &lt; 1 h path test; replay never resurrects erased cases</td><td><span class='chip todo'>Todo</span></td></tr>
+</table></div></div></details>
+<details id='PR-10'><summary><h3>PR-10 · SDK helper, CLI producer commands, instrumentation skill</h3> <span class='chip todo'>Not started</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>RFC follow-up</dd><dt>Prerequisites</dt><dd>PR-05, PR-06</dd><dt>Acceptance</dt><dd>A producer can be instrumented end to end from the skill; npm exports of the helper stay prerelease until release gates pass.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td><code>lifecycle()</code> helper with <code>caseRef</code>, <code>eventId</code>, builders, <code>validate</code>, <code>send</code></td><td><code>packages/worker/src/lifecycle.ts</code><br><code>packages/worker/README.md</code></td><td>Unit tests; <code>smoke:pack</code> typechecks a lifecycle producer</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td>CLI <code>li emit|keys add|cases|case|flow|stages|wip|funnel</code></td><td><code>packages/create-flightdeck/src/li.ts</code></td><td>CLI tests; exit codes 0/1/2/3</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td>Skill <code>skills/flightdeck-instrument-lifecycle</code>; extend <code>pii-check.sh</code> with the protected-characteristic list</td><td><code>skills/flightdeck-instrument-lifecycle/**</code><br><code>skills/flightdeck-instrument-worker/scripts/pii-check.sh</code></td><td>Seeded-violation test for the script</td><td><span class='chip todo'>Todo</span></td></tr>
+</table></div></div></details>
+<details id='PR-11'><summary><h3>PR-11 · Dashboard: Processes page with nested segmented bars</h3> <span class='chip active'>In flight (C demo on local fixtures)</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>C · FLIG-15</dd><dt>Prerequisites</dt><dd>PR-08 (C's components can merge earlier on fixtures behind the mode flag)</dd><dt>Acceptance</dt><dd>Processes page passes accessibility tests and renders the three RFC examples from a staging API in <code>shadow</code> for owners.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td>Switch C's adapter from fixtures to the RFC 08 API; keep the fixture adapter for Storybook-style tests</td><td><code>apps/dashboard/src/workflows/*</code><br><code>src/pages/*</code></td><td>Adapter tests</td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td>Bars meet RFC 11: additive-only, patterns, keyboard, table equivalent, freshness footer</td><td><code>apps/dashboard/src/lifecycle/LifecycleBar.tsx</code></td><td>axe in light and dark; keyboard path tests; percentiles cannot be stacked (type test)</td><td><span class='chip active'>In flight</span></td></tr>
+<tr><td>Lazy route; nav shown via <code>/api/me</code> features</td><td><code>apps/dashboard/src/nav.ts</code><br><code>src/router.ts</code></td><td>Bundle ≤ 40 KB gzip added</td><td><span class='chip active'>In flight</span></td></tr>
+</table></div></div></details>
+<details id='PR-12'><summary><h3>PR-12 · Scorecards, alerts and the read-only MCP endpoint</h3> <span class='chip todo'>Not started</span></summary><div class='body'>
+<dl class='kv'><dt>Workstream</dt><dd>RFC follow-up</dd><dt>Prerequisites</dt><dd>PR-08, PR-09</dd><dt>Acceptance</dt><dd>No mutating MCP tool exists; every tool result carries <code>meta</code>; alert payloads contain no case ids for restricted processes.</dd></dl>
+<div class='table-scroll'><table><tr><th>Task</th><th>Files</th><th>Verification</th><th>Status</th></tr>
+<tr><td>Scorecard and alert tables, evaluation in the cron, signed webhooks</td><td><code>apps/flightdeck/src/lifecycle/scorecards.ts</code><br><code>src/lifecycle/alerts.ts</code><br><code>migrations/00NN_lifecycle_alerts.sql</code></td><td>Hysteresis and dedup tests; <code>insufficient_data</code> never shown as met</td><td><span class='chip todo'>Todo</span></td></tr>
+<tr><td><code>POST /mcp</code> with the RFC 10 §10.5 resources and tools over the same handlers</td><td><code>apps/flightdeck/src/mcp/*</code></td><td>Test: the tool list maps only to GET handlers; service tokens denied restricted and case-level data</td><td><span class='chip todo'>Todo</span></td></tr>
+</table></div></div></details>
+<h2>Integration and release gates</h2><div class='table-scroll'><table><tr><th>Gate</th><th>What</th><th>Blocks</th><th>Owner</th></tr>
+<tr><td><a href='../rfcs/lifecycle-intelligence/appendix-a-reconciliation.md'>G1</a></td><td>Shared vocabulary</td><td>PR-03, PR-07</td><td>A + B</td></tr>
+<tr><td><a href='../rfcs/lifecycle-intelligence/appendix-a-reconciliation.md'>G2</a></td><td>Cross-branch contract test</td><td>PR-07, release</td><td>A + B + F</td></tr>
+<tr><td><a href='../rfcs/lifecycle-intelligence/appendix-a-reconciliation.md'>G3</a></td><td>Migration order</td><td>every migration PR</td><td>each author</td></tr>
+<tr><td><a href='../rfcs/lifecycle-intelligence/appendix-a-reconciliation.md'>G4</a></td><td>Authorization wiring</td><td>PR-08, PR-12</td><td>E + PR-08</td></tr>
+<tr><td><a href='../rfcs/lifecycle-intelligence/appendix-a-reconciliation.md'>G5</a></td><td>Definition additions before the schema freezes</td><td>PR-01</td><td>A + RFC</td></tr>
+<tr><td><a href='../rfcs/lifecycle-intelligence/appendix-a-reconciliation.md'>G6</a></td><td>Basin capability matrix</td><td>PR-09, Explore</td><td>PR-02</td></tr>
+<tr><td><a href='../rfcs/lifecycle-intelligence/appendix-a-reconciliation.md'>G7</a></td><td>Privacy review for restricted processes</td><td>any restricted process on</td><td>RFC + E + owner</td></tr>
+<tr><td><a href='../rfcs/lifecycle-intelligence/appendix-a-reconciliation.md'>G8</a></td><td>Seven-day shadow soak</td><td>LIFECYCLE_MODE=on</td><td>ops</td></tr>
+</table></div>
+<h2>Risks and mitigations</h2><div class='table-scroll'><table><tr><th>Risk</th><th>Likelihood / impact</th><th>Mitigation</th></tr><tr><td>Workstreams merge with divergent vocabularies</td><td><span class='chip risk'>Likely / high</span></td><td>G1 + G2 block PR-07 and release; one export in <code>@flightdeckhq/schema</code></td></tr><tr><td>Basin SQL lacks capabilities replay or reconciliation assume</td><td><span class='chip risk'>Possible / medium</span></td><td>G6 matrix in PR-02; every assumption has a fallback (RFC 08 §8.2)</td></tr><tr><td>Raw-tier erasure is impossible natively</td><td><span class='chip risk'>Possible / high for hiring</span></td><td>Pseudonymous ids; external Iceberg job; restricted processes stay off until G7</td></tr><tr><td>Migration number collisions (A 0005, E 0010)</td><td><span class='chip risk'>Likely / low</span></td><td>G3: renumber at merge; fresh-D1 migration test</td></tr><tr><td>Re-identification on small hiring cohorts</td><td><span class='chip risk'>Possible / high</span></td><td>k = 10, complementary suppression, 28-day windows, one breakdown, read audit (RFC 06)</td></tr><tr><td>D1 size growth from high-volume processes</td><td><span class='chip risk'>Possible / medium</span></td><td>2 GB budget, <code>readModel.aggregatesOnlyAfter</code>, doctor warning at 70%</td></tr><tr><td>Someone revives the old <code>feat/*</code> stack</td><td><span class='chip risk'>Unlikely / high</span></td><td>Appendix A policy: port concepts by fresh PRs only</td></tr></table></div>
+<h2>Verification</h2><p>Per PR: <code>pnpm lint</code>, <code>pnpm typecheck</code>, <code>pnpm test</code>, <code>pnpm smoke:pack</code> and the PR's acceptance line. Before release: G2 green in CI, the F 100k-case fixture within the RFC 12 §12.4 budgets, a seven-day shadow soak (G8) recorded in FLIG-17 with <code>li doctor --json</code>, and owner sign-off for any restricted process (G7).</p>
+<h2>Open questions</h2><p>OQ-1…OQ-8 in <a href='../rfcs/lifecycle-intelligence/13-decision-records.md'>13 Decision records</a>, to settle at the <a href='../rfcs/lifecycle-intelligence/appendix-b-workshop.md'>workshop</a>.</p>
+</main></body></html>

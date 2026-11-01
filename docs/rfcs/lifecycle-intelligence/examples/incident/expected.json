@@ -1,0 +1,290 @@
+{
+  "asOf": "2026-10-12T00:00:00Z",
+  "foldSemantics": "RFC 04",
+  "ingest": {
+    "linesReceived": 31,
+    "distinctEventIds": 31,
+    "duplicates": 0,
+    "conflictingDuplicates": 0,
+    "retracted": [],
+    "effectiveTransitions": 31
+  },
+  "cases": [
+    {
+      "caseId": "inc_51f7aa",
+      "processId": "incident.response",
+      "definitionVersion": 1,
+      "parent": null,
+      "status": "closed",
+      "outcome": "success",
+      "outcomeStageId": "resolved",
+      "createdAt": "2026-10-09T02:10:00Z",
+      "firstClosedAt": "2026-10-09T05:35:00Z",
+      "closedAt": "2026-10-09T08:35:00Z",
+      "reopenCount": 1,
+      "elapsedMs": 23100000,
+      "time": {
+        "workingMs": 12300000,
+        "blockedMs": 3600000,
+        "pausedMs": 0,
+        "betweenMs": 0,
+        "closedGapMs": 7200000
+      },
+      "derived": {
+        "activeMs": 15900000,
+        "flowEfficiency": 0.7736,
+        "blockedShare": 0.2264,
+        "timeToFirstCloseMs": 12300000,
+        "timeToStage": {
+          "monitoring": 8700000
+        }
+      },
+      "relations": [
+        {
+          "type": "caused_by",
+          "objectType": "deploy",
+          "objectId": "dpl_9a40d2"
+        }
+      ],
+      "children": {
+        "incident.remediation": {
+          "open": 1,
+          "closed": 1
+        }
+      },
+      "stageInstances": [
+        {
+          "stageInstanceId": "inc_51f7aa.triage.1",
+          "stageId": "triage",
+          "canonicalStageId": "triage",
+          "visit": 1,
+          "enteredAt": "2026-10-09T02:10:00Z",
+          "exitedAt": "2026-10-09T02:25:00Z",
+          "censored": false,
+          "wallMs": 900000,
+          "workingMs": 900000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "inc_51f7aa.investigating.1",
+          "stageId": "investigating",
+          "canonicalStageId": "investigating",
+          "visit": 1,
+          "enteredAt": "2026-10-09T02:25:00Z",
+          "exitedAt": "2026-10-09T04:05:00Z",
+          "censored": false,
+          "wallMs": 6000000,
+          "workingMs": 2400000,
+          "blockedMs": 3600000,
+          "pausedMs": 0,
+          "blockedByReason": {
+            "vendor_response": 3000000,
+            "awaiting_access": 600000
+          }
+        },
+        {
+          "stageInstanceId": "inc_51f7aa.mitigating.1",
+          "stageId": "mitigating",
+          "canonicalStageId": "mitigating",
+          "visit": 1,
+          "enteredAt": "2026-10-09T04:05:00Z",
+          "exitedAt": "2026-10-09T04:35:00Z",
+          "censored": false,
+          "wallMs": 1800000,
+          "workingMs": 1800000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "inc_51f7aa.monitoring.1",
+          "stageId": "monitoring",
+          "canonicalStageId": "monitoring",
+          "visit": 1,
+          "enteredAt": "2026-10-09T04:35:00Z",
+          "exitedAt": "2026-10-09T05:35:00Z",
+          "censored": false,
+          "wallMs": 3600000,
+          "workingMs": 3600000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "inc_51f7aa.resolved.1",
+          "stageId": "resolved",
+          "canonicalStageId": "resolved",
+          "visit": 1,
+          "enteredAt": "2026-10-09T05:35:00Z",
+          "exitedAt": "2026-10-09T07:35:00Z",
+          "terminal": true,
+          "note": "closed by case.reopened; the 2 h is closed gap, not dwell"
+        },
+        {
+          "stageInstanceId": "inc_51f7aa.monitoring.2",
+          "stageId": "monitoring",
+          "canonicalStageId": "monitoring",
+          "visit": 2,
+          "enteredAt": "2026-10-09T07:35:00Z",
+          "exitedAt": "2026-10-09T08:35:00Z",
+          "censored": false,
+          "wallMs": 3600000,
+          "workingMs": 3600000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "inc_51f7aa.resolved.2",
+          "stageId": "resolved",
+          "canonicalStageId": "resolved",
+          "visit": 2,
+          "enteredAt": "2026-10-09T08:35:00Z",
+          "exitedAt": null,
+          "terminal": true
+        }
+      ],
+      "intervals": [
+        {
+          "kind": "block",
+          "stageInstanceId": "inc_51f7aa.investigating.1",
+          "reason": "vendor_response",
+          "startAt": "2026-10-09T02:50:00Z",
+          "endAt": "2026-10-09T03:50:00Z",
+          "rawMs": 3600000,
+          "attributedMs": 3000000
+        },
+        {
+          "kind": "block",
+          "stageInstanceId": "inc_51f7aa.investigating.1",
+          "reason": "awaiting_access",
+          "startAt": "2026-10-09T03:20:00Z",
+          "endAt": "2026-10-09T03:40:00Z",
+          "rawMs": 1200000,
+          "attributedMs": 600000
+        }
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "rem_a1c3e5",
+      "processId": "incident.remediation",
+      "definitionVersion": 1,
+      "parent": {
+        "objectType": "incident",
+        "caseId": "inc_51f7aa",
+        "resolved": true
+      },
+      "status": "closed",
+      "outcome": "success",
+      "outcomeStageId": "done",
+      "createdAt": "2026-10-09T09:00:00Z",
+      "firstClosedAt": "2026-10-10T09:00:00Z",
+      "closedAt": "2026-10-10T09:00:00Z",
+      "reopenCount": 0,
+      "elapsedMs": 86400000,
+      "time": {
+        "workingMs": 86400000,
+        "blockedMs": 0,
+        "pausedMs": 0,
+        "betweenMs": 0,
+        "closedGapMs": 0
+      },
+      "stageInstances": [
+        {
+          "stageInstanceId": "rem_a1c3e5.todo.1",
+          "stageId": "todo",
+          "canonicalStageId": "todo",
+          "visit": 1,
+          "enteredAt": "2026-10-09T09:00:00Z",
+          "exitedAt": "2026-10-09T10:00:00Z",
+          "censored": false,
+          "wallMs": 3600000,
+          "workingMs": 3600000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "rem_a1c3e5.in_progress.1",
+          "stageId": "in_progress",
+          "canonicalStageId": "in_progress",
+          "visit": 1,
+          "enteredAt": "2026-10-09T10:00:00Z",
+          "exitedAt": "2026-10-10T09:00:00Z",
+          "censored": false,
+          "wallMs": 82800000,
+          "workingMs": 82800000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "rem_a1c3e5.done.1",
+          "stageId": "done",
+          "canonicalStageId": "done",
+          "visit": 1,
+          "enteredAt": "2026-10-10T09:00:00Z",
+          "exitedAt": null,
+          "terminal": true
+        }
+      ],
+      "diagnostics": []
+    },
+    {
+      "caseId": "rem_b2d4f6",
+      "processId": "incident.remediation",
+      "definitionVersion": 1,
+      "parent": {
+        "objectType": "incident",
+        "caseId": "inc_51f7aa",
+        "resolved": true
+      },
+      "status": "open",
+      "outcome": null,
+      "createdAt": "2026-10-09T09:00:00Z",
+      "firstClosedAt": null,
+      "closedAt": null,
+      "reopenCount": 0,
+      "censored": true,
+      "elapsedMs": 226800000,
+      "time": {
+        "workingMs": 226800000,
+        "blockedMs": 0,
+        "pausedMs": 0,
+        "betweenMs": 0,
+        "closedGapMs": 0
+      },
+      "derived": {
+        "currentStageId": "in_progress",
+        "currentStageAgeMs": 86400000,
+        "caseAgeMs": 226800000
+      },
+      "stageInstances": [
+        {
+          "stageInstanceId": "rem_b2d4f6.todo.1",
+          "stageId": "todo",
+          "canonicalStageId": "todo",
+          "visit": 1,
+          "enteredAt": "2026-10-09T09:00:00Z",
+          "exitedAt": "2026-10-11T00:00:00Z",
+          "censored": false,
+          "wallMs": 140400000,
+          "workingMs": 140400000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "rem_b2d4f6.in_progress.1",
+          "stageId": "in_progress",
+          "canonicalStageId": "in_progress",
+          "visit": 1,
+          "enteredAt": "2026-10-11T00:00:00Z",
+          "exitedAt": null,
+          "censored": true,
+          "wallMs": 86400000,
+          "workingMs": 86400000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        }
+      ],
+      "diagnostics": []
+    }
+  ]
+}

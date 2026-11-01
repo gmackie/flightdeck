@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "processId": "delivery.deploy",
+  "version": 1,
+  "name": "Service deploy",
+  "caseType": "deploy",
+  "sensitivity": "standard",
+  "stages": [
+    {
+      "stageId": "queued",
+      "name": "Queued",
+      "kind": "wait",
+      "group": "build_test",
+      "canonicalStageId": "queued"
+    },
+    {
+      "stageId": "build",
+      "name": "Build",
+      "kind": "work",
+      "group": "build_test",
+      "canonicalStageId": "build",
+      "ageLimitMs": 1800000
+    },
+    {
+      "stageId": "test",
+      "name": "Test",
+      "kind": "work",
+      "group": "build_test",
+      "canonicalStageId": "test",
+      "ageLimitMs": 2700000
+    },
+    {
+      "stageId": "approval",
+      "name": "Approval",
+      "kind": "wait",
+      "group": "approval",
+      "canonicalStageId": "approval",
+      "ageLimitMs": 14400000
+    },
+    {
+      "stageId": "rollout_staging",
+      "name": "Roll out to staging",
+      "kind": "work",
+      "group": "staging",
+      "canonicalStageId": "rollout_staging"
+    },
+    {
+      "stageId": "verify_staging",
+      "name": "Verify staging",
+      "kind": "work",
+      "group": "staging",
+      "canonicalStageId": "verify_staging"
+    },
+    {
+      "stageId": "rollout_production",
+      "name": "Roll out to production",
+      "kind": "work",
+      "group": "production",
+      "canonicalStageId": "rollout_production",
+      "ageLimitMs": 3600000
+    },
+    {
+      "stageId": "verify_production",
+      "name": "Verify production",
+      "kind": "work",
+      "group": "production",
+      "canonicalStageId": "verify_production",
+      "ageLimitMs": 1800000
+    },
+    {
+      "stageId": "succeeded",
+      "name": "Succeeded",
+      "kind": "terminal",
+      "outcome": "success",
+      "group": "outcome",
+      "canonicalStageId": "succeeded"
+    },
+    {
+      "stageId": "rolled_back",
+      "name": "Rolled back",
+      "kind": "terminal",
+      "outcome": "failure",
+      "group": "outcome",
+      "canonicalStageId": "rolled_back"
+    },
+    {
+      "stageId": "failed",
+      "name": "Failed",
+      "kind": "terminal",
+      "outcome": "failure",
+      "group": "outcome",
+      "canonicalStageId": "failed"
+    }
+  ],
+  "dimensions": [
+    {
+      "key": "env",
+      "values": [
+        "staging",
+        "production"
+      ],
+      "breakdown": true
+    },
+    {
+      "key": "service_tier",
+      "values": [
+        "tier1",
+        "tier2",
+        "tier3"
+      ],
+      "breakdown": true
+    }
+  ],
+  "relations": [
+    {
+      "type": "parent",
+      "objectType": "release",
+      "processId": "delivery.release"
+    },
+    {
+      "type": "blocked_by",
+      "objectType": "change_request"
+    }
+  ],
+  "failureReasons": [
+    "failed",
+    "timeout"
+  ],
+  "maxDepth": 3,
+  "calendar": "wall"
+}
