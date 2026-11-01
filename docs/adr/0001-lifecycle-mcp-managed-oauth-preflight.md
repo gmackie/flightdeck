@@ -1,7 +1,8 @@
 # ADR: lifecycle MCP Managed OAuth preflight (FLIG-37)
 
 Status: accepted for local preflight only; activation blocked on staging evidence.
-Base: PR #49, `63d45b609ae8fc06dadc014e2fcf44a7efb176c4`.
+Base: `origin/main` at merged integration PR #52 (`53a9382`); originally based
+on PR #49 at `63d45b609ae8fc06dadc014e2fcf44a7efb176c4`.
 
 The MCP origin already verifies an Access assertion and sends that unchanged assertion
 through the private named `LifecycleReadEntrypoint`. The backend verifies it again

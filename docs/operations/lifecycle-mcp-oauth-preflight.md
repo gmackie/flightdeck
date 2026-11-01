@@ -1,6 +1,6 @@
 # Lifecycle MCP Managed OAuth preflight (FLIG-37)
 
-**Non-deploying draft stacked on PR #49. No production activation.** This is a
+**Non-deploying draft against main after integration PR #52 (`53a9382`). No production activation.** Originally based on PR #49, this is a
 standalone offline harness and origin security regression suite. A browser OAuth
 handshake in a Cloudflare account, CloudflareOS interoperability, consented scope
 propagation and revocation are **unverified**. No credentials, clients, Access
