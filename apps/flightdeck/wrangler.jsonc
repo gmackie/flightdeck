@@ -49,6 +49,9 @@
     "READ_AUTHZ_MODE": "legacy",
     // This Worker's name, echoed in the service bindings /api/apps hands out.
     "FLIGHTDECK_WORKER_NAME": "flightdeck",
+    // Comma-separated Access emails (or service-token client ids) allowed to grant apps
+    // lifecycle.write and mint lifecycle-scoped keys. Empty disables lifecycle administration.
+    "LIFECYCLE_ADMINS": "",
     "FLIGHTDECK_DEV": "0"
   }
 }

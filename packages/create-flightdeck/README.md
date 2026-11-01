@@ -15,6 +15,15 @@ npx @flightdeckhq/create apps revoke-key app_myapp <sha256>
 npx @flightdeckhq/create --help
 ```
 
+Lifecycle ingestion ([docs](https://github.com/gmackie/flightdeck/tree/main/docs/operations/lifecycle-ingestion.md)) needs a principal listed in Flightdeck's `LIFECYCLE_ADMINS`:
+
+```bash
+npx @flightdeckhq/create apps grant-lifecycle app_myapp
+npx @flightdeckhq/create apps key app_myapp --scope lifecycle.write --out lifecycle.key
+npx @flightdeckhq/create apps key-scopes app_myapp <sha256> --scope lifecycle.write
+npx @flightdeckhq/create apps revoke-lifecycle app_myapp
+```
+
 `apps add` prints the service binding to paste into your wrangler config (see [`@flightdeckhq/worker`](https://www.npmjs.com/package/@flightdeckhq/worker)).
 
 ## Auth

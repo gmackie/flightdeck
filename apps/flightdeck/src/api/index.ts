@@ -1,5 +1,6 @@
 import type { JWTVerifyGetKey } from "jose";
 import * as v from "valibot";
+import type { AccessPrincipal } from "../access";
 import { forgetApp } from "../apps";
 import { trackDogfood } from "../dogfood";
 import { lifecycleServingRoutes } from "../lifecycle-serving/routes";
@@ -7,6 +8,14 @@ import { authenticate } from "./auth";
 import { authorizeApp, authorizeLifecycleRead, legacyReadMode } from "./authorization";
 import { fail, json, readJson } from "./http";
 import { lifecycleRead } from "./lifecycle";
+import {
+  auditLifecycleAdmin,
+  capabilityRoute,
+  isLifecycleAdmin,
+  keyScopesRoute,
+  Scopes,
+  storedScopes,
+} from "./lifecycle-admin";
 import { liveSocket, liveView, parseHours } from "./live";
 import {
   appIdentity,
@@ -22,6 +31,8 @@ type AppRow = { id: string; name: string; created_at: number };
 
 const KEYS_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/server-keys$/;
 const KEY_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/server-keys\/([^/]+)$/;
+const KEY_SCOPES_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/server-keys\/([^/]+)\/scopes$/;
+const CAPABILITY_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/capabilities\/lifecycle\.write$/;
 /** Read routes for one app: `live`, `live/ws` and `trends`. */
 const QUERY_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/(live|live\/ws|trends)$/;
 const LIFECYCLE_ROUTE = /^\/api\/apps\/([\w-]{3,64})\/lifecycle(?:\/(.*))?$/;
@@ -60,7 +71,15 @@ export async function apiRoutes(
     return notAllowed("GET, POST");
   }
   const keys = pathname.match(KEYS_ROUTE);
-  if (keys?.[1]) return method === "POST" ? addKey(request, env, keys[1]) : notAllowed("POST");
+  if (keys?.[1]) {
+    return method === "POST" ? addKey(request, env, principal, keys[1]) : notAllowed("POST");
+  }
+  const keyScopes = pathname.match(KEY_SCOPES_ROUTE);
+  if (keyScopes?.[1] && keyScopes[2]) {
+    return keyScopesRoute(request, env, principal, keyScopes[1], keyScopes[2]);
+  }
+  const capability = pathname.match(CAPABILITY_ROUTE);
+  if (capability?.[1]) return capabilityRoute(request, env, principal, capability[1]);
   const key = pathname.match(KEY_ROUTE);
   if (key?.[1] && key[2]) {
     return method === "DELETE" ? deleteKey(env, key[1], key[2]) : notAllowed("DELETE");
@@ -139,12 +158,26 @@ async function registerApp(request: Request, env: Env, ctx: ExecutionContext): P
   return json({ app, binding: serviceBinding(service, app.id) }, created ? 201 : 200);
 }
 
-async function addKey(request: Request, env: Env, appId: string): Promise<Response> {
+async function addKey(
+  request: Request,
+  env: Env,
+  principal: AccessPrincipal,
+  appId: string,
+): Promise<Response> {
   const parsed = await readJson(request);
   if (parsed instanceof Response) return parsed;
-  const input = v.safeParse(NewServerKey, parsed.body);
-  if (!input.success) return fail(400, "Expected { token_hash: <sha-256 hex>, expires_at: <ms> }");
-  const { token_hash, expires_at } = input.output;
+  const input = v.safeParse(
+    v.object({ ...NewServerKey.entries, scopes: v.optional(Scopes) }),
+    parsed.body,
+  );
+  if (!input.success) {
+    return fail(400, "Expected { token_hash: <sha-256 hex>, expires_at: <ms>, scopes? }");
+  }
+  const { token_hash, expires_at, scopes } = input.output;
+  // Minting a key that can write lifecycle events is lifecycle administration.
+  if (scopes?.includes("lifecycle.write") && !isLifecycleAdmin(env, principal)) {
+    return fail(403, "Lifecycle administration requires LIFECYCLE_ADMINS");
+  }
   const now = Date.now();
   if (expires_at <= now || expires_at > now + MAX_KEY_LIFETIME_MS) {
     return fail(400, "expires_at must be in the future and at most 400 days away");
@@ -152,12 +185,20 @@ async function addKey(request: Request, env: Env, appId: string): Promise<Respon
   const app = await env.DB.prepare("SELECT id FROM apps WHERE id = ?").bind(appId).first();
   if (!app) return fail(404, "Unknown app");
   const insert = await env.DB.prepare(
-    "INSERT OR IGNORE INTO server_ingest_keys (token_hash, app_id, expires_at) VALUES (?, ?, ?)",
+    `INSERT OR IGNORE INTO server_ingest_keys (token_hash, app_id, expires_at, scopes)
+     VALUES (?, ?, ?, ?)`,
   )
-    .bind(token_hash, appId, expires_at)
+    .bind(token_hash, appId, expires_at, storedScopes(scopes ?? ["events.write"]))
     .run();
   if (insert.meta.changes === 0) return fail(409, "Key already registered");
-  return json({ key: { app_id: appId, token_hash, expires_at } }, 201);
+  if (scopes?.includes("lifecycle.write")) {
+    auditLifecycleAdmin(principal, "mint_key", { app_id: appId, token_hash, scopes });
+  }
+  // The response names scopes only when the caller set them, as before scopes existed.
+  return json(
+    { key: { app_id: appId, token_hash, expires_at, ...(scopes ? { scopes } : {}) } },
+    201,
+  );
 }
 
 async function deleteKey(env: Env, appId: string, hash: string): Promise<Response> {

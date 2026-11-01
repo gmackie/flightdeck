@@ -76,11 +76,16 @@ Register over the binding with `flightdeckLifecycle(env).registerProcess(definit
 Lifecycle writes need two independent grants, both checked on every request (no cache), so
 revoking either takes effect at once:
 
-1. **App capability.** An operator grants the app `lifecycle.write` in `app_capabilities`.
-   There is deliberately no admin API for this. An Access session on `/api/*` can mint generic
-   server keys, but it cannot let an app write lifecycle events.
+1. **App capability.** A lifecycle admin grants the app `lifecycle.write` in
+   `app_capabilities`. Lifecycle admins are the Access principals listed in the
+   `LIFECYCLE_ADMINS` var (comma-separated emails, or service-token client ids; FLIG-26). Any
+   other Access session on `/api/*` can still mint generic `events.write` keys, but it gets 403
+   when it tries to grant lifecycle access, mint a `lifecycle.write` key or change a key's
+   scopes. An empty `LIFECYCLE_ADMINS` turns lifecycle administration off. Every change is
+   logged as a `flightdeck.lifecycle_admin` JSON line that names the principal.
 2. **Credential.** On HTTP, the bearer key's `scopes` must include `lifecycle.write`. Keys
-   minted before migration 0005, or by `apps key`, hold `events.write` only and get **403** on
+   minted before migration 0005, or by `apps key` without `--scope`, hold `events.write` only
+   and get **403** on
    the lifecycle endpoint. A key holding only `lifecycle.write` gets 403 on `/v1/server/events`.
    On the service binding, the credential is the binding's `props.appId`, as for `track`.
    That id is written in the calling Worker's own wrangler config, so the trust boundary for
@@ -138,32 +143,36 @@ Use the same Cloudflare account and D1 database as the rest of Flightdeck.
    Flightdeck's D1 evidence log and are forwarded to the stream once it is bound (see
    [lifecycle-projection.md](lifecycle-projection.md#basin-outbox)).
 
-4. **Grant the app** (the app must already be registered):
+4. **Name the lifecycle admins.** Set `LIFECYCLE_ADMINS` in `wrangler.jsonc` `vars` to the
+   Access emails or service-token client ids that may manage lifecycle access, and deploy
+   (`wrangler deploy` replaces vars set in the dashboard). Keep the list short.
+
+5. **Grant the app** (the app must already be registered), as a lifecycle admin:
 
    ```bash
-   pnpm exec wrangler d1 execute flightdeck --remote \
-     --command "INSERT INTO app_capabilities (app_id, capability) VALUES ('app_deploys', 'lifecycle.write')"
+   npx @flightdeckhq/create apps grant-lifecycle app_deploys    # PUT .../capabilities/lifecycle.write
+   npx @flightdeckhq/create apps revoke-lifecycle app_deploys   # DELETE, takes effect at once
    ```
 
-   Revoke with `DELETE FROM app_capabilities WHERE app_id = 'app_deploys' AND capability =
-   'lifecycle.write'`. Deleting an app cascades its grants.
+   Deleting an app cascades its grants. Without the CLI, an operator can still run
+   `INSERT INTO app_capabilities (app_id, capability) VALUES ('app_deploys',
+   'lifecycle.write')` with `wrangler d1 execute flightdeck --remote`.
 
-5. **For HTTP producers, mint a lifecycle key.** Mint the key with the CLI, so the raw key only
-   goes to a 0600 file, then set its scope by digest:
+6. **For HTTP producers, mint a lifecycle key**, as a lifecycle admin. The CLI sends only the
+   digest and writes the raw key to a new 0600 file:
 
    ```bash
-   npx @flightdeckhq/create apps key app_deploys --days 90 --out deploys-lifecycle.key
-   # prints: Key for app_deploys, digest <hex>, ...
-   pnpm exec wrangler d1 execute flightdeck --remote \
-     --command "UPDATE server_ingest_keys SET scopes = 'lifecycle.write' WHERE token_hash = '<hex>' AND app_id = 'app_deploys'"
+   npx @flightdeckhq/create apps key app_deploys --days 90 --scope lifecycle.write \
+     --out deploys-lifecycle.key
+   # Change an existing key's scopes by digest instead:
+   npx @flightdeckhq/create apps key-scopes app_deploys <sha256> --scope lifecycle.write
    ```
 
-   Setting `scopes = 'lifecycle.write'` removes `events.write`; use
-   `'events.write lifecycle.write'` only if one service needs both. Load the key into the
-   producer's secret store (for example `wrangler secret put FLIGHTDECK_LIFECYCLE_KEY <
+   `--scope lifecycle.write` alone means the key cannot write generic events; repeat
+   `--scope events.write` only if one service needs both. Load the key into the producer's
+   secret store (for example `wrangler secret put FLIGHTDECK_LIFECYCLE_KEY <
    deploys-lifecycle.key`), then delete the file. Rotate and revoke as described in
-   [server-ingestion.md](server-ingestion.md). The digest and app id are not secrets, but check
-   they are a 64-char hex digest and a registered id before you paste them into SQL.
+   [server-ingestion.md](server-ingestion.md).
 
 ## Send events
 
@@ -290,6 +299,5 @@ complete onboarding.
 
 ## Not yet implemented
 
-- No admin API or CLI flag for lifecycle grants or key scopes: operators use D1 statements.
 - No query API, dedup view or correction-application view over `lifecycle_events` (FLIG-16).
 - No per-app rate limits or quotas beyond the batch, event and body limits.
