@@ -310,6 +310,16 @@ importers:
         specifier: ^0.28.2
         version: 0.28.2
 
+  packages/lifecycle-investigations:
+    dependencies:
+      '@flightdeckhq/lifecycle-queries':
+        specifier: workspace:*
+        version: link:../lifecycle-queries
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: 5.0.5
+        version: 5.0.5(vitest@5.0.5)
+
   packages/lifecycle-queries:
     devDependencies:
       '@vitest/coverage-v8':
