@@ -48,11 +48,17 @@ export const serviceToken = () => sign({ common_name: "agent.access" }, { sub: "
 export const synthetic = (opts: SyntheticOptions = {}) =>
   new SyntheticLifecycleSource({ now, ...opts });
 
-export type Setup = { token?: string | null; env?: WorkerEnv; source?: LifecycleReadSource };
+export type Setup = {
+  token?: string | null;
+  env?: WorkerEnv;
+  source?: LifecycleReadSource;
+  /** The handler clock; the default source clock is unchanged, so pass a matching source. */
+  now?: () => number;
+};
 
 /** Calls the Worker handler directly, as the runtime would. */
 export function serve(request: Request, setup: Setup = {}): Promise<Response> {
-  const deps: Deps = { keys, now, source: setup.source ?? synthetic() };
+  const deps: Deps = { keys, now: setup.now ?? now, source: setup.source ?? synthetic() };
   return handleRequest(request, setup.env ?? ENV, deps);
 }
 
