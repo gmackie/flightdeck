@@ -2,11 +2,11 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "../../src/app";
-import { WorkflowsPage } from "../../src/pages/workflows";
+import { DemoWorkflowsPage } from "../../src/pages/workflows";
 import { navigate } from "../../src/router";
 import { FakeWebSocket, mockApps } from "../helpers";
 
-beforeEach(() => history.replaceState(null, "", "/workflows"));
+beforeEach(() => history.replaceState(null, "", "/workflows?view=demo"));
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -36,11 +36,15 @@ it("returns from the demo to live app loading and back", async () => {
   await screen.findByText("What is happening in Alpha now");
   expect(fetcher).toHaveBeenCalled();
   await user.click(screen.getByRole("link", { name: /^Workflows/ }));
+  expect(location.pathname + location.search).toBe("/workflows?app=app_alpha");
   expect(screen.getByRole("heading", { name: "Workflows" })).toBeInTheDocument();
+  // The nav lands on live data: no synthetic badge, and the (unrouted) API answers 404.
+  expect(await screen.findByText("Couldn't load workflows")).toBeInTheDocument();
+  expect(screen.queryByText("DEMO · SYNTHETIC")).not.toBeInTheDocument();
 });
 
 it("renders a distinct loop and nested concurrent assessments without confusing application stages", async () => {
-  render(<WorkflowsPage />);
+  render(<DemoWorkflowsPage />);
   const application = screen.getByRole("toolbar", { name: "Application 001 lifecycle stages" });
   expect(within(application).getAllByRole("button")).toHaveLength(5);
   const loop = screen.getByRole("toolbar", { name: "Interview loop 001 lifecycle stages" });
@@ -77,7 +81,7 @@ it("renders a distinct loop and nested concurrent assessments without confusing 
 
 it("shows twelve compact jobs with dwell and outcomes, filters them, and handles no matches", async () => {
   const user = userEvent.setup();
-  render(<WorkflowsPage />);
+  render(<DemoWorkflowsPage />);
   await user.click(screen.getByRole("button", { name: "Many jobs" }));
   const list = screen.getByRole("list", { name: "Many jobs" });
   expect(within(list).getAllByRole("listitem")).toHaveLength(12);
@@ -105,7 +109,7 @@ it("shows twelve compact jobs with dwell and outcomes, filters them, and handles
 
 it("searches nested workflows while preserving and expanding ancestor context", async () => {
   const user = userEvent.setup();
-  render(<WorkflowsPage />);
+  render(<DemoWorkflowsPage />);
   await user.type(screen.getByRole("searchbox"), "Systems exercise");
   expect(screen.getAllByRole("treeitem")).toHaveLength(5);
   expect(
@@ -115,7 +119,7 @@ it("searches nested workflows while preserving and expanding ancestor context", 
 
 it("switches between all three domains without a backend and labels example services", async () => {
   const user = userEvent.setup();
-  render(<WorkflowsPage />);
+  render(<DemoWorkflowsPage />);
   await user.click(screen.getByRole("button", { name: "Service deploys" }));
   expect(screen.getByRole("button", { name: "Service deploys" })).toHaveAttribute(
     "aria-pressed",
@@ -140,16 +144,16 @@ it("accepts an independent adapter instead of coupling generic UI to fixture dom
     source: { label: "Test fixture", synthetic: true },
     portfolios: [],
   }));
-  render(<WorkflowsPage adapter={{ read }} />);
+  render(<DemoWorkflowsPage adapter={{ read }} />);
   expect(read).toHaveBeenCalled();
   expect(screen.getByRole("status")).toHaveTextContent("No workflows match");
-  act(() => navigate("/workflows"));
+  act(() => navigate("/workflows?view=demo"));
 });
 
 it("surfaces invalid adapter timestamps and leaves durations unavailable", async () => {
   const user = userEvent.setup();
   render(
-    <WorkflowsPage
+    <DemoWorkflowsPage
       adapter={{
         read: () => ({
           asOf: 1000,

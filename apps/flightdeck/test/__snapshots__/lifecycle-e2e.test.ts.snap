@@ -1,0 +1,16 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`fixture scenarios through ingest, replay and the D1 read model > covers the committed scenarios 1`] = `
+[
+  "app-scope-separation",
+  "delivery-out-of-order-and-late",
+  "incident-long-dwell-open",
+  "incident-remediation-reopen",
+  "invalid-events",
+  "recruiting-paused-reopened",
+  "recruiting-pending-and-cancelled",
+  "recruiting-pipeline",
+  "recruiting-repeat-assessment-delayed-scorecard",
+  "service-regional-rollouts",
+]
+`;

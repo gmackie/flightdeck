@@ -1,7 +1,17 @@
 import type { IngestRpc, RequestContext } from "@flightdeckhq/schema";
 import { type PrivacyOptions, withPrivacy } from "./privacy.js";
 
-export type { ClientEventInput, IngestResult, IngestRpc } from "@flightdeckhq/schema";
+export type {
+  ClientEventInput,
+  IngestResult,
+  IngestRpc,
+  LifecycleEventInput,
+  LifecycleIngestResult,
+  LifecycleRpc,
+  ProcessDefinitionV1,
+  ProcessRegistration,
+} from "@flightdeckhq/schema";
+export { flightdeckLifecycle, isPermanentLifecycleError } from "./lifecycle.js";
 export type { PrivacyOptions } from "./privacy.js";
 
 export type FlightdeckOptions = PrivacyOptions & {

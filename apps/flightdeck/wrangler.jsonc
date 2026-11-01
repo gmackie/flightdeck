@@ -16,6 +16,8 @@
     ]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionDO", "AppDO"] }],
+  // Retries lifecycle projection and Basin forwarding (src/lifecycle-projection/schedule.ts).
+  "triggers": { "crons": ["*/5 * * * *"] },
   "d1_databases": [
     {
       "binding": "DB",
@@ -27,6 +29,11 @@
   "pipelines": [
     { "binding": "EVENTS", "stream": "ff8610cd69224104bafad28a00accabd" },
     { "binding": "SESSIONS", "stream": "a8da4675e9bc42bf838cf3fc2b8fd947" }
+    // Opt-in lifecycle stream (docs/operations/lifecycle-ingestion.md). Until it is bound,
+    // lifecycle writes answer 503 and nothing else changes. Provision it with
+    // `scripts/provision-dev.sh --lifecycle`, then add a comma above and this entry with the
+    // printed fd_lifecycle_events stream id:
+    // { "binding": "LIFECYCLE_EVENTS", "stream": "<fd_lifecycle_events stream id>" }
   ],
   // Cloudflare Access must protect every hostname that serves the dashboard and /api/*,
   // including the workers.dev one; otherwise disable workers_dev and use a custom domain.
@@ -34,6 +41,9 @@
     "ACCESS_TEAM_DOMAIN": "",
     // The dashboard's Access application audience (AUD tag); /api/* requires it.
     "ACCESS_AUD": "",
+    // Private MCP RPC is opt-in; its audience MUST differ from the dashboard audience.
+    "LIFECYCLE_MCP_READ_ENABLED": "0",
+    "LIFECYCLE_MCP_ACCESS_AUD": "",
     // Explicit compatibility rollout for live/live/ws/trends only. Lifecycle always requires grants.
     // Apply 0010 + provision grants, then set to "enforce". Unknown values fail closed.
     "READ_AUTHZ_MODE": "legacy",

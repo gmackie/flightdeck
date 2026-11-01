@@ -76,6 +76,22 @@ init({ redactProps: ["email"], beforeSend: (event) => event });
 track("search.submitted", { results: 3 });
 identify("user_1");
 EOF
+cat >src/lifecycle.ts <<'EOF'
+import { id, replay, stageMetrics, type ReplayInput } from "@flightdeckhq/lifecycle";
+
+const processId = id<"process">("process-v1");
+const caseId = id<"case">("case-1");
+const stageId = id<"stage">("stage-1");
+const stageInstanceId = id<"stage-instance">("attempt-1");
+const input: ReplayInput = {
+  definitions: [{ id: processId, stages: [{ id: stageId }] }],
+  cases: [{ id: caseId, processId }],
+  stageInstances: [{ id: stageInstanceId, caseId, stageId }],
+  events: [], asOf: 100,
+};
+const result = replay(input);
+stageMetrics(result, stageInstanceId);
+EOF
 cat >tsconfig.worker.json <<'EOF'
 {
   "compilerOptions": {
@@ -101,7 +117,7 @@ cat >tsconfig.browser.json <<'EOF'
     "strict": true,
     "noEmit": true
   },
-  "files": ["src/browser.ts"]
+  "files": ["src/browser.ts", "src/lifecycle.ts"]
 }
 EOF
 for tsc in node_modules/typescript/bin/tsc node_modules/ts5/bin/tsc; do
@@ -120,6 +136,11 @@ for (const name of ["flightdeck", "handleFlightdeck", "withFlightdeck"])
 const browser = await import("@flightdeckhq/browser");
 for (const name of ["init", "track", "identify"])
   if (typeof browser[name] !== "function") throw new Error(`browser: ${name} missing`);
+const lifecycle = await import("@flightdeckhq/lifecycle");
+for (const name of ["id", "replay", "stageMetrics", "caseMetrics", "funnel", "summarize", "normalizeCanonicalDefinition", "normalizeCanonicalEnvelope", "sanitizeDiagnostics"])
+  if (typeof lifecycle[name] !== "function") throw new Error(`lifecycle: ${name} missing`);
+const empty = lifecycle.replay({ definitions: [], cases: [], stageInstances: [], events: [], asOf: 0 });
+if (lifecycle.summarize(empty).cases !== 0) throw new Error("lifecycle: empty replay failed");
 console.log("libraries import in Node");
 '
 

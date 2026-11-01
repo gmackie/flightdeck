@@ -1,0 +1,133 @@
+{
+  "fields": [
+    {
+      "name": "event_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "app_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "schema_version",
+      "type": "int32",
+      "required": true
+    },
+    {
+      "name": "process_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "process_version",
+      "type": "int32",
+      "required": true
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "case_id",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "stage_id",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "stage_instance_id",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "occurred_at",
+      "type": "timestamp",
+      "unit": "millisecond",
+      "required": true
+    },
+    {
+      "name": "received_at",
+      "type": "timestamp",
+      "unit": "millisecond",
+      "required": true
+    },
+    {
+      "name": "source",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "source_sequence",
+      "type": "int64",
+      "required": true
+    },
+    {
+      "name": "reason",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "object_type",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "object_id",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "relations",
+      "type": "list",
+      "items": {
+        "name": "relation",
+        "type": "struct",
+        "required": true,
+        "fields": [
+          {
+            "name": "type",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "object_type",
+            "type": "string",
+            "required": true
+          },
+          {
+            "name": "object_id",
+            "type": "string",
+            "required": true
+          }
+        ]
+      },
+      "required": false
+    },
+    {
+      "name": "dimensions",
+      "type": "json",
+      "required": false
+    },
+    {
+      "name": "corrects_event_id",
+      "type": "string",
+      "required": false
+    },
+    {
+      "name": "correction",
+      "type": "json",
+      "required": false
+    },
+    {
+      "name": "channel",
+      "type": "string",
+      "required": true
+    }
+  ]
+}
