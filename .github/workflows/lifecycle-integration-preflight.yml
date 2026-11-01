@@ -1,0 +1,61 @@
+name: lifecycle-integration-preflight
+# Local-only release-gate preflight (scripts/lifecycle-preflight.mjs). Synthetic input, no
+# secrets, no Cloudflare credentials, no deploy. Runs by hand or on lifecycle integration
+# branches only; see docs/operations/lifecycle-release-gates.md.
+on:
+  workflow_dispatch:
+    inputs:
+      require:
+        description: "Fail unless this verdict is ready"
+        type: choice
+        options: [none, integration-ready]
+        default: none
+  push:
+    branches: ["integration/lifecycle-**", "feat/lifecycle-integration-**"]
+permissions:
+  contents: read
+concurrency:
+  group: lifecycle-integration-preflight-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  harness-tests:
+    # The harness is dependency-free; its own tests need only Node.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false }
+      # The repo's packageManager field would make setup-node try pnpm caching; turn it off.
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, package-manager-cache: false }
+      - run: node --disable-warning=ExperimentalWarning --test "scripts/lifecycle-preflight/test/*.test.mjs"
+  preflight:
+    needs: harness-tests
+    runs-on: ubuntu-latest
+    env:
+      # Push runs report only; integration/* branches and dispatch can require a verdict.
+      REQUIRE: ${{ github.event_name == 'workflow_dispatch' && inputs.require || (startsWith(github.ref_name, 'integration/') && 'integration-ready' || 'none') }}
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false }
+      # pnpm must be on PATH before setup-node resolves `cache: pnpm`.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Preflight (synthetic config, all local commands)
+        run: |
+          set -o pipefail # keep --require's exit code through tee
+          node --disable-warning=ExperimentalWarning scripts/lifecycle-preflight.mjs \
+            --run all \
+            --config scripts/lifecycle-preflight/fixtures/synthetic-staging.json \
+            --out-dir "$RUNNER_TEMP/preflight" \
+            --report "$RUNNER_TEMP/preflight/report.json" \
+            --format markdown \
+            --require "$REQUIRE" | tee -a "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lifecycle-preflight
+          path: ${{ runner.temp }}/preflight
+          retention-days: 14
+          if-no-files-found: ignore
