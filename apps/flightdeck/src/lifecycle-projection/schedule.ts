@@ -1,3 +1,4 @@
+import { maintainErasure } from "../lifecycle-erasure/schedule";
 import { appsWithDueWork, LifecycleProjector } from "./projector";
 import { forwardOutbox } from "./store";
 
@@ -17,4 +18,6 @@ export async function drainLifecycle(env: Env, now: () => number = Date.now): Pr
     const result = await forwardOutbox(env, now());
     if (!result.bound || result.sent === 0) break;
   }
+  // Erasure/retention maintenance: a no-op unless an operator enabled it (default off).
+  await maintainErasure(env, now).catch(() => undefined);
 }

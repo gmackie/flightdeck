@@ -48,6 +48,12 @@
     // LIFECYCLE_PRIVACY_KEY is a separate stable HMAC secret (>=32 chars), never a var.
     "LIFECYCLE_PRIVACY_MODE": "disabled",
     "LIFECYCLE_PRIVACY_RESTRICTED": "deny",
+    // Lifecycle erasure/retention (docs/operations/lifecycle-erasure-retention.md). Both are
+    // "off" (inert); "dry_run" only reports; "enforce" needs the policy variables validated in
+    // src/lifecycle-erasure/config.ts, otherwise it falls back to off. Erasure additionally needs
+    // an external runner and LIFECYCLE_ERASURE_RECEIPT_KEYS (public keys), or no job can complete.
+    "LIFECYCLE_ERASURE_MODE": "off",
+    "LIFECYCLE_RETENTION_MODE": "off",
     // Explicit compatibility rollout for live/live/ws/trends only. Lifecycle always requires grants.
     // Apply 0010 + provision grants, then set to "enforce". Unknown values fail closed.
     "READ_AUTHZ_MODE": "legacy",
