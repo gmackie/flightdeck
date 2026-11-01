@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flightdeck-lifecycle-findings.schema.json",
+  "title": "Known review findings that gate lifecycle integration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "version", "findings"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "kind": { "const": "flightdeck-lifecycle-findings" },
+    "version": { "const": 1 },
+    "description": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "severity", "title", "source", "status", "owner"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Z0-9]+(-[A-Z0-9]+)*$" },
+          "severity": { "enum": ["P0", "P1", "P2", "P3"] },
+          "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "source": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "foundOn": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "status": { "enum": ["open", "resolved"] },
+          "owner": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "gates": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }
+          },
+          "resolution": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["regressionTests", "review"],
+            "properties": {
+              "fixedBy": { "type": "string", "maxLength": 200 },
+              "regressionTests": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "$ref": "#/$defs/repoPath" }
+              },
+              "review": { "$ref": "#/$defs/repoPath" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "repoPath": {
+      "type": "string",
+      "maxLength": 300,
+      "pattern": "^[A-Za-z0-9._@+-]+(/[A-Za-z0-9._@+-]+)*$"
+    }
+  }
+}

@@ -3,7 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { CHECKS } from "./checks.mjs";
+import { CHECKS, FINDINGS_SCHEMA, readEvidenceJson } from "./checks.mjs";
 import { COMMANDS } from "./commands.mjs";
 import { findSecrets, isSyntheticHost, SECRET_KEY } from "./safety.mjs";
 import { validate } from "./schema.mjs";
@@ -19,6 +19,18 @@ export class UsageError extends Error {}
 export function loadManifest(path = join(here, "gates.json")) {
   const manifest = JSON.parse(readFileSync(path, "utf8"));
   const errors = validate(MANIFEST_SCHEMA, manifest);
+  const baseline =
+    (manifest.migrations?.required ?? [])
+      .map((m) => m.name)
+      .sort()
+      .at(-1) ?? "";
+  for (const a of manifest.migrations?.anticipated ?? []) {
+    if (a.name <= baseline)
+      errors.push(`migration ${a.name} must sort after the baseline ${baseline}`);
+    if (manifest.migrations.required.some((m) => m.name.slice(0, 4) === a.name.slice(0, 4))) {
+      errors.push(`migration ${a.name} reuses a baseline number`);
+    }
+  }
   const ids = new Set();
   for (const gate of manifest.gates ?? []) {
     if (ids.has(gate.id)) errors.push(`gate ${gate.id}: duplicate id`);
@@ -27,6 +39,9 @@ export function loadManifest(path = join(here, "gates.json")) {
     if (gate.check === "commands" && !gate.commands) errors.push(`gate ${gate.id}: no commands`);
     for (const id of gate.commands ?? []) {
       if (!Object.hasOwn(COMMANDS, id)) errors.push(`gate ${gate.id}: unknown command ${id}`);
+    }
+    if (gate.check === "findings" && !manifest.findings) {
+      errors.push(`gate ${gate.id}: findings gate without a findings register`);
     }
     if (gate.check === "attestation" && !gate.attestation) {
       errors.push(`gate ${gate.id}: attestation gate without required checks`);
@@ -193,7 +208,29 @@ export async function evaluate({
       docs: gate.docs ?? [],
     });
   }
+  applyFindingsToGates(gates, root, manifest);
   return { gates, verdicts: verdicts(gates, config), head: git.head };
+}
+
+/**
+ * A gate named by an open finding at a blocking severity is blocked, whatever its own check
+ * says: a green check must not hide a known defect in what it checks. An unreadable register is
+ * left to the open-critical-findings gate, which blocks on it.
+ */
+function applyFindingsToGates(gates, root, manifest) {
+  if (!manifest.findings) return;
+  const read = readEvidenceJson(root, manifest.findings.register);
+  if (read.error || validate(FINDINGS_SCHEMA, read.value).length) return;
+  for (const f of read.value.findings) {
+    if (f.status !== "open" || !manifest.findings.blockingSeverities.includes(f.severity)) continue;
+    for (const gate of gates.filter((g) => f.gates?.includes(g.id))) {
+      gate.status = "blocked";
+      gate.reasons = [
+        `known open finding ${f.id} (${f.severity}) affects this gate`,
+        ...gate.reasons,
+      ];
+    }
+  }
 }
 
 /**

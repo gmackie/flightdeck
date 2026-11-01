@@ -31,7 +31,7 @@
     "migrations": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["dir", "required", "pending"],
+      "required": ["dir", "required", "anticipated"],
       "properties": {
         "dir": { "$ref": "#/$defs/repoPath" },
         "required": {
@@ -46,14 +46,14 @@
             }
           }
         },
-        "pending": {
+        "anticipated": {
           "type": "array",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["match", "owner", "gate"],
+            "required": ["name", "owner", "gate"],
             "properties": {
-              "match": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+              "name": { "type": "string", "pattern": "^[0-9]{4}_[a-z0-9_]+$" },
               "owner": { "type": "string" },
               "gate": { "$ref": "#/$defs/id" }
             }
@@ -121,6 +121,19 @@
         "file": { "$ref": "#/$defs/repoPath" },
         "requiredFields": { "type": "array", "items": { "type": "string" } },
         "deniedFieldPattern": { "type": "string" }
+      }
+    },
+    "findings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["register", "blockingSeverities"],
+      "properties": {
+        "register": { "$ref": "#/$defs/repoPath" },
+        "blockingSeverities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "enum": ["P0", "P1", "P2", "P3"] }
+        }
       }
     },
     "basinSql": {

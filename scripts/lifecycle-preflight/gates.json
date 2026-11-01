@@ -7,32 +7,98 @@
     "production-safe": "Every integration gate plus operator-attested staging evidence (Access, OAuth, Basin, erasure, retention, rollback) for this exact commit. The harness cannot produce this from synthetic input."
   },
   "components": [
-    { "path": "apps/flightdeck", "owner": "main" },
-    { "path": "apps/dashboard", "owner": "main" },
-    { "path": "packages/schema", "owner": "main" },
-    { "path": "packages/lifecycle-queries", "owner": "#34" },
-    { "path": "examples/lifecycle-fixtures", "owner": "#37 FLIG-20" },
-    { "path": "packages/lifecycle", "owner": "#45 FLIG-22" },
-    { "path": "apps/lifecycle-mcp", "owner": "#44 FLIG-23 / #49 FLIG-32" },
-    { "path": "packages/lifecycle-investigations", "owner": "#48 FLIG-30 / #51 FLIG-33" },
-    { "path": "packages/lifecycle-insights", "owner": "#38 FLIG-24" }
+    {
+      "path": "apps/flightdeck",
+      "owner": "main"
+    },
+    {
+      "path": "apps/dashboard",
+      "owner": "main"
+    },
+    {
+      "path": "packages/schema",
+      "owner": "main"
+    },
+    {
+      "path": "packages/lifecycle-queries",
+      "owner": "#34"
+    },
+    {
+      "path": "examples/lifecycle-fixtures",
+      "owner": "#37 FLIG-20"
+    },
+    {
+      "path": "packages/lifecycle",
+      "owner": "#45 FLIG-22"
+    },
+    {
+      "path": "apps/lifecycle-mcp",
+      "owner": "#44 FLIG-23 / #49 FLIG-32"
+    },
+    {
+      "path": "packages/lifecycle-investigations",
+      "owner": "#48 FLIG-30 / #51 FLIG-33"
+    },
+    {
+      "path": "packages/lifecycle-insights",
+      "owner": "#38 FLIG-24"
+    }
   ],
   "migrations": {
     "dir": "apps/flightdeck/migrations",
     "required": [
-      { "name": "0001_apps", "owner": "main" },
-      { "name": "0002_server_ingest_keys", "owner": "main" },
-      { "name": "0003_dogfood_app", "owner": "main" },
-      { "name": "0004_hourly_rollups", "owner": "main" },
-      { "name": "0005_lifecycle_write", "owner": "#35 FLIG-19 via #45" },
-      { "name": "0006_process_definitions", "owner": "#39 FLIG-25 via #45" },
-      { "name": "0010_read_authorization", "owner": "#31 FLIG-18" },
-      { "name": "0020_lifecycle_serving", "owner": "#36 FLIG-21 via #45" },
-      { "name": "0030_lifecycle_projection", "owner": "#45 FLIG-22" }
+      {
+        "name": "0001_apps",
+        "owner": "main"
+      },
+      {
+        "name": "0002_server_ingest_keys",
+        "owner": "main"
+      },
+      {
+        "name": "0003_dogfood_app",
+        "owner": "main"
+      },
+      {
+        "name": "0004_hourly_rollups",
+        "owner": "main"
+      },
+      {
+        "name": "0005_lifecycle_write",
+        "owner": "#35 FLIG-19 via #45"
+      },
+      {
+        "name": "0006_process_definitions",
+        "owner": "#39 FLIG-25 via #45"
+      },
+      {
+        "name": "0010_read_authorization",
+        "owner": "#31 FLIG-18"
+      },
+      {
+        "name": "0020_lifecycle_serving",
+        "owner": "#36 FLIG-21 via #45"
+      },
+      {
+        "name": "0030_lifecycle_projection",
+        "owner": "#45 FLIG-22"
+      },
+      {
+        "name": "0031_lifecycle_snapshot_tombstones",
+        "owner": "#36 FLIG-21"
+      }
     ],
-    "pending": [
-      { "match": "erasure", "owner": "FLIG-35", "gate": "d1-retention" },
-      { "match": "budget", "owner": "FLIG-36", "gate": "query-budgets" }
+    "anticipated": [
+      {
+        "name": "0040_lifecycle_privacy_budget",
+        "owner": "#54 FLIG-36",
+        "gate": "query-budgets"
+      },
+      {
+        "name": "0041_lifecycle_erasure_retention",
+        "owner": "FLIG-35",
+        "gate": "d1-retention"
+      }
     ]
   },
   "flags": [
@@ -129,7 +195,19 @@
     "package": "packages/lifecycle-queries",
     "sqlDirs": ["packages/lifecycle-queries/sql", "apps/flightdeck/basin"]
   },
+  "findings": {
+    "register": "scripts/lifecycle-preflight/findings.json",
+    "blockingSeverities": ["P0", "P1", "P2"]
+  },
   "gates": [
+    {
+      "id": "open-critical-findings",
+      "title": "No open P0-P2 review findings; resolved ones have regression tests and an independent review of this commit",
+      "check": "findings",
+      "requiredFor": ["integration-ready", "production-safe"],
+      "owner": "independent review",
+      "evidence": ["scripts/lifecycle-preflight/findings.json"]
+    },
     {
       "id": "workspace-components",
       "title": "Lifecycle workspace components and toolchain",

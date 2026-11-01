@@ -13,6 +13,8 @@ const here = new URL("..", import.meta.url).pathname;
 export const ATTESTATION_SCHEMA = JSON.parse(
   readFileSync(join(here, "attestation.schema.json"), "utf8"),
 );
+export const FINDINGS_SCHEMA = JSON.parse(readFileSync(join(here, "findings.schema.json"), "utf8"));
+export const REVIEW_SCHEMA = JSON.parse(readFileSync(join(here, "review.schema.json"), "utf8"));
 export const ATTESTATION_MAX_AGE_DAYS = 30;
 
 const pass = (...reasons) => ({ status: "pass", reasons });
@@ -79,6 +81,15 @@ export const CHECKS = {
     for (const [number, names] of byNumber) {
       if (names.length > 1) {
         results.push(blocked(`ambiguous migration number ${number}: ${names.join(", ")}`));
+      }
+    }
+    // Numbers reserved for in-flight PRs: another file taking one would collide on merge.
+    for (const a of manifest.migrations.anticipated) {
+      const taken = (byNumber.get(a.name.slice(0, 4)) ?? []).filter((f) => f !== `${a.name}.sql`);
+      if (taken.length) {
+        results.push(
+          blocked(`${taken.join(", ")} collides with ${a.name} reserved for ${a.owner}`),
+        );
       }
     }
     const names = files.map((f) => f.replace(/\.sql$/, ""));
@@ -381,7 +392,7 @@ export const CHECKS = {
   },
 
   retention({ root, manifest, config }) {
-    const results = [pendingMigration(root, manifest, "d1-retention")];
+    const results = [anticipatedMigration(root, manifest, "d1-retention")];
     const r = config?.retention;
     if (!r) results.push(unknown("config retention not provided"));
     else if (!r.enabled) results.push(blocked("retention is disabled"));
@@ -391,7 +402,7 @@ export const CHECKS = {
   },
 
   budgets({ root, manifest, config }) {
-    const results = [pendingMigration(root, manifest, "query-budgets")];
+    const results = [anticipatedMigration(root, manifest, "query-budgets")];
     const b = config?.budgets;
     if (!b) results.push(unknown("config budgets not provided"));
     else {
@@ -412,6 +423,34 @@ export const CHECKS = {
       return blocked("PRODUCTION_ENABLED is false in this build (by design until a reviewed flip)");
     }
     return unknown("production switch on; live read-api completeness needs operator evidence");
+  },
+
+  findings({ root, manifest, now, head }) {
+    const spec = manifest.findings;
+    const read = readEvidenceJson(root, spec.register);
+    if (read.error) return blocked(`findings register ${spec.register}: ${read.error}`);
+    const errors = validate(FINDINGS_SCHEMA, read.value);
+    if (errors.length)
+      return blocked(`findings register invalid: ${errors.slice(0, 3).join("; ")}`);
+    const results = [];
+    for (const finding of read.value.findings) {
+      const label = `${finding.id} (${finding.severity})`;
+      if (!spec.blockingSeverities.includes(finding.severity)) {
+        if (finding.status === "open") results.push(pass(`${label} open, below blocking severity`));
+        continue;
+      }
+      if (finding.status === "open") {
+        results.push(blocked(`${label} open: ${finding.title}`));
+        continue;
+      }
+      if (!finding.resolution) {
+        results.push(unknown(`${label} marked resolved without regression tests or review`));
+        continue;
+      }
+      results.push(checkResolution(root, finding, label, now, head));
+    }
+    if (results.length === 0) results.push(pass("no open findings at a blocking severity"));
+    return combine(results);
   },
 
   attestation({ root, gate, config, now, head }) {
@@ -446,6 +485,39 @@ export const CHECKS = {
   },
 };
 
+/**
+ * A resolved finding passes only with its regression tests in the tree and an independent,
+ * non-synthetic, fresh review of this exact commit that marks it resolved. Anything uncertain
+ * (no review, stale commit, "unclear") is unknown.
+ */
+function checkResolution(root, finding, label, now, head) {
+  const { regressionTests, review } = finding.resolution;
+  const missing = regressionTests.filter((p) => {
+    const full = resolveInside(root, p);
+    return !full || !existsSync(full);
+  });
+  if (missing.length) return blocked(`${label} regression test missing: ${missing.join(", ")}`);
+  const read = readEvidenceJson(root, review);
+  if (read.error === "file not found")
+    return unknown(`${label} has no independent review on record`);
+  if (read.error) return blocked(`${label} review: ${read.error}`);
+  const doc = read.value;
+  const errors = validate(REVIEW_SCHEMA, doc);
+  if (errors.length) return blocked(`${label} review invalid: ${errors.slice(0, 3).join("; ")}`);
+  if (!doc.independent) return blocked(`${label} review is not independent`);
+  if (doc.synthetic) return blocked(`${label} review is synthetic`);
+  const verdict = doc.findings[finding.id];
+  if (verdict === "open") return blocked(`${label} review says still open`);
+  if (verdict !== "resolved") return unknown(`${label} review does not confirm resolution`);
+  if (!head) return unknown(`${label} current commit unknown; cannot bind review`);
+  if (doc.commit !== head) return unknown(`${label} review names a different commit (stale)`);
+  const age = (now.getTime() - Date.parse(doc.reviewedAt)) / 86_400_000;
+  if (!(age >= 0)) return blocked(`${label} review reviewedAt is in the future`);
+  if (age > ATTESTATION_MAX_AGE_DAYS)
+    return unknown(`${label} review older than ${ATTESTATION_MAX_AGE_DAYS} days`);
+  return pass(`${label} resolved; regression tests present; independently reviewed on this commit`);
+}
+
 function applyMigrations(sqlite, dir, files) {
   const db = new sqlite.DatabaseSync(":memory:");
   try {
@@ -462,14 +534,13 @@ function applyMigrations(sqlite, dir, files) {
   }
 }
 
-function pendingMigration(root, manifest, gateId) {
-  const pending = manifest.migrations.pending.find((p) => p.gate === gateId);
-  if (!pending) return pass("no pending migration");
-  const dir = join(root, manifest.migrations.dir);
-  const files = existsSync(dir) ? readdirSync(dir) : [];
-  return files.some((f) => f.includes(pending.match))
-    ? pass(`${pending.match} migration present`)
-    : blocked(`${pending.match} migration not integrated (${pending.owner})`);
+/** Present in the tree is all this shows; whether any D1 database applied it is not observed. */
+function anticipatedMigration(root, manifest, gateId) {
+  const a = manifest.migrations.anticipated.find((m) => m.gate === gateId);
+  if (!a) return unknown("no anticipated migration declared for this gate");
+  return existsSync(join(root, manifest.migrations.dir, `${a.name}.sql`))
+    ? pass(`${a.name} present in tree (applied state not observed)`)
+    : blocked(`${a.name} not integrated yet (${a.owner})`);
 }
 
 const MAX_EVIDENCE_BYTES = 256 * 1024;
@@ -488,7 +559,10 @@ export function readEvidenceJson(root, rel) {
   } catch {
     return { error: "not valid JSON" };
   }
-  const secrets = findSecrets(value, { hexKeys: ["commit"], allowKeys: OAUTH_METADATA_KEYS });
+  const secrets = findSecrets(value, {
+    hexKeys: ["commit", "foundOn"],
+    allowKeys: OAUTH_METADATA_KEYS,
+  });
   if (secrets.length) return { error: `secret-like content at ${secrets.slice(0, 3).join(", ")}` };
   return { value };
 }

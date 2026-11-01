@@ -69,6 +69,7 @@ export function makeRepo(overrides = {}) {
       fields: manifest.pipelineSchema.requiredFields.map((name) => ({ name, type: "string" })),
     }),
     "packages/lifecycle-queries/dist/index.js": basinModule("SELECT case_id FROM facts"),
+    "scripts/lifecycle-preflight/findings.json": findingsRegister([]),
   };
   for (const m of manifest.migrations.required) {
     files[`apps/flightdeck/migrations/${m.name}.sql`] = `CREATE TABLE t_${m.name} (id INTEGER);\n`;
@@ -84,6 +85,36 @@ export function makeRepo(overrides = {}) {
     writeFileSync(full, content);
   }
   return root;
+}
+
+export function findingsRegister(findings) {
+  return JSON.stringify({ kind: "flightdeck-lifecycle-findings", version: 1, findings });
+}
+
+export function finding(extra = {}) {
+  return {
+    id: "R1-P1-EXAMPLE",
+    severity: "P1",
+    title: "Example finding",
+    source: "test",
+    status: "open",
+    owner: "test",
+    ...extra,
+  };
+}
+
+export function review(extra = {}) {
+  return {
+    kind: "flightdeck-lifecycle-review",
+    version: 1,
+    commit: HEAD,
+    reviewedAt: "2026-10-31T10:00:00Z",
+    reviewer: "independent-reviewer",
+    independent: true,
+    synthetic: false,
+    findings: { "R1-P1-EXAMPLE": "resolved" },
+    ...extra,
+  };
 }
 
 export function basinModule(sql) {

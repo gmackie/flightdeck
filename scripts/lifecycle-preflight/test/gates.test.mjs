@@ -9,11 +9,14 @@ import {
   allCommandsPassed,
   attestation,
   basinModule,
+  finding,
+  findingsRegister,
   git,
   makeRepo,
   manifest,
   NOW,
   REPO,
+  review,
   sqlite,
   stagingConfig,
 } from "./helpers.mjs";
@@ -47,6 +50,144 @@ describe("current main (real repository)", () => {
     assert.equal(gate(report, "source-completeness").status, "blocked");
     assert.equal(gate(report, "d1-migrations").status, "pass");
     assert.equal(gate(report, "flags-default-off").status, "pass");
+  });
+});
+
+describe("open-critical-findings", () => {
+  const REGISTER = "scripts/lifecycle-preflight/findings.json";
+  const resolved = (extra = {}) =>
+    finding({
+      status: "resolved",
+      resolution: {
+        regressionTests: ["apps/flightdeck/test/regression.test.ts"],
+        review: "evidence/review.json",
+      },
+      ...extra,
+    });
+  const withFindings = async (findings, files = {}) => {
+    const root = makeRepo({
+      [REGISTER]: findingsRegister(findings),
+      "apps/flightdeck/test/regression.test.ts": "// regression",
+      ...files,
+    });
+    return run(root, { commandResults: allCommandsPassed() });
+  };
+
+  it("keeps real main BLOCKED for integration even when every command passed", async () => {
+    const report = await evaluate({
+      root: REPO,
+      manifest,
+      sqlite,
+      now: NOW,
+      commandResults: allCommandsPassed(),
+    });
+    const g = gate(report, "open-critical-findings");
+    assert.equal(g.status, "blocked");
+    for (const id of [
+      "R52-P1-FUTURE-EVENT-DISCARDED",
+      "R52-P1-SINGLETON-DWELL",
+      "R52-P2-CONFLICTING-OUTCOMES",
+      "R52-P2-FAILED-REBUILD-VISIBILITY",
+    ]) {
+      assert.match(g.reasons.join(), new RegExp(id));
+    }
+    assert.equal(report.verdicts["integration-ready"].status, "blocked");
+    assert.ok(report.verdicts["integration-ready"].blocking.includes("open-critical-findings"));
+    assert.equal(report.verdicts["production-safe"].status, "blocked");
+  });
+
+  it("blocks the gates an open finding names, even when their own check passes", async () => {
+    const real = await evaluate({ root: REPO, manifest, sqlite, now: NOW });
+    const k = gate(real, "privacy-k-floor");
+    assert.equal(k.status, "blocked");
+    assert.match(k.reasons[0], /R52-P1-SINGLETON-DWELL/);
+    const report = await withFindings([finding({ gates: ["pipeline-schema"] })]);
+    assert.equal(gate(report, "pipeline-schema").status, "blocked");
+    const openP3 = await withFindings([finding({ severity: "P3", gates: ["pipeline-schema"] })]);
+    assert.equal(gate(openP3, "pipeline-schema").status, "pass");
+  });
+
+  it("blocks open P1 and P2 findings but not P3", async () => {
+    const p1 = await withFindings([finding()]);
+    assert.equal(gate(p1, "open-critical-findings").status, "blocked");
+    assert.equal(p1.verdicts["integration-ready"].status, "blocked");
+    const p2 = await withFindings([finding({ severity: "P2" })]);
+    assert.equal(gate(p2, "open-critical-findings").status, "blocked");
+    const p3 = await withFindings([finding({ severity: "P3" })]);
+    assert.equal(gate(p3, "open-critical-findings").status, "pass");
+  });
+
+  it("passes a resolved finding only with tests present and an independent review of this commit", async () => {
+    const report = await withFindings([resolved()], {
+      "evidence/review.json": JSON.stringify(review()),
+    });
+    assert.equal(gate(report, "open-critical-findings").status, "pass");
+    assert.equal(report.verdicts["integration-ready"].status, "ready");
+  });
+
+  it("treats uncertain resolutions as unknown, never pass", async () => {
+    const cases = [
+      [[finding({ status: "resolved" })], {}],
+      [[resolved()], {}],
+      [
+        [resolved()],
+        { "evidence/review.json": JSON.stringify(review({ commit: "b".repeat(40) })) },
+      ],
+      [
+        [resolved()],
+        { "evidence/review.json": JSON.stringify(review({ reviewedAt: "2026-08-01T00:00:00Z" })) },
+      ],
+      [
+        [resolved()],
+        {
+          "evidence/review.json": JSON.stringify(
+            review({ findings: { "R1-P1-EXAMPLE": "unclear" } }),
+          ),
+        },
+      ],
+      [[resolved()], { "evidence/review.json": JSON.stringify(review({ findings: {} })) }],
+    ];
+    for (const [findings, files] of cases) {
+      const report = await withFindings(findings, files);
+      assert.equal(gate(report, "open-critical-findings").status, "unknown", JSON.stringify(files));
+      assert.notEqual(report.verdicts["integration-ready"].status, "ready");
+    }
+  });
+
+  it("blocks non-independent, synthetic, still-open or future reviews and missing regression tests", async () => {
+    const reviews = [
+      review({ independent: false }),
+      review({ synthetic: true }),
+      review({ findings: { "R1-P1-EXAMPLE": "open" } }),
+      review({ reviewedAt: "2027-01-01T00:00:00Z" }),
+    ];
+    for (const doc of reviews) {
+      const report = await withFindings([resolved()], {
+        "evidence/review.json": JSON.stringify(doc),
+      });
+      assert.equal(gate(report, "open-critical-findings").status, "blocked", JSON.stringify(doc));
+    }
+    const noTest = await withFindings(
+      [
+        resolved({
+          resolution: {
+            regressionTests: ["apps/x/missing.test.ts"],
+            review: "evidence/review.json",
+          },
+        }),
+      ],
+      {
+        "evidence/review.json": JSON.stringify(review()),
+      },
+    );
+    assert.match(gate(noTest, "open-critical-findings").reasons.join(), /regression test missing/);
+  });
+
+  it("blocks a missing or invalid register", async () => {
+    const missing = await run(makeRepo({ [REGISTER]: null }));
+    assert.equal(gate(missing, "open-critical-findings").status, "blocked");
+    const invalid = await run(makeRepo({ [REGISTER]: JSON.stringify({ kind: "x" }) }));
+    assert.equal(gate(invalid, "open-critical-findings").status, "blocked");
   });
 });
 
@@ -105,12 +246,55 @@ describe("d1-migrations", () => {
     assert.match(g.reasons.join(" "), /ambiguous migration number 0020/);
   });
 
+  it("reserves anticipated 0040/0041 after the baseline without requiring them", async () => {
+    const reserved = manifest.migrations.anticipated.map((a) => a.name);
+    assert.deepEqual(reserved, [
+      "0040_lifecycle_privacy_budget",
+      "0041_lifecycle_erasure_retention",
+    ]);
+    const last = manifest.migrations.required
+      .map((m) => m.name)
+      .sort()
+      .at(-1);
+    for (const name of reserved) assert.ok(name > last, name);
+    const main = await evaluate({ root: REPO, manifest, sqlite, now: NOW });
+    assert.equal(gate(main, "d1-migrations").status, "pass");
+    assert.match(
+      gate(main, "query-budgets").reasons.join(),
+      /0040_lifecycle_privacy_budget not integrated/,
+    );
+    assert.match(
+      gate(main, "d1-retention").reasons.join(),
+      /0041_lifecycle_erasure_retention not integrated/,
+    );
+  });
+
+  it("blocks another file taking a reserved number, and accepts the anticipated file itself", async () => {
+    const clash = makeRepo({ "apps/flightdeck/migrations/0040_other_feature.sql": "SELECT 1;" });
+    assert.match(
+      gate(await run(clash), "d1-migrations").reasons.join(),
+      /collides with 0040_lifecycle_privacy_budget/,
+    );
+    const landed = makeRepo({
+      "apps/flightdeck/migrations/0040_lifecycle_privacy_budget.sql":
+        "CREATE TABLE b (id INTEGER);",
+    });
+    const report = await run(landed, {
+      config: stagingConfig({
+        budgets: { perPrincipalDailyQueries: 5, perAppDailyQueries: 10, maxRowsPerQuery: 10 },
+      }),
+    });
+    assert.equal(gate(report, "d1-migrations").status, "pass");
+    assert.equal(gate(report, "query-budgets").status, "pass");
+    assert.match(gate(report, "query-budgets").reasons.join(), /applied state not observed/);
+  });
+
   it("blocks badly named, missing and unappliable migrations", async () => {
     const bad = makeRepo({ "apps/flightdeck/migrations/31_x.sql": "SELECT 1;" });
     assert.equal(gate(await run(bad), "d1-migrations").status, "blocked");
     const missing = makeRepo({ "apps/flightdeck/migrations/0030_lifecycle_projection.sql": null });
     assert.match(gate(await run(missing), "d1-migrations").reasons.join(), /missing required/);
-    const broken = makeRepo({ "apps/flightdeck/migrations/0040_broken.sql": "CREATE TABL oops" });
+    const broken = makeRepo({ "apps/flightdeck/migrations/0050_broken.sql": "CREATE TABL oops" });
     assert.match(gate(await run(broken), "d1-migrations").reasons.join(), /failed to apply/);
   });
 
@@ -239,8 +423,14 @@ describe("production gates", () => {
     });
     const report = await run(makeRepo(), { config });
     assert.match(gate(report, "query-budgets").reasons.join(), /must be positive/);
-    assert.match(gate(report, "query-budgets").reasons.join(), /budget migration not integrated/);
-    assert.match(gate(report, "d1-retention").reasons.join(), /erasure migration not integrated/);
+    assert.match(
+      gate(report, "query-budgets").reasons.join(),
+      /0040_lifecycle_privacy_budget not integrated/,
+    );
+    assert.match(
+      gate(report, "d1-retention").reasons.join(),
+      /0041_lifecycle_erasure_retention not integrated/,
+    );
   });
 
   it("blocks k below 5 in intended config", async () => {

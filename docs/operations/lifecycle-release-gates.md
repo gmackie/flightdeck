@@ -28,15 +28,21 @@ or a check that crashed. It never counts as passed.
 | `integration-ready` | Every integration gate passes, including every command gate **run in this invocation**. It says nothing about a Cloudflare account. |
 | `production-safe` | Every gate passes, integration gates included, **and** the config's `environment` is `staging`. Synthetic or absent input can never produce it. |
 
+**On current main both verdicts are BLOCKED.** `integration-ready` is held by
+`open-critical-findings`, even though every automated gate and command passes: an independent
+review of merged #52 found two P1 and two P2 bugs that are still on main (see
+[Known findings](#known-findings-open-critical-findings)). Passing tests don't clear a known
+finding.
+
 `--require integration-ready|production-safe` exits 1 when that verdict isn't `ready`. Exit 2 means
 a usage or config error, such as a secret in the config or an unknown flag.
 
-**On current main (53a9382) `production-safe` is BLOCKED by design:**
+`production-safe` is also BLOCKED by design, on top of the open findings:
 
 - `source-completeness`: `PRODUCTION_ENABLED = false` in `apps/lifecycle-mcp/src/config.ts`.
 - `oauth-metadata`: the MCP Worker doesn't serve `/.well-known/oauth-protected-resource`.
-- `d1-retention`: the erasure migration from FLIG-35 isn't integrated.
-- `query-budgets`: the budget migration from FLIG-36 isn't integrated.
+- `d1-retention`: `0041_lifecycle_erasure_retention` (FLIG-35) isn't integrated.
+- `query-budgets`: `0040_lifecycle_privacy_budget` (#54, FLIG-36) isn't integrated.
 - Every live gate is `unknown` until an operator attests to it.
 
 `flags-default-off` *requires* `PRODUCTION_ENABLED = false`, while `source-completeness` blocks
@@ -52,6 +58,7 @@ The manifest can't add commands.
 
 | Gate | Needed for | How it is decided |
 | --- | --- | --- |
+| `open-critical-findings` | integration and production | No open P0–P2 finding in `findings.json`. A resolved finding needs its regression tests in the tree and an independent review of this exact commit |
 | `workspace-components` | integration | Lifecycle packages and apps exist; pnpm is pinned; a lockfile exists; Node ≥ 24 |
 | `d1-migrations` | integration | `NNNN_name.sql` names, no duplicate number, the required baseline is present in order, and every file applies to a blank in-memory SQLite database (`node:sqlite`) |
 | `flags-default-off` | integration | Committed `vars` hold their default-off values; opt-in bindings (`LIFECYCLE_EVENTS`, `LIFECYCLE_READ_API`) aren't committed; `PRODUCTION_ENABLED = false` |
@@ -66,8 +73,8 @@ The manifest can't add commands.
 | `rpc-service-binding` | production | Config binding `LIFECYCLE_READ_API` targets `flightdeck` / `LifecycleReadEntrypoint`; any other service is blocked |
 | `staging-flag-plan` | production | Intended flags are allowed for a live stage (`READ_AUTHZ_MODE=enforce`, dev bypasses off) |
 | `oauth-metadata` | production | The Worker serves RFC 9728 metadata, and the fixture is well-formed |
-| `d1-retention` | production | The erasure migration is integrated; retention is enabled with bounded days. Disabled retention is blocked |
-| `query-budgets` | production | The budget migration is integrated; budgets are positive and bounded |
+| `d1-retention` | production | `0041_lifecycle_erasure_retention` is in the tree; retention is enabled with bounded days. Disabled retention is blocked |
+| `query-budgets` | production | `0040_lifecycle_privacy_budget` is in the tree; budgets are positive and bounded |
 | `source-completeness` | production | Production switch on (future) |
 | `access-live`, `oauth-live`, `basin-provisioned`, `erasure-certificate`, `audit-retention-live`, `rollback-rehearsed` | production | Operator attestation |
 
@@ -75,11 +82,53 @@ The manifest can't add commands.
 
 Current main applies, in order: `0001_apps`, `0002_server_ingest_keys`, `0003_dogfood_app`,
 `0004_hourly_rollups`, `0005_lifecycle_write`, `0006_process_definitions`,
-`0010_read_authorization`, `0020_lifecycle_serving` and `0030_lifecycle_projection`. A test
+`0010_read_authorization`, `0020_lifecycle_serving`, `0030_lifecycle_projection` and
+`0031_lifecycle_snapshot_tombstones` (#36, merged as 8372f5e). A test
 asserts that this list equals the files on disk. New migrations, such as erasure jobs (FLIG-35)
-and query budgets (FLIG-36), must take an unused number above `0030` and be added to
-`migrations.required`. Two files with the same number block the gate, because whichever branch
+and query budgets (FLIG-36), must take an unused number above `0031`. Two numbers are reserved in `migrations.anticipated`
+for in-flight drafts:
+
+| Reserved | Owner | Gate |
+| --- | --- | --- |
+| `0040_lifecycle_privacy_budget` | #54 (FLIG-36) | `query-budgets` |
+| `0041_lifecycle_erasure_retention` | FLIG-35 | `d1-retention` |
+
+They aren't required for `d1-migrations`. Until the file is in the tree, the gate it feeds is
+`blocked`. Once it is present, it only proves the file is in the tree. Whether any D1 database
+applied it isn't observed. Any other file using 0040 or 0041 blocks `d1-migrations` as a
+collision. When a draft merges, move its entry from `anticipated` to `required`. Two files with the same number block the gate, because whichever branch
 lands second would apply in an order no reviewer saw.
+
+## Known findings (`open-critical-findings`)
+
+`scripts/lifecycle-preflight/findings.json` (schema `findings.schema.json`) records known review
+findings against main. This independent integration review of merged #52 found:
+
+| Id | Severity | Finding |
+| --- | --- | --- |
+| `R52-P1-FUTURE-EVENT-DISCARDED` | P1 | A future-dated lifecycle event is discarded from the queue instead of being retained |
+| `R52-P1-SINGLETON-DWELL` | P1 | A stage with 1 completed and 4 censored cases exposes a singleton dwell time (small-cell suppression bypass) |
+| `R52-P2-CONFLICTING-OUTCOMES` | P2 | Conflicting case outcomes are not reconciled consistently |
+| `R52-P2-FAILED-REBUILD-VISIBILITY` | P2 | A failed read-model rebuild is not visible to operators or readers |
+
+All four are `open`. A separate hotfix draft is in progress. While any P0, P1 or P2 finding is
+open, the gate is `blocked`. To clear one, the hotfix PR sets `status: "resolved"` and adds:
+
+- `resolution.regressionTests`: repository paths that must exist. They run as part of
+  `pnpm test` in `local-quality`.
+- `resolution.review`: a JSON file matching `review.schema.json`, written by a reviewer who
+  didn't author the fix. It must be `independent: true` and `synthetic: false`, name this exact
+  `commit`, be at most 30 days old, and mark the finding `resolved`.
+
+A missing review, a review of another commit, an older review, or a verdict of `unclear` makes
+the gate `unknown`, never `pass`. A review that isn't independent, is synthetic, says `open` or
+is dated in the future is `blocked`, as is a missing regression test or register. Because the
+review names a commit, every new commit needs a re-review before `integration-ready` can return.
+P3 findings are listed but don't block.
+
+A finding can also list the `gates` it undermines. While it is open, those gates are `blocked`
+even if their own check passes. `R52-P1-SINGLETON-DWELL` names `privacy-k-floor`, because a k
+floor in config doesn't help when a censored-case path exposes a single dwell time.
 
 ## Input config (never secrets)
 
@@ -214,6 +263,9 @@ read-only `contents` permission, and checks out without persisted credentials.
 
 ## Limits
 
+- The findings register is maintained by hand. The harness can't discover new bugs; it only
+  stops a known finding from being hidden by green tests. Review records are checked for form,
+  commit and freshness, not truth.
 - No live state is observed. All live gates rely on attestations, and those are checked for
   form, not truth.
 - Static checks read source text with patterns, for example the AUD guard and `PRODUCTION_ENABLED`.
