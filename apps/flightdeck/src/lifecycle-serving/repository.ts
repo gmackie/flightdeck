@@ -10,10 +10,10 @@ import {
 
 /**
  * Writes and maintains the derived lifecycle read model (migration 0020). Its only intended
- * caller is a projector that replays lifecycle evidence; none is connected yet.
+ * caller is the lifecycle evidence projector.
  *
  * Generations: `beginRebuild` issues generation N+1 and the projector writes every snapshot with
- * it; `commitRebuild` makes it the active generation and soft-deletes rows from older
+ * it into isolated staging tables; `commitRebuild` atomically publishes it and soft-deletes older
  * generations that the rebuild did not rewrite. Incremental updates between rebuilds write with
  * the active generation, or with the building one while a rebuild runs, then `advanceWatermark`.
  *
@@ -55,7 +55,7 @@ export type ReplayRequest = {
   error_code: string | null;
 };
 
-/** D1 binds at most 100 parameters per statement; the 4 guard parameters leave room for these. */
+/** D1 binds at most 100 parameters per statement; the 7 guard parameters leave room for these. */
 const INTERVALS_PER_INSERT = 10;
 const EDGES_PER_INSERT = 18;
 /** Parent chains deeper than this are treated as cycles. */
@@ -68,15 +68,14 @@ const EDGES = "lifecycle_case_edges";
 const STATE = "lifecycle_projection_state";
 const REPLAYS = "lifecycle_replay_requests";
 
-/** The write is for a generation the projection accepts: the active or the building one. */
-const ACCEPTS_GENERATION = `EXISTS (SELECT 1 FROM ${STATE} s WHERE s.app_id = ?
-  AND (s.active_generation = ? OR s.building_generation = ?))`;
 /** Newer generation wins; within one generation, the higher (or equal) watermark wins. */
 const NOT_OLDER = (table: string) =>
   `excluded.generation > ${table}.generation OR (excluded.generation = ${table}.generation
    AND excluded.source_watermark >= ${table}.source_watermark)`;
 /** Children are rewritten only when the case row now holds exactly this write. */
-const CASE_HOLDS_WRITE = `EXISTS (SELECT 1 FROM ${CASES} c WHERE c.app_id = ? AND c.case_id = ?
+const CASE_HOLDS_WRITE = (
+  cases: string,
+) => `EXISTS (SELECT 1 FROM ${cases} c WHERE c.app_id = ? AND c.case_id = ?
   AND c.generation = ? AND c.source_watermark = ? AND c.deleted_at IS NULL)`;
 
 export class LifecycleSnapshotRepository {
@@ -108,6 +107,13 @@ export class LifecycleSnapshotRepository {
       .bind(appId, now)
       .first<{ building_generation: number }>();
     if (!row) throw new Error("projection state unavailable");
+    await this.db.batch(
+      [CASES, DEFINITIONS, INTERVALS, EDGES].map((table) =>
+        this.db
+          .prepare(`DELETE FROM ${table}_staging WHERE app_id = ? AND generation < ?`)
+          .bind(appId, row.building_generation),
+      ),
+    );
     return row.building_generation;
   }
 
@@ -122,14 +128,43 @@ export class LifecycleSnapshotRepository {
     const p = parseInput(Provenance, provenance);
     const now = this.now();
     const gen = p.generation;
-    const active = `EXISTS (SELECT 1 FROM ${STATE} WHERE app_id = ? AND active_generation = ?)`;
-    const [commit, cases, definitions] = await this.db.batch([
+    const active = `EXISTS (SELECT 1 FROM ${STATE} WHERE app_id = ? AND building_generation = ?)`;
+    const [cases, definitions, , , , , , , commit] = await this.db.batch([
+      this.db
+        .prepare(
+          `UPDATE ${CASES} SET deleted_at = ?, deleted_reason = 'superseded'
+           WHERE app_id = ? AND generation < ? AND deleted_at IS NULL AND ${active}
+             AND NOT EXISTS (SELECT 1 FROM ${CASES}_staging t WHERE t.app_id = ${CASES}.app_id
+               AND t.case_id = ${CASES}.case_id AND t.generation = ?)`,
+        )
+        .bind(now, appId, gen, appId, gen, gen),
+      this.db
+        .prepare(
+          `UPDATE ${DEFINITIONS} SET deleted_at = ?, deleted_reason = 'superseded'
+           WHERE app_id = ? AND generation < ? AND deleted_at IS NULL AND ${active}
+             AND NOT EXISTS (SELECT 1 FROM ${DEFINITIONS}_staging t WHERE t.app_id = ${DEFINITIONS}.app_id
+               AND t.process_key = ${DEFINITIONS}.process_key AND t.version = ${DEFINITIONS}.version AND t.generation = ?)`,
+        )
+        .bind(now, appId, gen, appId, gen, gen),
+      ...[INTERVALS, EDGES].map((table) =>
+        this.db
+          .prepare(`DELETE FROM ${table} WHERE app_id = ? AND ${active}`)
+          .bind(appId, appId, gen),
+      ),
+      ...[CASES, DEFINITIONS, INTERVALS, EDGES].map((table) =>
+        this.db
+          .prepare(
+            `INSERT OR REPLACE INTO ${table} SELECT * FROM ${table}_staging
+         WHERE app_id = ? AND generation = ? AND ${active}`,
+          )
+          .bind(appId, gen, appId, gen),
+      ),
       this.db
         .prepare(
           `UPDATE ${STATE} SET active_generation = ?, building_generation = NULL, status = 'ready',
              source_watermark = ?, as_of = ?, reducer_version = ?, last_success_at = ?,
              last_error_code = NULL, updated_at = ?,
-             rows_written = (SELECT count(*) FROM ${CASES}
+             rows_written = (SELECT count(*) FROM ${CASES}_staging
                WHERE app_id = ? AND generation = ? AND deleted_at IS NULL)
            WHERE app_id = ? AND building_generation = ?`,
         )
@@ -145,18 +180,14 @@ export class LifecycleSnapshotRepository {
           appId,
           gen,
         ),
-      this.db
-        .prepare(
-          `UPDATE ${CASES} SET deleted_at = ?, deleted_reason = 'superseded'
-           WHERE app_id = ? AND generation < ? AND deleted_at IS NULL AND ${active}`,
-        )
-        .bind(now, appId, gen, appId, gen),
-      this.db
-        .prepare(
-          `UPDATE ${DEFINITIONS} SET deleted_at = ?, deleted_reason = 'superseded'
-           WHERE app_id = ? AND generation < ? AND deleted_at IS NULL AND ${active}`,
-        )
-        .bind(now, appId, gen, appId, gen),
+      ...[CASES, DEFINITIONS, INTERVALS, EDGES].map((table) =>
+        this.db
+          .prepare(
+            `DELETE FROM ${table}_staging WHERE app_id = ? AND generation = ?
+           AND EXISTS (SELECT 1 FROM ${STATE} WHERE app_id = ? AND active_generation = ?)`,
+          )
+          .bind(appId, gen, appId, gen),
+      ),
     ]);
     if (!commit?.meta.changes) {
       throw new SnapshotRejected("generation", "generation is not being rebuilt");
@@ -197,6 +228,18 @@ export class LifecycleSnapshotRepository {
     return result.meta.changes > 0;
   }
 
+  /** The table choice is guarded again inside every write transaction. */
+  private async target(appId: string, generation: number, table: string) {
+    const state = await this.state(appId);
+    const staging = state?.building_generation === generation;
+    return {
+      table: staging ? `${table}_staging` : table,
+      accepts: staging
+        ? `EXISTS (SELECT 1 FROM ${STATE} s WHERE s.app_id = ? AND s.building_generation = ? AND s.building_generation = ?)`
+        : `EXISTS (SELECT 1 FROM ${STATE} s WHERE s.app_id = ? AND s.active_generation = ? AND s.active_generation = ? AND s.building_generation IS NULL)`,
+    };
+  }
+
   async upsertProcessDefinition(
     appId: string,
     definition: ProcessDefinitionInput,
@@ -204,18 +247,19 @@ export class LifecycleSnapshotRepository {
   ): Promise<WriteResult> {
     const d = parseInput(ProcessDefinitionInput, definition);
     const p = parseInput(Provenance, provenance);
+    const { table, accepts } = await this.target(appId, p.generation, DEFINITIONS);
     const stages = d.stages.map((s) => ({ key: s.key, label: s.label, terminal: !!s.terminal }));
     const result = await this.db
       .prepare(
-        `INSERT INTO ${DEFINITIONS} (app_id, process_key, version, label, stages_json, generation,
+        `INSERT INTO ${table} (app_id, process_key, version, label, stages_json, generation,
            source_watermark, as_of, updated_at)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${ACCEPTS_GENERATION}
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${accepts}
          ON CONFLICT (app_id, process_key, version) DO UPDATE SET
            label = excluded.label, stages_json = excluded.stages_json,
            generation = excluded.generation, source_watermark = excluded.source_watermark,
            as_of = excluded.as_of, updated_at = excluded.updated_at,
            deleted_at = NULL, deleted_reason = NULL
-         WHERE ${NOT_OLDER(DEFINITIONS)}`,
+         WHERE ${NOT_OLDER(table)}`,
       )
       .bind(
         appId,
@@ -247,18 +291,32 @@ export class LifecycleSnapshotRepository {
   ): Promise<WriteResult> {
     const c = parseInput(CaseSnapshotInput, snapshot);
     const p = parseInput(Provenance, provenance);
-    if (c.parent_case_id && (await this.wouldCycle(appId, c.case_id, c.parent_case_id))) {
+    const target = await this.target(appId, p.generation, CASES);
+    const cases = target.table;
+    const staging = cases !== CASES;
+    const intervals = staging ? `${INTERVALS}_staging` : INTERVALS;
+    const edges = staging ? `${EDGES}_staging` : EDGES;
+    const holdsWrite = `${CASE_HOLDS_WRITE(cases)} AND ${target.accepts}`;
+    if (c.parent_case_id && (await this.wouldCycle(appId, c.case_id, c.parent_case_id, cases))) {
       throw new SnapshotRejected("cycle", "parent_case_id is a descendant of the case");
     }
     const now = this.now();
-    const guard = [appId, c.case_id, p.generation, p.source_watermark];
+    const guard = [
+      appId,
+      c.case_id,
+      p.generation,
+      p.source_watermark,
+      appId,
+      p.generation,
+      p.generation,
+    ];
     const statements = [
       this.db
         .prepare(
-          `INSERT INTO ${CASES} (app_id, case_id, process_key, process_version, status, outcome,
+          `INSERT INTO ${cases} (app_id, case_id, process_key, process_version, status, outcome,
              current_stage, parent_case_id, started_at, ended_at, last_event_at, generation,
              source_watermark, reducer_version, as_of, updated_at)
-           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${ACCEPTS_GENERATION}
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE ${target.accepts}
            ON CONFLICT (app_id, case_id) DO UPDATE SET
              process_key = excluded.process_key, process_version = excluded.process_version,
              status = excluded.status, outcome = excluded.outcome,
@@ -268,7 +326,7 @@ export class LifecycleSnapshotRepository {
              source_watermark = excluded.source_watermark,
              reducer_version = excluded.reducer_version, as_of = excluded.as_of,
              updated_at = excluded.updated_at, deleted_at = NULL, deleted_reason = NULL
-           WHERE ${NOT_OLDER(CASES)}`,
+           WHERE ${NOT_OLDER(cases)}`,
         )
         .bind(
           appId,
@@ -292,14 +350,10 @@ export class LifecycleSnapshotRepository {
           p.generation,
         ),
       this.db
-        .prepare(
-          `DELETE FROM ${INTERVALS} WHERE app_id = ? AND case_id = ? AND ${CASE_HOLDS_WRITE}`,
-        )
+        .prepare(`DELETE FROM ${intervals} WHERE app_id = ? AND case_id = ? AND ${holdsWrite}`)
         .bind(appId, c.case_id, ...guard),
       this.db
-        .prepare(
-          `DELETE FROM ${EDGES} WHERE app_id = ? AND from_case_id = ? AND ${CASE_HOLDS_WRITE}`,
-        )
+        .prepare(`DELETE FROM ${edges} WHERE app_id = ? AND from_case_id = ? AND ${holdsWrite}`)
         .bind(appId, c.case_id, ...guard),
     ];
     for (let i = 0; i < c.intervals.length; i += INTERVALS_PER_INSERT) {
@@ -307,10 +361,10 @@ export class LifecycleSnapshotRepository {
       statements.push(
         this.db
           .prepare(
-            `INSERT INTO ${INTERVALS} (app_id, case_id, seq, stage_key, state, entered_at,
+            `INSERT INTO ${intervals} (app_id, case_id, seq, stage_key, state, entered_at,
                exited_at, outcome, generation)
              SELECT * FROM (VALUES ${chunk.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ")})
-             WHERE ${CASE_HOLDS_WRITE}`,
+             WHERE ${holdsWrite}`,
           )
           .bind(
             ...chunk.flatMap((iv, j) => [
@@ -337,9 +391,9 @@ export class LifecycleSnapshotRepository {
       statements.push(
         this.db
           .prepare(
-            `INSERT INTO ${EDGES} (app_id, from_case_id, relation, to_case_id, generation)
+            `INSERT INTO ${edges} (app_id, from_case_id, relation, to_case_id, generation)
              SELECT * FROM (VALUES ${chunk.map(() => "(?, ?, ?, ?, ?)").join(", ")})
-             WHERE ${CASE_HOLDS_WRITE}`,
+             WHERE ${holdsWrite}`,
           )
           .bind(
             ...chunk.flatMap((r) => [appId, c.case_id, r.relation, r.to_case_id, p.generation]),
@@ -357,12 +411,13 @@ export class LifecycleSnapshotRepository {
    */
   async tombstoneCase(appId: string, caseId: string, provenance: Provenance): Promise<WriteResult> {
     const p = parseInput(Provenance, provenance);
+    const { table, accepts } = await this.target(appId, p.generation, CASES);
     const now = this.now();
     const result = await this.db
       .prepare(
-        `UPDATE ${CASES} SET deleted_at = ?, deleted_reason = 'source_deleted', generation = ?,
+        `UPDATE ${table} SET deleted_at = ?, deleted_reason = 'source_deleted', generation = ?,
            source_watermark = ?, as_of = ?, updated_at = ?
-         WHERE app_id = ? AND case_id = ? AND ${ACCEPTS_GENERATION}
+         WHERE app_id = ? AND case_id = ? AND ${accepts}
            AND (? > generation OR (? = generation AND ? >= source_watermark))`,
       )
       .bind(
@@ -424,9 +479,14 @@ export class LifecycleSnapshotRepository {
   /** Forgets everything derived for an app (not its replay history), ahead of a clean rebuild. */
   async dropApp(appId: string): Promise<void> {
     await this.db.batch(
-      [INTERVALS, EDGES, CASES, DEFINITIONS, STATE].map((table) =>
-        this.db.prepare(`DELETE FROM ${table} WHERE app_id = ?`).bind(appId),
-      ),
+      [
+        INTERVALS,
+        EDGES,
+        CASES,
+        DEFINITIONS,
+        ...[INTERVALS, EDGES, CASES, DEFINITIONS].map((t) => `${t}_staging`),
+        STATE,
+      ].map((table) => this.db.prepare(`DELETE FROM ${table} WHERE app_id = ?`).bind(appId)),
     );
   }
 
@@ -508,13 +568,18 @@ export class LifecycleSnapshotRepository {
   }
 
   /** True when `parentId` is `caseId` or one of its descendants (bounded walk up the parents). */
-  private async wouldCycle(appId: string, caseId: string, parentId: string): Promise<boolean> {
+  private async wouldCycle(
+    appId: string,
+    caseId: string,
+    parentId: string,
+    table = CASES,
+  ): Promise<boolean> {
     const hit = await this.db
       .prepare(
         `WITH RECURSIVE chain(id, depth) AS (
            SELECT ?, 0
            UNION
-           SELECT c.parent_case_id, chain.depth + 1 FROM ${CASES} c JOIN chain
+           SELECT c.parent_case_id, chain.depth + 1 FROM ${table} c JOIN chain
              ON c.app_id = ? AND c.case_id = chain.id
            WHERE c.parent_case_id IS NOT NULL AND c.deleted_at IS NULL AND chain.depth < ?
          )

@@ -27,8 +27,11 @@ evidence log → replay engine (FLIG-16) → serving tables (FLIG-21) → read A
    writes it with provenance `(generation, source_watermark, as_of, reducer_version)`. Late,
    reordered and corrected events need no special path: the whole case is replayed.
 4. An app that was never projected is **rebuilt**: a new generation is written from the log and
-   activated at once. `LifecycleProjector.rebuild(appId)` repeats that on demand (for example
-   after bumping `REDUCER_VERSION`).
+   activated at once. Migration `0031` adds separate staging tables for cases, definitions,
+   intervals and edges. Readers keep the committed tables while a rebuild runs or fails;
+   one D1 batch transaction publishes all four tables and their generation metadata.
+   `LifecycleProjector.rebuild(appId)` repeats that on demand (for example after bumping
+   `REDUCER_VERSION`). Rebuild queue entries are acknowledged only after publication succeeds.
 5. A cron (`*/5 * * * *`, `src/lifecycle-projection/schedule.ts`) retries due projection work
    and forwards pending outbox rows.
 
@@ -79,6 +82,11 @@ an error code (`projection_error`, `snapshot_invalid`, `snapshot_cycle`, `snapsh
 One bad case never blocks the rest of its app, or a rebuild (during a rebuild it is hidden
 until its retry succeeds). A queue entry is only cleared if
 the projection covered the newest event for that case.
+
+Accepted future-dated evidence remains queued until its occurrence time. Eligible history is
+still projected, but the case is not acknowledged until all its evidence is eligible. The
+scheduled drain retries it without another producer delivery. The committed watermark stays
+below pending evidence, including when later eligible events have higher log sequence numbers.
 
 ## Basin outbox
 

@@ -10,6 +10,7 @@ import {
   terminalClasses,
 } from "@flightdeckhq/lifecycle";
 import type { LifecycleRecord, ProcessDefinitionV1 } from "@flightdeckhq/schema";
+import { canonical } from "./identity";
 import {
   type AdapterCode,
   engineProcessId,
@@ -51,7 +52,7 @@ type Draft = Record<string, unknown> & { id: string; type: string };
 type Envelope = {
   id: string;
   occurredAt: number;
-  source: { id: string; sequence?: number; producer?: string };
+  source: { id: string; sequence?: number; producer?: string; evidenceFingerprint: string };
 };
 
 const order = (a: LifecycleRecord, b: LifecycleRecord) =>
@@ -114,7 +115,11 @@ export function adaptCase(
       },
       "",
     );
-    return { id, occurredAt, source };
+    const { received_at: _received, channel: _channel, ...evidence } = r;
+    // Preserve wire identity through normalization: dimensions and reasons can affect the
+    // served result even when the engine action is identical. Source metadata participates
+    // in duplicate equality but is excluded from correction action compatibility checks.
+    return { id, occurredAt, source: { ...source, evidenceFingerprint: canonical(evidence) } };
   };
 
   /** The engine events for one lifecycle (non-correction) record. */
@@ -284,7 +289,7 @@ export function adaptCase(
           ? { ...target.dimensions, ...correction.dimensions }
           : null,
     };
-    const replacement = { ...envelope(target, c.event_id, amended.occurred_at) };
+    const replacement = { ...envelope(amended, c.event_id, amended.occurred_at) };
     for (const e of transition(amended, replacement)) {
       events.push({ ...e, supersedes: target.event_id });
     }
