@@ -76,6 +76,63 @@ init({ redactProps: ["email"], beforeSend: (event) => event });
 track("search.submitted", { results: 3 });
 identify("user_1");
 EOF
+cat >src/lifecycle.ts <<'EOF'
+import { id, replay, stageMetrics, type ReplayInput } from "@flightdeckhq/lifecycle";
+
+const processId = id<"process">("process-v1");
+const caseId = id<"case">("case-1");
+const stageId = id<"stage">("stage-1");
+const stageInstanceId = id<"stage-instance">("attempt-1");
+const input: ReplayInput = {
+  definitions: [{ id: processId, stages: [{ id: stageId }] }],
+  cases: [{ id: caseId, processId }],
+  stageInstances: [{ id: stageInstanceId, caseId, stageId }],
+  events: [], asOf: 100,
+};
+const result = replay(input);
+stageMetrics(result, stageInstanceId);
+EOF
+cat >src/investigations.ts <<'EOF'
+import { executeInvestigation, type InvestigationRequest } from "@flightdeckhq/lifecycle-investigations";
+import { createFakeAdapter, type QueryRegistry } from "@flightdeckhq/lifecycle-queries";
+const registry: QueryRegistry = {
+  appId: "synthetic", definitionId: "pipeline", metricVersion: "lifecycle.v1",
+  availableFrom: "2026-01-01T00:00:00.000Z", maxWindowDays: 31, minSampleSize: 3,
+  versions: { v1: { comparisonKey: "same", stages: { work: "work" }, checkpoints: {}, variants: { main: "main" } } },
+  filterValues: { caseMix: ["standard"], cohortId: ["control"], definitionVersion: ["v1"], variantId: ["main"], outcome: ["open", "completed", "cancelled", "failed"] },
+};
+const request: InvestigationRequest = {
+  recipe: "process-health", appId: registry.appId, definitionId: registry.definitionId,
+  definitionVersions: ["v1"], metricVersion: "lifecycle.v1", asOf: "2026-02-01T00:00:00.000Z",
+  window: { from: "2026-01-01T00:00:00.000Z", to: "2026-01-15T00:00:00.000Z" },
+  cohort: { id: "control", caseMix: ["standard"] },
+};
+void executeInvestigation(request, {
+  catalog: { revision: "r1", registry, stages: [{ id: "work", lane: "main" }], allowedGroupBy: [] },
+  adapter: createFakeAdapter([], registry, request.asOf),
+  authorize: () => ({ allowed: true, appId: registry.appId, scopeKey: "smoke-scope-r1" }),
+});
+EOF
+cat >src/lifecycle-insights.ts <<'EOF'
+import { compareVariants, evaluateRule, type AlertEvaluation, type Comparison } from "@flightdeckhq/lifecycle-insights";
+import { syntheticContext, syntheticFixture } from "@flightdeckhq/lifecycle-insights/fixtures";
+
+const { snapshot, comparison, rule } = syntheticFixture("release");
+const alert: AlertEvaluation = evaluateRule({ rule, current: snapshot, context: syntheticContext });
+const observed: Comparison = compareVariants({
+  spec: comparison, left: snapshot, right: snapshot, context: syntheticContext,
+});
+void [alert, observed];
+EOF
+cat >tsconfig.insights.json <<'EOF'
+{
+  "compilerOptions": {
+    "target": "es2022", "module": "nodenext", "moduleResolution": "nodenext",
+    "lib": ["es2022"], "types": [], "strict": true, "noEmit": true
+  },
+  "files": ["src/lifecycle-insights.ts"]
+}
+EOF
 cat >tsconfig.worker.json <<'EOF'
 {
   "compilerOptions": {
@@ -87,7 +144,7 @@ cat >tsconfig.worker.json <<'EOF'
     "strict": true,
     "noEmit": true
   },
-  "files": ["src/worker.ts"]
+  "files": ["src/worker.ts", "src/lifecycle.ts", "src/investigations.ts"]
 }
 EOF
 cat >tsconfig.browser.json <<'EOF'
@@ -101,13 +158,14 @@ cat >tsconfig.browser.json <<'EOF'
     "strict": true,
     "noEmit": true
   },
-  "files": ["src/browser.ts"]
+  "files": ["src/browser.ts", "src/lifecycle.ts", "src/investigations.ts"]
 }
 EOF
 for tsc in node_modules/typescript/bin/tsc node_modules/ts5/bin/tsc; do
   echo "typecheck with TypeScript $(node "$tsc" -v)"
   node "$tsc" -p tsconfig.worker.json
   node "$tsc" -p tsconfig.browser.json
+  node "$tsc" -p tsconfig.insights.json
 done
 
 # The libraries load as plain Node ESM (no bundler extension resolution).
@@ -120,7 +178,42 @@ for (const name of ["flightdeck", "handleFlightdeck", "withFlightdeck"])
 const browser = await import("@flightdeckhq/browser");
 for (const name of ["init", "track", "identify"])
   if (typeof browser[name] !== "function") throw new Error(`browser: ${name} missing`);
+const lifecycle = await import("@flightdeckhq/lifecycle");
+for (const name of ["id", "replay", "stageMetrics", "caseMetrics", "funnel", "summarize", "normalizeCanonicalDefinition", "normalizeCanonicalEnvelope", "sanitizeDiagnostics"])
+  if (typeof lifecycle[name] !== "function") throw new Error(`lifecycle: ${name} missing`);
+const empty = lifecycle.replay({ definitions: [], cases: [], stageInstances: [], events: [], asOf: 0 });
+if (lifecycle.summarize(empty).cases !== 0) throw new Error("lifecycle: empty replay failed");
 console.log("libraries import in Node");
+const queries = await import("@flightdeckhq/lifecycle-queries");
+const investigations = await import("@flightdeckhq/lifecycle-investigations");
+const registry = queries.demoRegistry;
+const request = {
+  recipe: "process-health", appId: registry.appId, definitionId: registry.definitionId,
+  definitionVersions: queries.demoQuery.definitionVersions, metricVersion: registry.metricVersion,
+  asOf: queries.demoQuery.asOf, window: { from: queries.demoQuery.from, to: queries.demoQuery.to },
+  cohort: queries.demoQuery.cohort,
+};
+const result = await investigations.executeInvestigation(request, {
+  catalog: { revision: "smoke-r1", registry, stages: Object.values(registry.versions[request.definitionVersions[0]].stages).map(id => ({ id, lane: "main" })), allowedGroupBy: [] },
+  adapter: queries.createFakeAdapter(queries.syntheticFacts(), registry, queries.demoWatermark),
+  authorize: () => ({ allowed: true, appId: registry.appId, scopeKey: "smoke-scope-r1" }),
+});
+if (!result.pack.evidence.some(entry => entry.status === "ok")) throw new Error("investigations: no evidence");
+if (investigations.parseEvidencePack(investigations.serializeEvidencePack(result.pack)).digest !== result.pack.digest)
+  throw new Error("investigations: pack round-trip");
+console.log("libraries import in Node; installed investigation executes");
+const insights = await import("@flightdeckhq/lifecycle-insights");
+const { syntheticContext, syntheticFixture } = await import("@flightdeckhq/lifecycle-insights/fixtures");
+for (const domain of ["hiring", "release", "incidents"]) {
+  const { snapshot, rule, comparison } = syntheticFixture(domain);
+  const alert = insights.evaluateRule({ rule, current: snapshot, context: syntheticContext });
+  if (alert.status !== "evaluated" || alert.transition !== "opened" || alert.value !== 0.9)
+    throw new Error(`insights: ${domain} alert`);
+  const result = insights.compareVariants({ spec: comparison, left: snapshot, right: snapshot, context: syntheticContext });
+  if (result.status !== "compared" || result.differences.length !== 5 || result.coverage.matchedStrata !== 2)
+    throw new Error(`insights: ${domain} comparison`);
+}
+console.log("libraries import in Node; synthetic lifecycle evaluations pass");
 '
 
 node node_modules/@flightdeckhq/create/dist/cli.js --help | grep -q "@flightdeckhq/create apps add"

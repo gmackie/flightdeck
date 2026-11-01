@@ -22,7 +22,10 @@ import { AppsPage } from "./pages/apps";
 import { ComingSoonPage } from "./pages/coming-soon";
 import { LivePage } from "./pages/live";
 import { TrendsPage } from "./pages/trends";
+import { DemoWorkflowsPage } from "./pages/workflows";
+import { LiveWorkflowsPage } from "./pages/workflows-live";
 import {
+  isDemoView,
   navigate,
   type PageId,
   pageFrom,
@@ -50,6 +53,7 @@ function NavGroup(props: { label: string; items: NavItem[]; current: PageId | nu
           >
             {item.label}
             {item.soon ? <Sidebar.MenuBadge>Soon</Sidebar.MenuBadge> : null}
+            {item.demo ? <Sidebar.MenuBadge>Demo</Sidebar.MenuBadge> : null}
           </Sidebar.MenuButton>
         ))}
       </Sidebar.Menu>
@@ -64,6 +68,7 @@ function Centered({ children }: { children: ReactNode }) {
 /** What the main area shows for the current page, apps state and selection. */
 function Content(props: {
   page: PageId | null;
+  demo: boolean;
   state: AppsState;
   selected: AppRecord | null;
   reload: () => void;
@@ -86,6 +91,7 @@ function Content(props: {
     );
   }
   const item = NAV_ITEMS.find((i) => i.id === page);
+  if (props.demo) return <DemoWorkflowsPage />;
   if (item?.soon) return <ComingSoonPage item={item} />;
   if (state.status === "loading") {
     return (
@@ -161,13 +167,16 @@ function Content(props: {
       </Centered>
     );
   }
+  if (page === "workflows") return <LiveWorkflowsPage app={selected} />;
   return page === "live" ? <LivePage app={selected} /> : <TrendsPage app={selected} />;
 }
 
 export function App() {
   const href = useLocation();
-  const [state, reload] = useApps();
   const page = pageFrom(location.pathname);
+  // Only the explicit synthetic Workflows demo runs without the apps API.
+  const demo = page === "workflows" && isDemoView();
+  const [state, reload] = useApps(!demo);
   const apps = state.status === "ok" ? state.apps : [];
   const param = selectedAppParam();
   const selected = apps.find((a) => a.id === param) ?? apps[0] ?? null;
@@ -176,10 +185,10 @@ export function App() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: `href` changes on every navigation.
   useEffect(() => {
     if (location.pathname === "/") navigate(`/live${location.search}`, { replace: true });
-    else if (state.status === "ok" && (selected?.id ?? null) !== param) {
+    else if (!demo && state.status === "ok" && (selected?.id ?? null) !== param) {
       navigate(withApp(selected?.id ?? null), { replace: true });
     }
-  }, [href, state.status, selected?.id, param]);
+  }, [href, demo, state.status, selected?.id, param]);
 
   const label = NAV_ITEMS.find((i) => i.id === page)?.label ?? "Not found";
   useEffect(() => {
@@ -206,14 +215,18 @@ export function App() {
         <div className="fd-main">
           <header className="fd-header">
             <Sidebar.Trigger aria-label="Toggle navigation" data-flightdeck="nav.toggle" />
-            <AppSwitcher
-              state={state}
-              selected={selected}
-              onSelect={(appId) => navigate(withApp(appId))}
-            />
+            {demo ? (
+              <span className="wf-header-notice">Synthetic demo workspace</span>
+            ) : (
+              <AppSwitcher
+                state={state}
+                selected={selected}
+                onSelect={(appId) => navigate(withApp(appId))}
+              />
+            )}
           </header>
           <main className="fd-content" aria-label={label}>
-            <Content page={page} state={state} selected={selected} reload={reload} />
+            <Content page={page} demo={demo} state={state} selected={selected} reload={reload} />
           </main>
         </div>
       </Sidebar.Provider>

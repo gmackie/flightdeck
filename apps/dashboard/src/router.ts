@@ -1,8 +1,23 @@
 import { useSyncExternalStore } from "react";
 
-export type PageId = "live" | "trends" | "journeys" | "funnels" | "retention" | "apps";
+export type PageId =
+  | "live"
+  | "trends"
+  | "workflows"
+  | "journeys"
+  | "funnels"
+  | "retention"
+  | "apps";
 
-export const PAGES: PageId[] = ["live", "trends", "journeys", "funnels", "retention", "apps"];
+export const PAGES: PageId[] = [
+  "live",
+  "trends",
+  "workflows",
+  "journeys",
+  "funnels",
+  "retention",
+  "apps",
+];
 
 /** The selected app lives in `?app=`, so links and reloads keep it. */
 export const APP_PARAM = "app";
@@ -23,6 +38,20 @@ const snapshot = () => location.pathname + location.search;
 /** Re-renders on every navigation; returns `pathname + search`. */
 export function useLocation(): string {
   return useSyncExternalStore(subscribe, snapshot);
+}
+
+/** `?view=demo` opts into the synthetic Workflows demo; live data is the default. */
+export const VIEW_PARAM = "view";
+
+export function isDemoView(search = location.search): boolean {
+  return new URLSearchParams(search).get(VIEW_PARAM) === "demo";
+}
+
+/** The synthetic Workflows demo, keeping the selected app for the way back to live data. */
+export function workflowsDemoHref(appId = selectedAppParam()): string {
+  const params = new URLSearchParams({ [VIEW_PARAM]: "demo" });
+  if (appId) params.set(APP_PARAM, appId);
+  return `/workflows?${params}`;
 }
 
 /** `/trends` -> "trends"; `/` -> "live"; anything else -> null (not found). */

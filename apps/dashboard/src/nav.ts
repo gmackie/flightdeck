@@ -9,11 +9,12 @@ import {
 } from "@phosphor-icons/react";
 import type { PageId } from "./router";
 
-export type NavItem = { id: PageId; label: string; icon: Icon; soon?: boolean };
+export type NavItem = { id: PageId; label: string; icon: Icon; soon?: boolean; demo?: boolean };
 
 export const ANALYTICS_NAV: NavItem[] = [
   { id: "live", label: "Live", icon: PulseIcon },
   { id: "trends", label: "Trends", icon: ChartLineIcon },
+  { id: "workflows", label: "Workflows", icon: PathIcon },
   { id: "journeys", label: "Journeys", icon: PathIcon, soon: true },
   { id: "funnels", label: "Funnels", icon: FunnelIcon, soon: true },
   { id: "retention", label: "Retention", icon: ArrowsClockwiseIcon, soon: true },

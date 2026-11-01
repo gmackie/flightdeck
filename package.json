@@ -12,6 +12,7 @@
     "format": "biome check --write .",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
+    "test:integration": "vitest run --project lifecycle-mcp --project flightdeck-mcp-live apps/lifecycle-mcp/test/acceptance.test.ts apps/lifecycle-mcp/test/investigation-engine.test.ts apps/flightdeck/test/lifecycle-mcp-live.test.ts",
     "build": "pnpm -r build",
     "smoke:pack": "bash scripts/pack-smoke.sh",
     "release:version": "node scripts/release-version.mjs"

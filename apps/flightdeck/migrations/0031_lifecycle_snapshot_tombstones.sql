@@ -9,7 +9,7 @@
 --
 -- Holds only the opaque case id, slugs and numbers: no case content, no principal identity.
 -- restore_ref is an opaque approval reference supplied by the authorizer.
-CREATE TABLE lifecycle_case_tombstones (
+CREATE TABLE lifecycle_snapshot_tombstones (
   app_id TEXT NOT NULL,
   case_id TEXT NOT NULL,
   reason TEXT NOT NULL,

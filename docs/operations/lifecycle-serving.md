@@ -1,9 +1,10 @@
-# Lifecycle serving read model (not live)
+# Lifecycle serving read model (integrated, not deployed)
 
-Status: **library only.** The tables, repository and route handler exist and are tested against
-D1, but nothing writes to them and nothing routes to them. No projector, ingestion source or
-reducer is connected, and `/api/*` does not dispatch to these routes. Nothing here works
-end-to-end yet.
+Status: **integrated, not deployed.** The projector (`src/lifecycle-projection`) writes these
+tables from accepted lifecycle events and `/api/*` dispatches to these routes behind
+`authorizeLifecycleRead` (see "Routing and projection" below). Nothing is deployed: the
+migrations have not been applied to a production database and no production source sends
+lifecycle events yet.
 
 ## What it is
 
@@ -11,7 +12,7 @@ A derived, rebuildable D1 read model for lifecycle process analytics
 (`apps/flightdeck/migrations/0020_lifecycle_serving.sql`, `apps/flightdeck/src/lifecycle-serving/`).
 It stores snapshots a projector computes from lifecycle evidence. It is never the source of truth:
 `LifecycleSnapshotRepository.dropApp()` followed by a replay must always be safe. The one
-exception is deletions: tombstones (migration 0021) persist through rebuilds so a replay cannot
+exception is deletions: tombstones (migration 0031) persist through rebuilds so a replay cannot
 recreate a deleted case.
 
 | Table | Holds |
@@ -22,7 +23,7 @@ recreate a deleted case.
 | `lifecycle_stage_intervals` | per-case stage intervals (`active`/`paused`/`blocked`), open intervals have `exited_at = NULL` |
 | `lifecycle_case_edges` | typed relations between cases (parent links live on the case row) |
 | `lifecycle_replay_requests` | queued rebuild requests for a future projector |
-| `lifecycle_case_tombstones` | persistent deletions: opaque case id, reason slug, deletion watermark, restore approval (migration 0021) |
+| `lifecycle_snapshot_tombstones` | persistent deletions of served cases: opaque case id, reason slug, deletion watermark, restore approval (migration 0031) |
 
 Every key starts with `app_id`. Ids are opaque tokens (`[A-Za-z0-9_-]{1,64}`, so no emails);
 keys/outcomes/relations are lowercase slugs; labels are definition metadata with a narrow charset.
@@ -60,6 +61,13 @@ soft-deleted rows for good.
   the pre-deletion evidence stays refused. Deleting again re-arms the tombstone.
 - Incoming relations from other cases to a deleted case are hidden by the read API; a child of a
   deleted parent reports the parent as `available: false`.
+- `hideCase(app, caseId, provenance)` is not a deletion: it soft-deletes (`not_servable`) a case
+  whose evidence no longer yields a snapshot, under the usual `(generation, source_watermark)`
+  ordering, and a later snapshot brings it back. The projector uses it; erasure uses
+  `tombstoneCase`.
+- These serving tombstones key the opaque served id. The projector's evidence-level erasure
+  (`eraseCase`, `lifecycle_case_tombstones`, migration 0030) keys the source case id and stops
+  evidence at ingest; see [lifecycle-projection.md](lifecycle-projection.md).
 
 ## Read API (`routes.ts`)
 
@@ -72,6 +80,7 @@ All `GET`, under `/api/apps/:app/lifecycle/`:
 | `cases/:id` | `lifecycle:read` | intervals, parent (flagged when not projected), ≤100 children, relations, provenance |
 | `summaries/stages` | `process:read` | dwell per stage/state; requires `process_key` + `version`; window ≤366 days (default last 30) |
 | `summaries/outcomes` | `process:read` | closed cases by outcome plus open count; same filters |
+| `diagnostics` | `lifecycle:read` | projection health: counts and codes only |
 
 Every response: `{ app_id, as_of, data_freshness, cohort, sample_count, suppressed, suppression,
 data, page? }`. `data_freshness.status` is `unavailable` until a projection is committed, then
@@ -85,6 +94,7 @@ never included in dwell.
 | `summaries/*` | `min_cohort` | configured (default 5, floor 2) | `distinct_cases` | `released_groups` |
 | `processes`, `cases` | `not_applicable` | `null` | `null` | `returned_rows` |
 | `cases/:id` | `not_applicable` | `null` | `null` | `case` |
+| `diagnostics` | `not_applicable` | `null` | `null` | `none` (`sample_count` is 0) |
 
 `withheld` (and its shorthand `suppressed`) is true when at least one aggregate group was
 withheld. The number of withheld groups and their sizes are never disclosed. Case lists and
@@ -94,19 +104,15 @@ detail are not cohort-suppressed: they return individual opaque cases, which is 
 Diagnostics (`repository.diagnostics`) return counts and codes only: no case ids, approval
 references or snapshot content. Error and reason codes must be slugs.
 
-## Integration hook
+## Routing and projection
 
-Authorization is injected and **denies by default**. Once the RBAC module (FLIG-18) lands, the
-`/api/*` dispatcher wires it after `authenticate()`:
+The `/api/*` dispatcher (`src/api/index.ts`) calls `lifecycleServingRoutes` after
+`authenticate()`, with `authorizeLifecycleRead` (FLIG-18) as the authorizer, before the reserved
+lifecycle namespace (`policy`, `projection`). The handler authorizes before validating anything,
+fails closed (503) if the checker throws, and refuses a scope for a different app. Unknown and
+ungranted apps get the same 403. `diagnostics` (`lifecycle:read`) reports projection health as
+counts and codes, and `data_freshness.pending_cases` counts cases with accepted events not yet
+reflected.
 
-```ts
-const served = await lifecycleServingRoutes(request, env, principal, {
-  authorize: ({ principal, appId, capability }) =>
-    authorizeLifecycleRead(env, principal, appId, capability),
-});
-if (served) return served;
-```
-
-The handler authorizes before validating anything, fails closed (503) if the checker throws,
-and refuses a scope for a different app. A projector from the lifecycle reducer is the other
-missing piece.
+The projector (`src/lifecycle-projection`) fills these tables from accepted lifecycle events;
+see [lifecycle-projection.md](lifecycle-projection.md).

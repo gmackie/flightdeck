@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "processId": "hiring.application",
+  "version": 2,
+  "name": "Engineering application",
+  "caseType": "application",
+  "sensitivity": "restricted",
+  "stages": [
+    {
+      "stageId": "applied",
+      "name": "Applied",
+      "kind": "wait",
+      "group": "intake",
+      "canonicalStageId": "applied",
+      "ageLimitMs": 432000000
+    },
+    {
+      "stageId": "screen",
+      "name": "Screen",
+      "kind": "work",
+      "group": "intake",
+      "canonicalStageId": "screen",
+      "ageLimitMs": 864000000
+    },
+    {
+      "stageId": "technical_interview",
+      "name": "Technical interview",
+      "kind": "work",
+      "group": "interview_loop",
+      "canonicalStageId": "interview",
+      "ageLimitMs": 604800000
+    },
+    {
+      "stageId": "team_interview",
+      "name": "Team interview",
+      "kind": "work",
+      "group": "interview_loop",
+      "canonicalStageId": "interview",
+      "ageLimitMs": 604800000
+    },
+    {
+      "stageId": "offer",
+      "name": "Offer",
+      "kind": "work",
+      "group": "offer",
+      "canonicalStageId": "offer",
+      "ageLimitMs": 864000000
+    },
+    {
+      "stageId": "hired",
+      "name": "Hired",
+      "kind": "terminal",
+      "outcome": "success",
+      "group": "outcome",
+      "canonicalStageId": "hired"
+    },
+    {
+      "stageId": "rejected",
+      "name": "Rejected",
+      "kind": "terminal",
+      "outcome": "failure",
+      "group": "outcome",
+      "canonicalStageId": "rejected"
+    },
+    {
+      "stageId": "withdrawn",
+      "name": "Withdrawn",
+      "kind": "terminal",
+      "outcome": "neutral",
+      "group": "outcome",
+      "canonicalStageId": "withdrawn"
+    }
+  ],
+  "dimensions": [
+    {
+      "key": "level",
+      "values": [
+        "L3",
+        "L4",
+        "L5",
+        "L6"
+      ],
+      "breakdown": true
+    },
+    {
+      "key": "channel",
+      "values": [
+        "referral",
+        "inbound",
+        "agency"
+      ],
+      "breakdown": true
+    },
+    {
+      "key": "department",
+      "values": [
+        "platform",
+        "product",
+        "infra"
+      ],
+      "breakdown": false
+    }
+  ],
+  "relations": [
+    {
+      "type": "parent",
+      "objectType": "requisition",
+      "processId": "hiring.requisition"
+    },
+    {
+      "type": "related",
+      "objectType": "application"
+    }
+  ],
+  "failureReasons": [
+    "failed"
+  ],
+  "maxDepth": 4,
+  "calendar": "wall",
+  "retention": {
+    "closedDays": 365,
+    "rawDays": 365
+  },
+  "predecessor": {
+    "version": 1,
+    "stageMap": {
+      "applied": [
+        "applied"
+      ],
+      "screen": [
+        "screen"
+      ],
+      "onsite": [
+        "technical_interview",
+        "team_interview"
+      ],
+      "offer": [
+        "offer"
+      ],
+      "hired": [
+        "hired"
+      ],
+      "rejected": [
+        "rejected"
+      ],
+      "withdrawn": [
+        "withdrawn"
+      ]
+    }
+  }
+}

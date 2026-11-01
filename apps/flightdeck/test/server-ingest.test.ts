@@ -15,7 +15,9 @@ beforeAll(async () => {
     [token, Date.now() + 600000],
     [expired, Date.now() - 1],
   ] as const) {
-    await env.DB.prepare("INSERT INTO server_ingest_keys VALUES (?,?,?)")
+    await env.DB.prepare(
+      "INSERT INTO server_ingest_keys (token_hash, app_id, expires_at) VALUES (?,?,?)",
+    )
       .bind(await hash(value), "app_bob_http", expiry)
       .run();
   }
@@ -87,7 +89,9 @@ it("reports sink failures as retryable without echoing internal data", async () 
 it("rejects revoked credentials immediately", async () => {
   const revoked = "d".repeat(48),
     digest = await hash(revoked);
-  await env.DB.prepare("INSERT INTO server_ingest_keys VALUES (?,?,?)")
+  await env.DB.prepare(
+    "INSERT INTO server_ingest_keys (token_hash, app_id, expires_at) VALUES (?,?,?)",
+  )
     .bind(digest, "app_bob_http", Date.now() + 600000)
     .run();
   await env.DB.prepare("DELETE FROM server_ingest_keys WHERE token_hash = ?").bind(digest).run();

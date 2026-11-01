@@ -1,0 +1,15 @@
+{
+  "name": "@flightdeckhq/lifecycle-outbox-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler d1 migrations apply lifecycle-outbox-example --local && wrangler dev",
+    "typecheck": "wrangler types && tsc -p ."
+  },
+  "dependencies": {
+    "@flightdeckhq/worker": "workspace:*"
+  },
+  "devDependencies": {
+    "wrangler": "^4.156.0"
+  }
+}

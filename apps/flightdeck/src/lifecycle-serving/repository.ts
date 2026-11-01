@@ -11,7 +11,7 @@ import {
 
 /**
  * Writes and maintains the derived lifecycle read model (migration 0020). Its only intended
- * caller is a projector that replays lifecycle evidence; none is connected yet.
+ * caller is the projector that replays lifecycle evidence (src/lifecycle-projection).
  *
  * Generations: `beginRebuild` issues generation N+1 and the projector writes every snapshot with
  * it; `commitRebuild` makes it the active generation and soft-deletes rows from older
@@ -22,7 +22,7 @@ import {
  * (generation, source_watermark). Replaying the same snapshot rewrites identical values; an older
  * one is reported as `stale` and changes nothing.
  *
- * Deletion (migration 0021): `tombstoneCase` erases a case's rows and records a tombstone, even
+ * Deletion (migration 0031): `tombstoneCase` erases a case's rows and records a tombstone, even
  * for a case never projected. Every later write for it is refused as `tombstoned`, whatever its
  * generation or watermark, until `restoreCase` is approved by an injected authorizer; after that
  * only snapshots strictly newer than the deletion watermark land. Tombstones survive rebuilds,
@@ -85,7 +85,7 @@ const INTERVALS = "lifecycle_stage_intervals";
 const EDGES = "lifecycle_case_edges";
 const STATE = "lifecycle_projection_state";
 const REPLAYS = "lifecycle_replay_requests";
-const TOMBSTONES = "lifecycle_case_tombstones";
+const TOMBSTONES = "lifecycle_snapshot_tombstones";
 
 /** The write is for a generation the projection accepts: the active or the building one. */
 const ACCEPTS_GENERATION = `EXISTS (SELECT 1 FROM ${STATE} s WHERE s.app_id = ?
@@ -420,6 +420,42 @@ export class LifecycleSnapshotRepository {
         .bind(appId, caseId, reason, p.source_watermark, p.as_of, now),
     ]);
     return "written";
+  }
+
+  /**
+   * Hides a case whose evidence no longer yields a servable snapshot (e.g. its start was
+   * retracted). Unlike `tombstoneCase` this is a reversible soft delete: it obeys the same
+   * (generation, source_watermark) ordering as `upsertCase`, and a later, not-older snapshot
+   * brings the case back.
+   */
+  async hideCase(appId: string, caseId: string, provenance: Provenance): Promise<WriteResult> {
+    const p = parseInput(Provenance, provenance);
+    if (!OPAQUE_ID.test(caseId)) throw new SnapshotRejected("invalid", "case_id: opaque id");
+    const now = this.now();
+    const result = await this.db
+      .prepare(
+        `UPDATE ${CASES} SET deleted_at = ?, deleted_reason = 'not_servable', generation = ?,
+           source_watermark = ?, as_of = ?, updated_at = ?
+         WHERE app_id = ? AND case_id = ? AND ${ACCEPTS_GENERATION}
+           AND (? > generation OR (? = generation AND ? >= source_watermark))`,
+      )
+      .bind(
+        now,
+        p.generation,
+        p.source_watermark,
+        p.as_of,
+        now,
+        appId,
+        caseId,
+        appId,
+        p.generation,
+        p.generation,
+        p.generation,
+        p.generation,
+        p.source_watermark,
+      )
+      .run();
+    return this.outcome(appId, p.generation, result.meta.changes);
   }
 
   /**

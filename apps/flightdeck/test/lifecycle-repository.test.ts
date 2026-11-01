@@ -8,7 +8,7 @@ import { DAY, HOUR, openSnap, prov, repo, seed, snap, T0 } from "./lifecycle-fix
 const approve: RestoreAuthorizer = async () => true;
 const approval = { reason: "operator_restore", approval_ref: "apr_01" };
 const tombstone = (appId: string, caseId: string) =>
-  env.DB.prepare("SELECT * FROM lifecycle_case_tombstones WHERE app_id = ? AND case_id = ?")
+  env.DB.prepare("SELECT * FROM lifecycle_snapshot_tombstones WHERE app_id = ? AND case_id = ?")
     .bind(appId, caseId)
     .first<Record<string, unknown>>();
 
@@ -343,6 +343,22 @@ describe("tombstones", () => {
 });
 
 describe("deletion and retention", () => {
+  it("hides an unservable case reversibly, without a tombstone", async () => {
+    const app = "app_hide";
+    const { repo: r } = repo(env.DB);
+    await seed(r, app, [snap("c1")]);
+    expect(await r.hideCase(app, "c1", prov(1, 200))).toBe("written");
+    expect(await ids(app)).toEqual([]);
+    expect(await raw(app, "c1")).toMatchObject({ deleted_reason: "not_servable" });
+    expect(await tombstone(app, "c1")).toBeNull();
+    // An older snapshot cannot undo the hide; a newer one brings the case back.
+    expect(await r.upsertCase(app, snap("c1"), prov(1, 150))).toBe("stale");
+    expect(await r.upsertCase(app, snap("c1"), prov(1, 250))).toBe("written");
+    expect(await ids(app)).toEqual(["c1"]);
+    expect(await r.hideCase(app, "c1", prov(1, 240))).toBe("stale");
+    await rejection(r.hideCase(app, "jane@example.com", prov(1, 300)));
+  });
+
   it("retires closed cases past retention, keeps open ones, then purges", async () => {
     const app = "app_retention";
     const { repo: r, clock } = repo(env.DB);
