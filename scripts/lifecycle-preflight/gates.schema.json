@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "flightdeck-lifecycle-gates.schema.json",
+  "title": "Flightdeck lifecycle release-gate manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "version", "verdicts", "components", "migrations", "flags", "gates"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "kind": { "const": "flightdeck-lifecycle-gates" },
+    "version": { "const": 1 },
+    "verdicts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["integration-ready", "production-safe"],
+      "properties": {
+        "integration-ready": { "type": "string" },
+        "production-safe": { "type": "string" }
+      }
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "owner"],
+        "properties": { "path": { "$ref": "#/$defs/repoPath" }, "owner": { "type": "string" } }
+      }
+    },
+    "migrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dir", "required", "pending"],
+      "properties": {
+        "dir": { "$ref": "#/$defs/repoPath" },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "owner"],
+            "properties": {
+              "name": { "type": "string", "pattern": "^[0-9]{4}_[a-z0-9_]+$" },
+              "owner": { "type": "string" }
+            }
+          }
+        },
+        "pending": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["match", "owner", "gate"],
+            "properties": {
+              "match": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+              "owner": { "type": "string" },
+              "gate": { "$ref": "#/$defs/id" }
+            }
+          }
+        }
+      }
+    },
+    "flags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "name", "default", "allowed", "production"],
+        "properties": {
+          "file": { "$ref": "#/$defs/repoPath" },
+          "name": { "$ref": "#/$defs/flagName" },
+          "default": { "type": "string" },
+          "allowed": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "production": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+        }
+      }
+    },
+    "optInBindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "section", "binding"],
+        "properties": {
+          "file": { "$ref": "#/$defs/repoPath" },
+          "section": { "enum": ["pipelines", "services", "d1_databases", "r2_buckets"] },
+          "binding": { "$ref": "#/$defs/flagName" }
+        }
+      }
+    },
+    "rpc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["worker", "entrypoint", "binding", "exportFile", "audienceVar"],
+      "properties": {
+        "worker": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "entrypoint": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]+$" },
+        "binding": { "$ref": "#/$defs/flagName" },
+        "exportFile": { "$ref": "#/$defs/repoPath" },
+        "audienceVar": { "$ref": "#/$defs/flagName" }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app", "sdkMajor", "protocolVersion", "productionSwitch", "minCohortFloor"],
+      "properties": {
+        "app": { "$ref": "#/$defs/repoPath" },
+        "sdkMajor": { "type": "integer", "minimum": 2 },
+        "protocolVersion": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "productionSwitch": { "$ref": "#/$defs/repoPath" },
+        "minCohortFloor": { "type": "integer", "minimum": 5 }
+      }
+    },
+    "pipelineSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "requiredFields", "deniedFieldPattern"],
+      "properties": {
+        "file": { "$ref": "#/$defs/repoPath" },
+        "requiredFields": { "type": "array", "items": { "type": "string" } },
+        "deniedFieldPattern": { "type": "string" }
+      }
+    },
+    "basinSql": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "sqlDirs"],
+      "properties": {
+        "package": { "$ref": "#/$defs/repoPath" },
+        "sqlDirs": { "type": "array", "items": { "$ref": "#/$defs/repoPath" } }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "check", "requiredFor", "owner", "evidence"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "title": { "type": "string", "minLength": 1 },
+          "check": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9]*$" },
+          "commands": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/id" } },
+          "requiredFor": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["integration-ready", "production-safe"] }
+          },
+          "owner": { "type": "string" },
+          "evidence": { "type": "array", "items": { "$ref": "#/$defs/repoPath" } },
+          "docs": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^https://[a-z0-9.-]+/" }
+          },
+          "attestation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["checks"],
+            "properties": {
+              "checks": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9]*$" }
+              },
+              "fields": {
+                "type": "array",
+                "items": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9]*$" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "flagName": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+    "repoPath": { "type": "string", "pattern": "^[A-Za-z0-9._@+-]+(/[A-Za-z0-9._@+-]+)*$" }
+  }
+}

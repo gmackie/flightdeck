@@ -1,0 +1,6 @@
+{
+  "resource": "https://lifecycle-mcp.staging.example/mcp",
+  "authorization_servers": ["https://auth.staging.example"],
+  "bearer_methods_supported": ["header"],
+  "scopes_supported": ["lifecycle.read"]
+}

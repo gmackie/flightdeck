@@ -1,0 +1,42 @@
+{
+  "$schema": "../config.schema.json",
+  "kind": "flightdeck-lifecycle-preflight-config",
+  "version": 1,
+  "environment": "synthetic",
+  "description": "Synthetic stand-in for intended staging settings. Reserved test domains and placeholder AUDs only; it can never yield production-safe.",
+  "hostnames": {
+    "dashboard": "flightdeck.staging.example",
+    "mcp": "lifecycle-mcp.staging.example"
+  },
+  "access": {
+    "teamDomain": "synthetic-team.example",
+    "dashboardAud": "synthetic-dashboard-aud",
+    "mcpAud": "synthetic-mcp-aud"
+  },
+  "flags": {
+    "FLIGHTDECK_DEV": "0",
+    "READ_AUTHZ_MODE": "enforce",
+    "LIFECYCLE_MCP_READ_ENABLED": "1",
+    "LIFECYCLE_MCP_ENVIRONMENT": "staging",
+    "LIFECYCLE_MCP_SOURCE": "read-api",
+    "LIFECYCLE_MCP_DEV": "0",
+    "LIFECYCLE_MCP_MIN_COHORT": "5"
+  },
+  "services": [
+    {
+      "binding": "LIFECYCLE_READ_API",
+      "service": "flightdeck",
+      "entrypoint": "LifecycleReadEntrypoint"
+    }
+  ],
+  "oauth": {
+    "protectedResourceMetadata": "scripts/lifecycle-preflight/fixtures/oauth-protected-resource.synthetic.json"
+  },
+  "retention": { "enabled": true, "days": 400 },
+  "budgets": {
+    "perPrincipalDailyQueries": 200,
+    "perAppDailyQueries": 2000,
+    "maxRowsPerQuery": 500
+  },
+  "privacy": { "minCohort": 5 }
+}
