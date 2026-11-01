@@ -8,6 +8,8 @@
     "typecheck": "wrangler types --strict-vars false && tsc -p ."
   },
   "dependencies": {
+    "@flightdeckhq/lifecycle-investigations": "workspace:*",
+    "@flightdeckhq/lifecycle-queries": "workspace:*",
     "@modelcontextprotocol/server": "2.4.0",
     "jose": "^6.2.14",
     "zod": "^4.2.0",

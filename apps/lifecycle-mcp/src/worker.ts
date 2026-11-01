@@ -5,6 +5,7 @@ import { authenticate } from "./auth";
 import { Authorizer } from "./authorize";
 import { LIMITS } from "./bounds";
 import { type Config, type ConfigEnv, readConfig } from "./config";
+import type { InvestigationEngineConfig } from "./investigation-engine-adapter";
 import { createLifecycleServer } from "./server";
 import type { LifecycleReadSource } from "./source";
 import { ReadApiLifecycleSource } from "./sources/read-api";
@@ -17,6 +18,8 @@ export type WorkerEnv = ConfigEnv & {
 
 /** Test seams: a local JWKS, an injected source and a fixed clock. */
 export type Deps = {
+  /** Optional typed engine path. No source is inferred from legacy reads or synthetic mode. */
+  investigationEngine?: InvestigationEngineConfig;
   keys?: JWTVerifyGetKey;
   source?: LifecycleReadSource;
   now?: () => number;
@@ -90,6 +93,7 @@ export async function handleRequest(
   const now = deps.now ?? Date.now;
   const source = deps.source ?? createSource(config, env, now);
   const ctx = {
+    investigationEngine: deps.investigationEngine,
     source,
     authorizer: new Authorizer(principal, source, now),
     minCohort: config.minCohort,

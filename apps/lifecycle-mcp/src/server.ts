@@ -10,6 +10,13 @@ import {
 import { LIMITS } from "./bounds";
 import { METRICS, WORKFLOW_DEFINITION_SPEC } from "./glossary";
 import { investigationInput, investigationOutputs } from "./investigation-contract";
+import { runEngineInvestigation } from "./investigation-engine-adapter";
+import {
+  engineExecutionInput,
+  engineExecutionOutput,
+  engineInput,
+  enginePlanOutput,
+} from "./investigation-engine-contract";
 import { BoundedReadInvestigationBridge, withInvestigationDeadline } from "./investigations";
 import { projectDefinition } from "./privacy";
 import { registerAnalysisPrompts } from "./prompts";
@@ -98,7 +105,41 @@ export function createLifecycleServer(ctx: ToolContext): McpServer {
     },
   );
 
-  registerAnalysisPrompts(server);
+  registerAnalysisPrompts(server, ctx.investigationEngine !== undefined);
+  if (ctx.investigationEngine !== undefined) {
+    server.registerTool(
+      "plan_process_investigation",
+      {
+        title: "Plan typed process investigation",
+        description:
+          "Compile package v1 aggregate queries against a trusted app catalog. No data queries, free-text query instructions, SQL, raw cases or relationship graphs.",
+        inputSchema: engineInput,
+        outputSchema: enginePlanOutput,
+        annotations: READ_ONLY,
+      },
+      (args) =>
+        formatToolResult(
+          () => runEngineInvestigation(ctx, args, false),
+          "Package v1 plan in structuredContent. Review its digest, query IDs, budgets and version comparability before execution. No model invoked.",
+        ),
+    );
+    server.registerTool(
+      "execute_process_investigation",
+      {
+        title: "Collect typed process investigation evidence",
+        description:
+          "Recompile a reviewed package v1 plan and collect bounded aggregate evidence. Optional client analysis is validated against the newly collected pack; no generated claims, persistence or model invocation.",
+        inputSchema: engineExecutionInput,
+        outputSchema: engineExecutionOutput,
+        annotations: READ_ONLY,
+      },
+      (args) =>
+        formatToolResult(
+          () => runEngineInvestigation(ctx, args, true),
+          "Package v1 evidence in structuredContent. Preserve exact query and row refs; inspect coverage, suppression, censoring, watermarks and unsupported claims. Descriptive, non-causal evidence only. Fixture sources are invented data. Historical asOf depends on the configured normalized revision source; legacy reads cannot provide it. No model invoked.",
+        ),
+    );
+  }
   for (const name of ["plan_investigation", "collect_investigation_evidence"] as const) {
     server.registerTool(
       name,

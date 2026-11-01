@@ -243,12 +243,15 @@ rollout/region parent blockers or critical paths by summing child/stage medians.
 `aggregate_child_rollup` or `get_case_relations` capability needs its own authorized, privacy-safe
 source contract and tests before these questions can be answered.
 
-`src/investigation-contract.ts` defines a versioned `InvestigationBridge` seam; the temporary
-`BoundedReadInvestigationBridge` only plans/collects existing reads and checks their bounds and
-metadata. `@flightdeckhq/lifecycle-investigations` is not a dependency and was not published as a
-PR when implementation began. Its concurrent worktree is untouched. When its reviewed contract is
-available, replace this bridge with package calls, keeping app authorization, fixed read bounds,
-privacy projection and provenance at the MCP boundary. No second statistics/LLM engine was built.
+`src/investigation-contract.ts` retains the original `bounded-read-bridge@1` seam
+and working bounded-read tools. An optional package-backed path now registers
+`plan_process_investigation` / `execute_process_investigation` through injected
+trusted query catalogs and a scoped QueryAdapter, under `package-investigation@1`.
+See [the MCP README](../../apps/lifecycle-mcp/README.md) for configuration, exact
+schema versions, authorization/budgets, workflow and fixture-only verification.
+No package source is inferred from legacy reads; unavailable engines explicitly
+refuse without synthetic fallback. No production normalized QueryAdapter or
+role-delegated OAuth integration is claimed.
 
 ## Deferred progressive enhancements (unimplemented)
 
