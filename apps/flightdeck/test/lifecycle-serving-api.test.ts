@@ -371,14 +371,7 @@ describe("aggregates", () => {
       sample_count_of: "released_groups",
     });
     const build = body.data.find((g: Json) => g.stage_key === "build" && g.state === "active");
-    expect(build).toEqual({
-      stage_key: "build",
-      state: "active",
-      case_count: 7,
-      closed_intervals: 6,
-      open_intervals: 1,
-      dwell_ms: { mean: 35 * MIN, p50: 30 * MIN, p90: 60 * MIN, min: 10 * MIN, max: 60 * MIN },
-    });
+    expect(build).toBeUndefined(); // One censored case also requires complementary suppression.
     expect(body.data.find((g: Json) => g.stage_key === "release")).toMatchObject({
       case_count: 6,
       dwell_ms: { p50: 5 * MIN },
@@ -386,7 +379,7 @@ describe("aggregates", () => {
     // build/blocked covers only two cases.
     expect(body.data.some((g: Json) => g.state === "blocked")).toBe(false);
     expect(body.suppressed).toBe(true);
-    expect(body.sample_count).toBe(7);
+    expect(body.sample_count).toBe(6);
   });
 
   it("summarizes outcomes, releasing only groups at or above the minimum cohort", async () => {

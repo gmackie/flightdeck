@@ -1,6 +1,7 @@
 import type { LifecycleRecord } from "@flightdeckhq/schema";
 import { LifecycleUnavailable } from "../ingest/lifecycle";
 import { sinks } from "../sinks";
+import { canonical } from "./identity";
 
 /**
  * The projector's evidence log (migration 0030). Accepting a lifecycle batch appends it here and
@@ -20,18 +21,6 @@ export const backoff = (attempts: number) =>
   Math.min(MAX_BACKOFF_MS, 1_000 * 2 ** Math.min(attempts, 20));
 
 const encoder = new TextEncoder();
-
-/** Canonical JSON: sorted keys, so equal payloads serialize identically. */
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.keys(value)
-      .sort()
-      .map((k) => `${JSON.stringify(k)}:${canonical((value as Record<string, unknown>)[k])}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
-}
 
 /** What the producer said: receipt time and channel are not part of the event's identity. */
 export async function fingerprint(row: LifecycleRecord): Promise<string> {
@@ -162,6 +151,14 @@ export async function eraseCase(
          ON CONFLICT (app_id, case_id) DO NOTHING`,
       )
       .bind(appId, caseId, reason, now),
+    ...["lifecycle_case_snapshots", "lifecycle_stage_intervals"].map((table) =>
+      db
+        .prepare(`DELETE FROM ${table}_staging WHERE app_id = ? AND case_id = ?`)
+        .bind(appId, servedId),
+    ),
+    db
+      .prepare("DELETE FROM lifecycle_case_edges_staging WHERE app_id = ? AND from_case_id = ?")
+      .bind(appId, servedId),
     db.prepare(`DELETE FROM ${LOG} WHERE app_id = ? AND case_id = ?`).bind(appId, caseId),
     db.prepare(`DELETE FROM ${QUEUE} WHERE app_id = ? AND case_id = ?`).bind(appId, caseId),
     db.prepare(`DELETE FROM ${DIAGNOSTICS} WHERE app_id = ? AND case_id = ?`).bind(appId, caseId),

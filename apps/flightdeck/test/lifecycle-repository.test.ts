@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { SnapshotRejected } from "../src/lifecycle-serving/model";
-import { caseDetail, listCases } from "../src/lifecycle-serving/read";
+import { caseDetail, listCases, listProcesses } from "../src/lifecycle-serving/read";
 import type { RestoreAuthorizer } from "../src/lifecycle-serving/repository";
-import { DAY, HOUR, openSnap, prov, repo, seed, snap, T0 } from "./lifecycle-fixtures";
+import { DAY, DEPLOY_V1, HOUR, openSnap, prov, repo, seed, snap, T0 } from "./lifecycle-fixtures";
 
 const approve: RestoreAuthorizer = async () => true;
 const approval = { reason: "operator_restore", approval_ref: "apr_01" };
@@ -46,6 +46,67 @@ const rejection = async (p: Promise<unknown>) => {
 };
 
 describe("generations", () => {
+  it("rolls back partial publication in Miniflare and rejects a second commit without changing children", async () => {
+    const app = "app_gen_atomic_rollback";
+    const { repo: r } = repo(env.DB);
+    await seed(r, app, [snap("keep"), snap("target")]);
+    const before = await caseDetail(env.DB, app, "keep");
+    const gen = await r.beginRebuild(app);
+    await r.upsertCase(app, openSnap("keep"), prov(gen, 200));
+    await env.DB.prepare(`CREATE TRIGGER fail_hotfix_publication BEFORE INSERT ON lifecycle_case_snapshots
+      WHEN NEW.app_id = 'app_gen_atomic_rollback' AND NEW.generation = 2
+      BEGIN SELECT RAISE(ABORT, 'synthetic publication failure'); END`).run();
+    try {
+      await expect(r.commitRebuild(app, prov(gen, 200))).rejects.toThrow();
+      expect(await caseDetail(env.DB, app, "keep")).toEqual(before);
+      expect(await caseDetail(env.DB, app, "target")).not.toBeNull();
+      expect(await r.state(app)).toMatchObject({ active_generation: 1, building_generation: 2 });
+    } finally {
+      await env.DB.prepare("DROP TRIGGER fail_hotfix_publication").run();
+    }
+    await r.commitRebuild(app, prov(gen, 200));
+    const committed = await caseDetail(env.DB, app, "keep");
+    await expect(r.commitRebuild(app, prov(gen, 200))).rejects.toThrow();
+    expect(await caseDetail(env.DB, app, "keep")).toEqual(committed);
+  });
+
+  it("isolates cases, intervals, relations and definitions until atomic commit; failure preserves them", async () => {
+    const app = "app_gen_isolation";
+    const { repo: r } = repo(env.DB);
+    await seed(r, app, [
+      snap("keep", { relations: [{ relation: "blocks", to_case_id: "target" }] }),
+      snap("target"),
+    ]);
+    const before = await caseDetail(env.DB, app, "keep");
+    const processes = () =>
+      listProcesses(env.DB, app, { processKey: null, limit: 100, after: null });
+    const definitions = await processes();
+    const gen = await r.beginRebuild(app);
+    await r.upsertCase(app, openSnap("keep", { parent_case_id: "target" }), prov(gen, 200));
+    await r.upsertCase(app, snap("new_case"), prov(gen, 200));
+    await r.upsertProcessDefinition(app, { ...DEPLOY_V1, label: "Changed" }, prov(gen, 200));
+    expect(await caseDetail(env.DB, app, "keep")).toEqual(before);
+    expect(await caseDetail(env.DB, app, "new_case")).toBeNull();
+    expect(await processes()).toEqual(definitions);
+    await r.failRebuild(app, gen, "source_timeout");
+    expect(await caseDetail(env.DB, app, "keep")).toEqual(before);
+    expect(await processes()).toEqual(definitions);
+    expect(await caseDetail(env.DB, app, "new_case")).toBeNull();
+    const retry = await r.beginRebuild(app);
+    await r.upsertCase(app, openSnap("keep", { parent_case_id: "target" }), prov(retry, 201));
+    await r.upsertCase(app, snap("target"), prov(retry, 201));
+    await r.upsertProcessDefinition(app, { ...DEPLOY_V1, label: "Changed" }, prov(retry, 201));
+    await r.commitRebuild(app, prov(retry, 201));
+    expect(await caseDetail(env.DB, app, "keep")).toMatchObject({
+      status: "open",
+      provenance: { generation: retry },
+      relations: { outgoing: [] },
+      parent: { case_id: "target", available: true },
+    });
+    expect((await processes())[0]?.label).toBe("Changed");
+    expect(await caseDetail(env.DB, app, "new_case")).toBeNull();
+  });
+
   it("commits a rebuild and records its watermark and row count", async () => {
     const { repo: r } = repo(env.DB);
     const gen = await seed(r, "app_gen_commit", [snap("c1"), openSnap("c2")]);
@@ -230,6 +291,33 @@ describe("hierarchy", () => {
 });
 
 describe("tombstones", () => {
+  it("deletes already-staged content so commit cannot resurrect an erased case", async () => {
+    const app = "app_tomb_staged";
+    const { repo: r } = repo(env.DB);
+    await seed(r, app, [snap("gone"), snap("target")]);
+    const gen = await r.beginRebuild(app);
+    await r.upsertCase(
+      app,
+      snap("gone", {
+        relations: [{ relation: "blocks", to_case_id: "target" }],
+      }),
+      prov(gen, 200),
+    );
+    await r.tombstoneCase(app, "gone", prov(gen, 201));
+    expect(await r.upsertCase(app, snap("gone"), prov(gen, 300))).toBe("tombstoned");
+    await r.commitRebuild(app, prov(gen, 300));
+    expect(await caseDetail(env.DB, app, "gone")).toBeNull();
+    expect(await intervalCount(app, "gone")).toBe(0);
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS n FROM lifecycle_case_edges WHERE app_id = ? AND from_case_id = ?",
+      )
+        .bind(app, "gone")
+        .first(),
+    ).toEqual({ n: 0 });
+    expect(await tombstone(app, "gone")).toMatchObject({ restored_at: null });
+  });
+
   it("erases the case and refuses every later write, at any generation or watermark", async () => {
     const app = "app_tomb_live";
     const { repo: r } = repo(env.DB);
