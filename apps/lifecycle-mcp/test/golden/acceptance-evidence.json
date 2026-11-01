@@ -1,0 +1,215 @@
+{
+  "_comment": "Golden evidence summaries for test/acceptance.test.ts. Synthetic, invented fixtures at a fixed as_of (2026-10-30T00:05Z). evidence_id is the content address of the full pack. Regenerate only for an intended fixture or contract change, and review the diff.",
+  "interview_loop_regression": {
+    "evidence_id": "sha256:cb5a6d07b807ee01e239c29998b3dde1c8a1edfddcf377cb128da80f2633672f",
+    "app_id": "synthetic-recruiting",
+    "workflow_key": "interview-loop",
+    "as_of": "2026-10-30T00:05:00.000Z",
+    "watermark": "2026-10-30T00:00:00.000Z",
+    "status": "bounded_evidence",
+    "any_suppressed": true,
+    "samples": [
+      {
+        "cohort_ref": "cohort-1",
+        "n": 58,
+        "completed_n": 58,
+        "open_n": 0
+      },
+      {
+        "cohort_ref": "cohort-2",
+        "n": 50,
+        "completed_n": 50,
+        "open_n": 0
+      }
+    ],
+    "query_ids": [
+      "cohort-1:get_stage_dwell:sha256:ba188249024147195f732930e832cc390e88f977d8f9d93973b28231505d406b",
+      "cohort-1:get_funnel:sha256:5dd55c6e5de0972c630c39c49f0b230e31c8f8118ba6d596b8c206b6875174a6",
+      "cohort-1:compare_workflow_variants:sha256:8d8788fe8ac3f655a63853abc4de3691713ff5bbd17eecaf884637766f7760ee",
+      "cohort-2:get_stage_dwell:sha256:5861ec4cc328c188d02ac6b4c6d01e968d5f10e860c34fd18585a7a349626ecb",
+      "cohort-2:get_funnel:sha256:4ed5a20a3c6fd30e8b864ece5fccb5c1304dc646f1e43d16b13539dec0003915",
+      "cohort-2:compare_workflow_variants:sha256:d6e1213ffdd09b543c5fad566cfef08eb203a08e5eb3083e4fd0bba57d9c6798"
+    ],
+    "dwell": {
+      "cohort-1": {
+        "defined": {
+          "n": 58,
+          "open_n": 0,
+          "p50_ms": 16323058,
+          "p90_ms": 27955415
+        },
+        "staffing": {
+          "n": 58,
+          "open_n": 0,
+          "p50_ms": 72526063,
+          "p90_ms": 153860147
+        },
+        "scheduling": {
+          "n": 58,
+          "open_n": 0,
+          "p50_ms": 120770637,
+          "p90_ms": 239546894
+        },
+        "conducting": {
+          "n": 58,
+          "open_n": 0,
+          "p50_ms": 146155705,
+          "p90_ms": 242077123
+        },
+        "feedback": {
+          "n": 58,
+          "open_n": 0,
+          "p50_ms": 44061844,
+          "p90_ms": 104914896
+        },
+        "debrief": {
+          "n": 58,
+          "open_n": 0,
+          "p50_ms": 63013483,
+          "p90_ms": 140584191
+        }
+      },
+      "cohort-2": {
+        "defined": {
+          "n": 49,
+          "open_n": 0,
+          "p50_ms": 13274890,
+          "p90_ms": 22452353
+        },
+        "staffing": {
+          "n": 49,
+          "open_n": 0,
+          "p50_ms": 57022078,
+          "p90_ms": 176063724
+        },
+        "scheduling": {
+          "n": 48,
+          "open_n": 0,
+          "p50_ms": 96307905,
+          "p90_ms": 203620727
+        },
+        "on_hold": {
+          "suppressed": "small_cohort"
+        },
+        "conducting": {
+          "n": 47,
+          "open_n": 0,
+          "p50_ms": 149181067,
+          "p90_ms": 176546159
+        },
+        "feedback": {
+          "n": 45,
+          "open_n": 0,
+          "p50_ms": 236415160,
+          "p90_ms": 419388519
+        },
+        "debrief": {
+          "n": 45,
+          "open_n": 0,
+          "p50_ms": 60923179,
+          "p90_ms": 137949798
+        }
+      }
+    }
+  },
+  "service_rollout_variants": {
+    "evidence_id": "sha256:df1e27686304c1c4d8d10c04b556b5b7bbb22e18db14d116fc5d54284512c3a3",
+    "app_id": "synthetic-delivery",
+    "workflow_key": "service-rollout",
+    "as_of": "2026-10-30T00:05:00.000Z",
+    "watermark": "2026-10-30T00:00:00.000Z",
+    "status": "bounded_evidence",
+    "any_suppressed": true,
+    "samples": [
+      {
+        "cohort_ref": "cohort-1",
+        "n": 51,
+        "completed_n": 51,
+        "open_n": 0
+      },
+      {
+        "cohort_ref": "cohort-2",
+        "n": 46,
+        "completed_n": 46,
+        "open_n": 0
+      }
+    ],
+    "query_ids": [
+      "cohort-1:get_stage_dwell:sha256:0a3137b0d5f98004a59ca0d5ed7b1ed615f6dea58ce86410fd88d7bad24ed434",
+      "cohort-1:get_funnel:sha256:e478e11d6c18eaefa723d5e2a7f3c5103278a58e9accbc1c0dd788b778096d62",
+      "cohort-1:compare_workflow_variants:sha256:409050606578fa2ece4651fb503a7168a220820d80472ae8d27281380ce04354",
+      "cohort-2:get_stage_dwell:sha256:e91c13aff8cb097f92763ac2ecb6113f3418c8c63b346bb112d5fecea455e6db",
+      "cohort-2:get_funnel:sha256:8a87e72372dc423c876cfa51f903d9648336f7ec5086781b08b1ea2c67c34ccc",
+      "cohort-2:compare_workflow_variants:sha256:96541e775587e90202b68db29bd3902ebf1ba87d50114759277b220c64a6ba6a"
+    ],
+    "dwell": {
+      "cohort-1": {
+        "planned": {
+          "n": 51,
+          "open_n": 0,
+          "p50_ms": 12184766,
+          "p90_ms": 20303879
+        },
+        "build": {
+          "n": 51,
+          "open_n": 0,
+          "p50_ms": 1393065,
+          "p90_ms": 2171992
+        },
+        "verify": {
+          "n": 51,
+          "open_n": 0,
+          "p50_ms": 2272001,
+          "p90_ms": 4431570
+        },
+        "rolling_out": {
+          "n": 51,
+          "open_n": 0,
+          "p50_ms": 31653899,
+          "p90_ms": 47525473
+        },
+        "paused": {
+          "n": 6,
+          "open_n": 0,
+          "p50_ms": 19333986,
+          "p90_ms": 62941348
+        }
+      },
+      "cohort-2": {
+        "planned": {
+          "n": 46,
+          "open_n": 0,
+          "p50_ms": 11962157,
+          "p90_ms": 24602547
+        },
+        "build": {
+          "n": 46,
+          "open_n": 0,
+          "p50_ms": 1432671,
+          "p90_ms": 2515938
+        },
+        "verify": {
+          "n": 46,
+          "open_n": 0,
+          "p50_ms": 2640752,
+          "p90_ms": 3615309
+        },
+        "bake": {
+          "n": 46,
+          "open_n": 0,
+          "p50_ms": 5251228,
+          "p90_ms": 7429368
+        },
+        "rolling_out": {
+          "n": 46,
+          "open_n": 0,
+          "p50_ms": 33182355,
+          "p90_ms": 54063046
+        },
+        "paused": {
+          "suppressed": "small_cohort"
+        }
+      }
+    }
+  }
+}

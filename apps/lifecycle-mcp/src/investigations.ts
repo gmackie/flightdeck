@@ -342,7 +342,18 @@ export class BoundedReadInvestigationBridge implements InvestigationBridge {
       model_invoked: false as const,
       causal: false as const,
     };
-    const id = await digest(payload);
+    // Hash the schema-normalized form, which is exactly what the client receives: output parsing
+    // reorders the keys of withheld cells, so hashing the raw payload would be unverifiable.
+    const {
+      evidence_id: _id,
+      evidence_ref: _ref,
+      ...normalized
+    } = investigationOutputs.collect_investigation_evidence.parse({
+      ...payload,
+      evidence_id: "",
+      evidence_ref: "",
+    });
+    const id = await digest(normalized);
     const ref = `urn:flightdeck:evidence:${id}`;
     const pack = investigationOutputs.collect_investigation_evidence.parse({
       ...payload,

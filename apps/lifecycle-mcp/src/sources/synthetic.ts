@@ -17,6 +17,8 @@ import type {
   WorkflowDefinition,
 } from "../source";
 import {
+  DELIVERY_APP,
+  RECRUITING_APP,
   SYNTHETIC_ANCHOR,
   SYNTHETIC_WORKFLOWS,
   type SyntheticCase,
@@ -27,6 +29,8 @@ import {
 export const DEFAULT_SYNTHETIC_GRANTS: Grant[] = [
   { appId: "synthetic-release", role: "analyst", expiresAt: null },
   { appId: "synthetic-support", role: "analyst", expiresAt: null },
+  { appId: RECRUITING_APP, role: "analyst", expiresAt: null },
+  { appId: DELIVERY_APP, role: "analyst", expiresAt: null },
 ];
 
 const STALE_AFTER_MS = 15 * 60_000;
