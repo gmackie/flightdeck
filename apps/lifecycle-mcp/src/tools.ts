@@ -3,6 +3,7 @@ import type { z } from "zod";
 import type { Authorizer } from "./authorize";
 import { BoundsError, decodeCursor, encodeCursor, LIMITS, resolveWindow } from "./bounds";
 import { CASE_CAVEATS, METRICS, OBSERVATIONAL_CAVEATS } from "./glossary";
+import type { InvestigationEngineConfig } from "./investigation-engine-adapter";
 import {
   type PublicDefinition,
   projectCase,
@@ -25,6 +26,7 @@ import {
 export const SERVER_VERSION = "0.1.0";
 
 export type ToolContext = {
+  investigationEngine?: InvestigationEngineConfig;
   source: LifecycleReadSource;
   authorizer: Authorizer;
   minCohort: number;
@@ -39,6 +41,8 @@ type ErrorCode =
   | "result_too_large"
   | "budget_exceeded"
   | "insufficient_evidence"
+  | "unsupported"
+  | "engine_unavailable"
   | "internal";
 
 /** A tool failure with a fixed, safe message: never an upstream error text or an input value. */

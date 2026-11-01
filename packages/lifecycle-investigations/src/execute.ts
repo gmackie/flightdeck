@@ -64,7 +64,12 @@ const delay = (ms: number) => {
   const promise = new Promise<"timeout">((resolve) => {
     timer = setTimeout(() => resolve("timeout"), Math.max(0, ms));
   });
-  return { promise, cancel: () => clearTimeout(timer) };
+  return {
+    promise,
+    cancel: () => {
+      if (timer !== undefined) clearTimeout(timer);
+    },
+  };
 };
 
 /** Rebuild a minimal result from accepted aggregates so cached values hold nothing else. */

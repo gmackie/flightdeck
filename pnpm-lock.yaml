@@ -252,6 +252,12 @@ importers:
 
   apps/lifecycle-mcp:
     dependencies:
+      '@flightdeckhq/lifecycle-investigations':
+        specifier: workspace:*
+        version: link:../../packages/lifecycle-investigations
+      '@flightdeckhq/lifecycle-queries':
+        specifier: workspace:*
+        version: link:../../packages/lifecycle-queries
       '@modelcontextprotocol/server':
         specifier: 2.4.0
         version: 2.4.0

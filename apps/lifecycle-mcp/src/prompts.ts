@@ -41,7 +41,7 @@ const argsSchema = z.strictObject({
   workflow_key: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
 });
 
-export function registerAnalysisPrompts(server: McpServer): void {
+export function registerAnalysisPrompts(server: McpServer, engineEnabled = false): void {
   for (const name of ANALYSIS_GOALS) {
     server.registerPrompt(
       name,
@@ -56,7 +56,10 @@ export function registerAnalysisPrompts(server: McpServer): void {
         messages: [
           {
             role: "user",
-            content: { type: "text", text: `${ANALYSIS_INSTRUCTIONS}\n${ANALYSIS_GUIDES[name]}` },
+            content: {
+              type: "text",
+              text: `${ANALYSIS_INSTRUCTIONS}\n${ANALYSIS_GUIDES[name]}${engineEnabled ? "\nAn optional package-investigation@1 path is enabled: use plan_process_investigation then execute_process_investigation with the returned plan digest, explicit registered cohort/caseMix IDs and package definition versions. An unavailable or unsupported engine must be reported explicitly; never substitute synthetic or legacy evidence. Preserve package plan/evidence schema versions, exact query IDs and row refs. Only copy exact determinable finding statements with every evidence ref; optional analysis validation rejects invented or causal claims. The legacy bounded-read-bridge@1 tools have a different, limited contract." : ""}`,
+            },
           },
           {
             role: "user",
