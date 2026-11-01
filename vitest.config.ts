@@ -7,6 +7,7 @@ export default defineConfig({
       "apps/*",
       "apps/flightdeck/vitest.live.config.ts",
       "apps/flightdeck/vitest.sqlite.config.ts",
+      "examples/lifecycle-outbox",
     ],
     passWithNoTests: true,
   },

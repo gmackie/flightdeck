@@ -10,6 +10,9 @@
     "@flightdeckhq/worker": "workspace:*"
   },
   "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.11",
+    "@flightdeckhq/schema": "workspace:*",
+    "valibot": "^1.5.0",
     "wrangler": "^4.156.0"
   }
 }
