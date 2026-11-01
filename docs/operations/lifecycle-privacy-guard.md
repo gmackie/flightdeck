@@ -1,9 +1,9 @@
 # Lifecycle aggregate privacy admission (FLIG-36)
 
-Draft, non-deploying change stacked on **PR #49**, `feat/lifecycle-mcp-live-source`
-(at `63d45b609ae8fc06dadc014e2fcf44a7efb176c4`). Its integration stack, registered
-process definitions, projection and current D1 grants are prerequisites. No real
-hiring data, Cloudflare-account migration, merge or deployment is part of validation.
+Draft, non-deploying change against **main at `53a9382`**, after integration PR #52
+landed PR #49 (`feat/lifecycle-mcp-live-source`) and its dependency stack. Registered
+process definitions, projection and current D1 grants remain prerequisites. No real
+hiring data, Cloudflare-account migration, merge or deployment is part of this change.
 
 ## Release boundary
 
@@ -163,7 +163,7 @@ Apply existing migrations in filename order:
 `0006_process_definitions`, `0010_read_authorization`,
 `0020_lifecycle_serving`, `0030_lifecycle_projection`, then
 **`0040_lifecycle_privacy_budget.sql`**. `0040` is a new unique number and table/index
-namespace on #49; no old migration is renumbered. Recheck numbering when integrating
+namespace on the merged integration main; no old migration is renumbered. Recheck numbering when integrating
 other stack layers; do not edit already applied migration contents to resolve a
 future conflict. The full sequence runs through `readD1Migrations` and
 `applyD1Migrations` on Miniflare for both Worker suites.
@@ -194,3 +194,9 @@ conditional SQL, not a claim of real-account global load validation.
 Cloudflare's [rate-limit binding documentation](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
 describes approximate per-location limits and recommends Durable Objects for a strict
 global limit. This feature does not rely on that binding for privacy accounting.
+
+Local verification on the main-based draft: 72 test files / 1,032 tests passed,
+including 13 new Miniflare privacy cases and 11 live binding/MCP cases.
+`pnpm typecheck`, `pnpm lint`, `pnpm build` and `pnpm smoke:pack` passed.
+Wrangler builds use `--dry-run`; no account flags or remote databases were changed.
+GitHub CI is tracked on the draft PR separately from this local evidence.
