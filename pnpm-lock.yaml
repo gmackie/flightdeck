@@ -252,18 +252,27 @@ importers:
       '@cloudflare/vitest-plugin':
         specifier: ^1.4.11
         version: 1.4.11(@cloudflare/workers-types@5.20261030.1)(@types/node@26.6.6)(vitest@5.0.5)
+      '@modelcontextprotocol/client':
+        specifier: 2.4.0
+        version: 2.4.0
       wrangler:
         specifier: ^4.156.0
         version: 4.156.0(@cloudflare/workers-types@5.20261030.1)(@types/node@26.6.6)
 
   apps/lifecycle-mcp:
     dependencies:
+      '@flightdeckhq/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
       '@modelcontextprotocol/server':
         specifier: 2.4.0
         version: 2.4.0
       jose:
         specifier: ^6.2.14
         version: 6.2.14
+      valibot:
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@7.0.2)
       zod:
         specifier: ^4.2.0
         version: 4.6.6

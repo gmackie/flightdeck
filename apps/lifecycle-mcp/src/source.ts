@@ -48,6 +48,13 @@ export type SourceMeta = {
   freshness: Freshness;
   /** The source's contract or projection version, e.g. `synthetic-fixtures@1`. */
   source_version: string;
+  /** Ingestion sequence, NOT an event-time completeness watermark. */
+  projection?: {
+    source_watermark: number;
+    generation: number;
+    status: "ready" | "rebuilding" | "failed" | "empty";
+    lag_ms: number;
+  };
 };
 
 export type Sourced<T> = { data: T; meta: SourceMeta };
@@ -187,3 +194,6 @@ export class SourceUnavailableError extends Error {
     this.name = "SourceUnavailableError";
   }
 }
+
+/** A current backend grant check denied the app; never reveals app existence. */
+export class SourceForbiddenError extends Error {}

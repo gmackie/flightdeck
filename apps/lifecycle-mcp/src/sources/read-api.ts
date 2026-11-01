@@ -1,77 +1,124 @@
 import {
-  type AppFreshness,
+  type LifecycleReadRequest,
+  type LifecycleReadRpc,
+  ReadCase,
+  ReadDefinition,
+  ReadDwell,
+  ReadFreshness,
+  ReadGrants,
+  ReadTimeline,
+  readPage,
+  readSourced,
+} from "@flightdeckhq/schema";
+import * as v from "valibot";
+import {
+  type AggregateQuery,
   type AppScope,
-  type CaseSummary,
-  type DwellGroup,
-  type FunnelGroup,
-  type Grant,
   type LifecycleReadSource,
-  type Page,
+  type PageRequest,
   type Principal,
-  type Sourced,
+  SourceForbiddenError,
   SourceUnavailableError,
-  type TimelineEntry,
-  type VariantStats,
-  type WorkflowDefinition,
 } from "../source";
 
-/**
- * Integration placeholder for the Workstream H lifecycle read API (FLIG-21, PR #36), reached over
- * a service binding. It FAILS CLOSED: until that API is on main and this adapter is implemented
- * and reviewed, every method rejects without making a request, so `read-api` mode serves nothing.
- *
- * Planned mapping, all GET with the caller's verified `Cf-Access-Jwt-Assertion` forwarded so the
- * read API re-checks the FLIG-18 grant itself. Responses use H's envelope
- * `{ app_id, as_of, data_freshness, cohort, sample_count, suppressed, data, page? }`; the adapter
- * must check `app_id` equals `scope.appId` and validate every field before returning it.
- */
+/** Implemented private RPC methods; retained name for source-method discovery. No HTTP fallback. */
 export const PLANNED_ROUTES = {
-  grantsFor: "GET /api/lifecycle/grants (not yet specified; FLIG-18 needs a caller-grants read)",
-  listWorkflowDefinitions: "GET /api/apps/:app/lifecycle/processes",
-  getWorkflowDefinition: "GET /api/apps/:app/lifecycle/processes?process=:key",
-  getCaseSummary: "GET /api/apps/:app/lifecycle/cases/:id",
-  getCaseTimeline: "GET /api/apps/:app/lifecycle/cases/:id (intervals)",
-  getStageDwell: "GET /api/apps/:app/lifecycle/summaries/stages",
-  getFunnel: "not in PR #36 yet: needs a stage-reach summary",
-  getVariantStats: "not in PR #36 yet: needs a path-variant summary",
-  getFreshness: "data_freshness of any envelope",
+  grantsFor: "RPC authenticated grantsFor",
+  listWorkflowDefinitions: "RPC listWorkflowDefinitions",
+  getWorkflowDefinition: "RPC getWorkflowDefinition",
+  getCaseSummary: "RPC getCaseSummary",
+  getCaseTimeline: "RPC getCaseTimeline (all-active histories only)",
+  getStageDwell: "RPC getStageDwell (all-active, ungrouped cohorts only)",
+  getFunnel: "unsupported",
+  getVariantStats: "unsupported",
+  getFreshness: "RPC getFreshness (projection time; event-time watermark unknown)",
 } as const satisfies Record<Exclude<keyof LifecycleReadSource, "kind">, string>;
 
 export class ReadApiLifecycleSource implements LifecycleReadSource {
   readonly kind = "lifecycle-read-api" as const;
+  constructor(readonly binding: LifecycleReadRpc | undefined) {}
 
-  /** `binding` is the service binding to the Flightdeck Worker; it is unused until integration. */
-  constructor(readonly binding: Fetcher | undefined) {}
-
-  private unavailable(): never {
-    throw new SourceUnavailableError("The lifecycle read API adapter is not integrated yet");
+  private async request<S extends v.GenericSchema>(
+    principal: Principal,
+    appId: string | null,
+    request: LifecycleReadRequest,
+    schema: S,
+  ): Promise<v.InferOutput<S>> {
+    if (!principal.assertion || !this.binding || typeof this.binding.read !== "function")
+      throw new SourceUnavailableError();
+    try {
+      // The assertion is forwarded UNCHANGED. No principal/role/capability is sent.
+      const result = await this.binding.read(principal.assertion, appId, request);
+      if (!result?.ok) {
+        if (result?.code === "forbidden") throw new SourceForbiddenError();
+        throw new SourceUnavailableError();
+      }
+      if (result.appId !== appId) throw new SourceUnavailableError();
+      const parsed = v.safeParse(schema, result.value);
+      if (!parsed.success) throw new SourceUnavailableError();
+      return parsed.output;
+    } catch (error) {
+      if (error instanceof SourceForbiddenError) throw error;
+      // Never surface backend messages, token contents, or binding exceptions.
+      throw new SourceUnavailableError();
+    }
   }
 
-  async grantsFor(_principal: Principal): Promise<Grant[]> {
-    this.unavailable();
+  grantsFor(principal: Principal) {
+    return this.request(principal, null, { method: "grantsFor" }, ReadGrants);
   }
-  async listWorkflowDefinitions(_scope: AppScope): Promise<Sourced<Page<WorkflowDefinition>>> {
-    this.unavailable();
+  listWorkflowDefinitions(scope: AppScope, q: { workflowKey: string | null; page: PageRequest }) {
+    return this.request(
+      scope.principal,
+      scope.appId,
+      { method: "listWorkflowDefinitions", workflowKey: q.workflowKey, ...q.page },
+      readSourced(readPage(ReadDefinition)),
+    );
   }
-  async getWorkflowDefinition(_scope: AppScope): Promise<Sourced<WorkflowDefinition | null>> {
-    this.unavailable();
+  getWorkflowDefinition(scope: AppScope, workflowKey: string, version: number | null) {
+    return this.request(
+      scope.principal,
+      scope.appId,
+      { method: "getWorkflowDefinition", workflowKey, version },
+      readSourced(v.nullable(ReadDefinition)),
+    );
   }
-  async getCaseSummary(_scope: AppScope): Promise<Sourced<CaseSummary | null>> {
-    this.unavailable();
+  getCaseSummary(scope: AppScope, caseId: string) {
+    return this.request(
+      scope.principal,
+      scope.appId,
+      { method: "getCaseSummary", caseId },
+      readSourced(v.nullable(ReadCase)),
+    );
   }
-  async getCaseTimeline(_scope: AppScope): Promise<Sourced<Page<TimelineEntry> | null>> {
-    this.unavailable();
+  getCaseTimeline(scope: AppScope, caseId: string, page: PageRequest) {
+    return this.request(
+      scope.principal,
+      scope.appId,
+      { method: "getCaseTimeline", caseId, ...page },
+      readSourced(v.nullable(readPage(ReadTimeline))),
+    );
   }
-  async getStageDwell(_scope: AppScope): Promise<Sourced<DwellGroup[]>> {
-    this.unavailable();
+  getStageDwell(scope: AppScope, q: AggregateQuery) {
+    return this.request(
+      scope.principal,
+      scope.appId,
+      { method: "getStageDwell", ...q },
+      readSourced(v.pipe(v.array(ReadDwell), v.maxLength(64))),
+    );
   }
-  async getFunnel(_scope: AppScope): Promise<Sourced<FunnelGroup[]>> {
-    this.unavailable();
+  async getFunnel(_scope: AppScope, _q: AggregateQuery & { stages: string[] }): Promise<never> {
+    throw new SourceUnavailableError("Unsupported funnel source");
   }
-  async getVariantStats(_scope: AppScope): Promise<Sourced<VariantStats>> {
-    this.unavailable();
+  async getVariantStats(_scope: AppScope, _q: AggregateQuery & { limit: number }): Promise<never> {
+    throw new SourceUnavailableError("Unsupported path variant source");
   }
-  async getFreshness(_scope: AppScope): Promise<Sourced<AppFreshness>> {
-    this.unavailable();
+  getFreshness(scope: AppScope) {
+    return this.request(
+      scope.principal,
+      scope.appId,
+      { method: "getFreshness" },
+      readSourced(ReadFreshness),
+    );
   }
 }

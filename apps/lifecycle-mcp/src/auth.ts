@@ -54,11 +54,11 @@ export async function authenticate(
       requiredClaims: ["exp", "iat"],
     });
     const { sub, email, common_name: commonName } = payload;
-    if (typeof sub === "string" && sub && typeof email === "string" && email) {
-      return { sub, email, serviceToken: false, assertion: token };
-    }
     if (typeof commonName === "string" && commonName) {
       return { sub: commonName, serviceToken: true, assertion: token };
+    }
+    if (typeof sub === "string" && sub && typeof email === "string" && email) {
+      return { sub, email, serviceToken: false, assertion: token };
     }
     return null;
   } catch {

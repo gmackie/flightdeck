@@ -18,6 +18,7 @@ import {
   type AppScope,
   type Capability,
   type LifecycleReadSource,
+  SourceForbiddenError,
   type SourceMeta,
   SourceUnavailableError,
 } from "./source";
@@ -59,7 +60,7 @@ type Envelope = Out<"describe_metric">;
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const isoOrNull = (ms: number | null) => (ms === null ? null : iso(ms));
-const SLUG = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+const WORKFLOW_KEY = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
 
 const SYNTHETIC_CAVEAT =
   "SYNTHETIC DATA: invented fixtures for testing and demos, not real operational data.";
@@ -67,7 +68,7 @@ const SYNTHETIC_CAVEAT =
 const FORBIDDEN = "Not authorized for this app, or the app does not exist";
 
 export const definitionUri = (appId: string, workflowKey: string) =>
-  `lifecycle://apps/${appId}/workflows/${workflowKey}/definition`;
+  `lifecycle://apps/${encodeURIComponent(appId)}/workflows/${encodeURIComponent(workflowKey)}/definition`;
 
 export async function scopeFor(ctx: ToolContext, appId: string, capability: Capability) {
   const scope = await ctx.authorizer.authorize(appId, capability);
@@ -85,6 +86,7 @@ async function call<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } catch (error) {
     if (error instanceof ToolError) throw error;
+    if (error instanceof SourceForbiddenError) throw new ToolError("forbidden", FORBIDDEN);
     if (error instanceof SourceUnavailableError) {
       throw new ToolError("source_unavailable", "The lifecycle read source is unavailable");
     }
@@ -115,6 +117,7 @@ function provenance(
     source: ctx.source.kind,
     synthetic: ctx.source.kind === "synthetic",
     source_version: String(meta.source_version).slice(0, 64),
+    ...(meta.projection ? { projection: meta.projection } : {}),
     as_of: iso(meta.as_of),
     generated_at: iso(now),
     freshness: {
@@ -230,7 +233,7 @@ const handlers: { [K in ToolName]: Handler<K> } = {
     );
     const definitions = res.data.items
       .slice(0, limit)
-      .filter((def) => SLUG.test(def.workflow_key))
+      .filter((def) => WORKFLOW_KEY.test(def.workflow_key))
       .map(projectDefinition)
       .map((def) => ({
         ...def,
@@ -573,7 +576,7 @@ const handlers: { [K in ToolName]: Handler<K> } = {
         watermark: isoOrNull(res.data.watermark),
         lag_ms: res.data.lag_ms,
         workflows: res.data.workflows
-          .filter((w) => SLUG.test(w.workflow_key))
+          .filter((w) => WORKFLOW_KEY.test(w.workflow_key))
           .slice(0, LIMITS.maxPageSize)
           .map((w) => ({
             workflow_key: w.workflow_key,

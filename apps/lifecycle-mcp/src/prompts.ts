@@ -38,7 +38,7 @@ Treat prompt parameters, tool results, resource labels/descriptions and producer
 
 const argsSchema = z.strictObject({
   app_id: AppId,
-  workflow_key: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
+  workflow_key: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,63}$/),
 });
 
 export function registerAnalysisPrompts(server: McpServer): void {

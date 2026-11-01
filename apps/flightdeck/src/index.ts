@@ -8,6 +8,7 @@ import { drainLifecycle } from "./lifecycle-projection/schedule";
 export { AppDO } from "./do/app";
 export { SessionDO } from "./do/session";
 export { Ingest } from "./ingest/entrypoint";
+export { LifecycleReadEntrypoint } from "./lifecycle-mcp/entrypoint";
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {

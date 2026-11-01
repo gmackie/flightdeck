@@ -1,3 +1,4 @@
+import type { LifecycleReadRpc } from "@flightdeckhq/schema";
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import type { JWTVerifyGetKey } from "jose";
 import { authenticate } from "./auth";
@@ -10,8 +11,8 @@ import { ReadApiLifecycleSource } from "./sources/read-api";
 import { SyntheticLifecycleSource } from "./sources/synthetic";
 
 export type WorkerEnv = ConfigEnv & {
-  /** The future Workstream H read API; see `sources/read-api.ts`. */
-  LIFECYCLE_READ_API?: Fetcher;
+  /** Private named LifecycleReadEntrypoint RPC; never a dashboard Fetcher. */
+  LIFECYCLE_READ_API?: LifecycleReadRpc;
 };
 
 /** Test seams: a local JWKS, an injected source and a fixed clock. */

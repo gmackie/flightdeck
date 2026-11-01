@@ -18,7 +18,7 @@ const LIMITATIONS = [
   "No upstream event coverage, arrival/service rates, resource capacity, staffing forecast or outcome breakdown is available.",
   "No historical as_of query or atomic snapshot API is available; each source snapshot is preserved and checked.",
   "Evidence refs are content-addressed citations, not stored resources or retrievable tasks; retain the returned pack.",
-  "The production read API remains unwired and fail closed. Synthetic results describe invented fixtures only.",
+  "Production remains disabled. Live D1 has no event-time completeness watermark; unsupported evidence reads fail closed. Synthetic results describe invented fixtures only.",
   "Read timeouts stop further scheduling; the source contract has no abort signal to cancel an already-started read.",
   "Parent/child dependencies and concurrent critical paths are unsupported until aggregate_child_rollup or get_case_relations is wired. Never sum stage or child medians to infer parent blockers.",
 ];

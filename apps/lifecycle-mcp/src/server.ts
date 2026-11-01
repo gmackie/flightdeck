@@ -234,7 +234,7 @@ async function listDefinitions(ctx: ToolContext) {
       .catch(() => null);
     const seen = new Set<string>();
     for (const def of res?.data.items ?? []) {
-      if (seen.has(def.workflow_key) || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(def.workflow_key)) {
+      if (seen.has(def.workflow_key) || !/^[a-z0-9][a-z0-9_.-]{0,63}$/.test(def.workflow_key)) {
         continue;
       }
       seen.add(def.workflow_key);

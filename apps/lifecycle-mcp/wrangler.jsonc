@@ -8,9 +8,8 @@
   // Access-protected custom domain only after the read API and grants are wired (see the docs).
   "workers_dev": false,
   "preview_urls": false,
-  // The future Workstream H read API. Left unbound on purpose: `read-api` mode fails closed until
-  // the adapter is integrated (src/sources/read-api.ts).
-  // "services": [{ "binding": "LIFECYCLE_READ_API", "service": "flightdeck" }],
+  // Opt-in private RPC (backend must separately opt in and configure the MCP-specific AUD).
+  // "services": [{ "binding": "LIFECYCLE_READ_API", "service": "flightdeck", "entrypoint": "LifecycleReadEntrypoint" }],
   "vars": {
     // `production` is refused outright by this build (src/config.ts); see the rollout checklist.
     "LIFECYCLE_MCP_ENVIRONMENT": "production",

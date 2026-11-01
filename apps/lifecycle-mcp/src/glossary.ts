@@ -153,7 +153,7 @@ export const WORKFLOW_DEFINITION_SPEC = {
   description:
     "A workflow definition describes a generic, versioned process: ordered stages, terminal outcomes and the categorical dimensions aggregates may be grouped or filtered by. It holds no case data.",
   definition: {
-    workflow_key: "Slug [a-z0-9][a-z0-9_-]{0,63}, stable across versions.",
+    workflow_key: "Namespaced key [a-z0-9][a-z0-9_.-]{0,63}, stable across versions.",
     version: "Positive integer. Cases record the version they started on.",
     label: "Display name, at most 120 characters.",
     description: "Short description, at most 120 characters.",

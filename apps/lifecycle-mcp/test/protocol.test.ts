@@ -182,7 +182,7 @@ describe("no writes", () => {
       connect: () => {
         throw new Error("unused");
       },
-    } as unknown as Fetcher;
+    } as unknown as import("@flightdeckhq/schema").LifecycleReadRpc;
     const source = new ReadApiLifecycleSource(binding);
     const client = await connect({ source, env: { ...ENV, LIFECYCLE_MCP_SOURCE: "read-api" } });
     for (const [name, args] of [
@@ -198,9 +198,9 @@ describe("no writes", () => {
       "lifecycle://spec/workflow-definition",
     ]);
     expect(fetched).toBe(0);
-    // Every planned upstream call is a GET (or not specified yet).
+    // Private source uses RPC only; unsupported methods have no fallback.
     for (const route of Object.values(PLANNED_ROUTES)) {
-      expect(route).toMatch(/^(GET |not |data_freshness)/);
+      expect(route).toMatch(/^(RPC |unsupported)/);
     }
   });
 });

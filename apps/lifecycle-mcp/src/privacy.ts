@@ -22,7 +22,7 @@ export type SuppressionReason = "small_cohort" | "complementary" | "source";
 type Withheld = { suppressed: true; reason: SuppressionReason };
 
 const MAX_LABEL = 120;
-const MAX_STAGES = 50;
+const MAX_STAGES = 64;
 const MAX_DIMENSIONS = 20;
 const MAX_VALUES = 50;
 

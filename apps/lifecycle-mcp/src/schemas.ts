@@ -14,12 +14,15 @@ export const AppId = z
   .string()
   .regex(/^[\w-]{3,64}$/)
   .describe("Flightdeck app id the caller holds a grant for, e.g. synthetic-release.");
-const WorkflowKey = slug.describe("Workflow key from list_workflow_definitions.");
+const WorkflowKey = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9_.-]{0,63}$/)
+  .describe("Workflow key from list_workflow_definitions.");
 const CaseId = z
   .string()
   .regex(/^[A-Za-z0-9_-]{1,64}$/)
   .describe("Opaque case id. Never an email or name.");
-const Version = z.number().int().min(1).max(10_000);
+const Version = z.number().int().min(1).max(1_000_000);
 const Instant = z
   .string()
   .max(40)
@@ -114,6 +117,14 @@ const provenance = z.strictObject({
   source: z.enum(["synthetic", "lifecycle-read-api", "server"]),
   synthetic: z.boolean(),
   source_version: z.string(),
+  projection: z
+    .strictObject({
+      source_watermark: z.number().int().nonnegative(),
+      generation: z.number().int().nonnegative(),
+      status: z.enum(["ready", "empty", "rebuilding", "failed"]),
+      lag_ms: z.number().nonnegative(),
+    })
+    .optional(),
   as_of: iso,
   generated_at: iso,
   freshness: z.strictObject({

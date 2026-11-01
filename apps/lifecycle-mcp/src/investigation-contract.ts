@@ -23,7 +23,7 @@ const cohort = z.strictObject({
 
 export const investigationInput = z.strictObject({
   app_id: AppId,
-  workflow_key: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/),
+  workflow_key: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,63}$/),
   goal: z.enum(ANALYSIS_GOALS),
   dependency_scope: z
     .enum(["workflow_only", "child_dependencies"])
