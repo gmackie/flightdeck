@@ -1,0 +1,521 @@
+{
+  "$schema": "./gates.schema.json",
+  "kind": "flightdeck-lifecycle-gates",
+  "version": 1,
+  "verdicts": {
+    "integration-ready": "The combined lifecycle + MCP tree builds, tests and dry-runs locally with every feature still off by default. Says nothing about a Cloudflare account.",
+    "production-safe": "Every integration gate plus operator-attested staging evidence (Access, OAuth, Basin, erasure, retention, rollback) for this exact commit. The harness cannot produce this from synthetic input."
+  },
+  "components": [
+    {
+      "path": "apps/flightdeck",
+      "owner": "main"
+    },
+    {
+      "path": "apps/dashboard",
+      "owner": "main"
+    },
+    {
+      "path": "packages/schema",
+      "owner": "main"
+    },
+    {
+      "path": "packages/lifecycle-queries",
+      "owner": "#34"
+    },
+    {
+      "path": "examples/lifecycle-fixtures",
+      "owner": "#37 FLIG-20"
+    },
+    {
+      "path": "packages/lifecycle",
+      "owner": "#45 FLIG-22"
+    },
+    {
+      "path": "apps/lifecycle-mcp",
+      "owner": "#44 FLIG-23 / #49 FLIG-32"
+    },
+    {
+      "path": "packages/lifecycle-investigations",
+      "owner": "#48 FLIG-30 / #51 FLIG-33"
+    },
+    {
+      "path": "packages/lifecycle-insights",
+      "owner": "#38 FLIG-24"
+    }
+  ],
+  "migrations": {
+    "dir": "apps/flightdeck/migrations",
+    "required": [
+      {
+        "name": "0001_apps",
+        "owner": "main"
+      },
+      {
+        "name": "0002_server_ingest_keys",
+        "owner": "main"
+      },
+      {
+        "name": "0003_dogfood_app",
+        "owner": "main"
+      },
+      {
+        "name": "0004_hourly_rollups",
+        "owner": "main"
+      },
+      {
+        "name": "0005_lifecycle_write",
+        "owner": "#35 FLIG-19 via #45"
+      },
+      {
+        "name": "0006_process_definitions",
+        "owner": "#39 FLIG-25 via #45"
+      },
+      {
+        "name": "0010_read_authorization",
+        "owner": "#31 FLIG-18"
+      },
+      {
+        "name": "0020_lifecycle_serving",
+        "owner": "#36 FLIG-21 via #45"
+      },
+      {
+        "name": "0030_lifecycle_projection",
+        "owner": "#45 FLIG-22"
+      },
+      {
+        "name": "0031_lifecycle_snapshot_tombstones",
+        "owner": "#36 FLIG-21"
+      }
+    ],
+    "anticipated": [
+      {
+        "name": "0040_lifecycle_privacy_budget",
+        "owner": "#54 FLIG-36",
+        "gate": "query-budgets"
+      },
+      {
+        "name": "0041_lifecycle_erasure_retention",
+        "owner": "FLIG-35",
+        "gate": "d1-retention"
+      }
+    ]
+  },
+  "flags": [
+    {
+      "file": "apps/flightdeck/wrangler.jsonc",
+      "name": "FLIGHTDECK_DEV",
+      "default": "0",
+      "allowed": ["0", "1"],
+      "production": ["0"]
+    },
+    {
+      "file": "apps/flightdeck/wrangler.jsonc",
+      "name": "READ_AUTHZ_MODE",
+      "default": "legacy",
+      "allowed": ["legacy", "enforce"],
+      "production": ["enforce"]
+    },
+    {
+      "file": "apps/flightdeck/wrangler.jsonc",
+      "name": "LIFECYCLE_MCP_READ_ENABLED",
+      "default": "0",
+      "allowed": ["0", "1"],
+      "production": ["0", "1"]
+    },
+    {
+      "file": "apps/lifecycle-mcp/wrangler.jsonc",
+      "name": "LIFECYCLE_MCP_ENVIRONMENT",
+      "default": "production",
+      "allowed": ["development", "staging", "production"],
+      "production": ["staging", "production"]
+    },
+    {
+      "file": "apps/lifecycle-mcp/wrangler.jsonc",
+      "name": "LIFECYCLE_MCP_SOURCE",
+      "default": "disabled",
+      "allowed": ["disabled", "synthetic", "read-api"],
+      "production": ["disabled", "read-api"]
+    },
+    {
+      "file": "apps/lifecycle-mcp/wrangler.jsonc",
+      "name": "LIFECYCLE_MCP_DEV",
+      "default": "0",
+      "allowed": ["0", "1"],
+      "production": ["0"]
+    },
+    {
+      "file": "apps/lifecycle-mcp/wrangler.jsonc",
+      "name": "LIFECYCLE_MCP_MIN_COHORT",
+      "default": "5",
+      "allowed": ["5", "10", "20", "50", "100"],
+      "production": ["5", "10", "20", "50", "100"]
+    }
+  ],
+  "optInBindings": [
+    {
+      "file": "apps/flightdeck/wrangler.jsonc",
+      "section": "pipelines",
+      "binding": "LIFECYCLE_EVENTS"
+    },
+    {
+      "file": "apps/lifecycle-mcp/wrangler.jsonc",
+      "section": "services",
+      "binding": "LIFECYCLE_READ_API"
+    }
+  ],
+  "rpc": {
+    "worker": "flightdeck",
+    "entrypoint": "LifecycleReadEntrypoint",
+    "binding": "LIFECYCLE_READ_API",
+    "exportFile": "apps/flightdeck/src/index.ts",
+    "audienceVar": "LIFECYCLE_MCP_ACCESS_AUD"
+  },
+  "mcp": {
+    "app": "apps/lifecycle-mcp",
+    "sdkMajor": 2,
+    "protocolVersion": "2026-07-28",
+    "productionSwitch": "apps/lifecycle-mcp/src/config.ts",
+    "minCohortFloor": 5
+  },
+  "pipelineSchema": {
+    "file": "apps/flightdeck/pipelines/lifecycle_events.schema.json",
+    "requiredFields": [
+      "event_id",
+      "app_id",
+      "schema_version",
+      "process_id",
+      "process_version",
+      "type",
+      "case_id"
+    ],
+    "deniedFieldPattern": "(^|_)(email|e_mail|phone|name|first_name|last_name|full_name|address|ip|ip_address|ssn|dob|birth|salary|compensation|note|notes|comment|free_text|score)($|_)"
+  },
+  "basinSql": {
+    "package": "packages/lifecycle-queries",
+    "sqlDirs": ["packages/lifecycle-queries/sql", "apps/flightdeck/basin"]
+  },
+  "findings": {
+    "register": "scripts/lifecycle-preflight/findings.json",
+    "blockingSeverities": ["P0", "P1", "P2"]
+  },
+  "gates": [
+    {
+      "id": "open-critical-findings",
+      "title": "No open P0-P2 review findings; resolved ones have regression tests and an independent review of this commit",
+      "check": "findings",
+      "requiredFor": ["integration-ready", "production-safe"],
+      "owner": "independent review",
+      "evidence": ["scripts/lifecycle-preflight/findings.json"]
+    },
+    {
+      "id": "workspace-components",
+      "title": "Lifecycle workspace components and toolchain",
+      "check": "components",
+      "requiredFor": ["integration-ready"],
+      "owner": "FLIG-34",
+      "evidence": ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml"]
+    },
+    {
+      "id": "d1-migrations",
+      "title": "D1 migrations: unique, ordered, complete, apply on a blank SQLite database",
+      "check": "migrations",
+      "requiredFor": ["integration-ready"],
+      "owner": "FLIG-34",
+      "evidence": ["apps/flightdeck/migrations"],
+      "docs": ["https://developers.cloudflare.com/d1/reference/migrations/"]
+    },
+    {
+      "id": "flags-default-off",
+      "title": "Committed flags and opt-in bindings default to off",
+      "check": "flags",
+      "requiredFor": ["integration-ready"],
+      "owner": "FLIG-34",
+      "evidence": [
+        "apps/flightdeck/wrangler.jsonc",
+        "apps/lifecycle-mcp/wrangler.jsonc",
+        "apps/lifecycle-mcp/src/config.ts"
+      ]
+    },
+    {
+      "id": "no-committed-secrets",
+      "title": "No secrets in tracked config or .dev.vars files",
+      "check": "committedSecrets",
+      "requiredFor": ["integration-ready"],
+      "owner": "FLIG-38",
+      "evidence": ["apps/flightdeck/wrangler.jsonc", "apps/lifecycle-mcp/wrangler.jsonc"]
+    },
+    {
+      "id": "rpc-entrypoint",
+      "title": "Named RPC entrypoint exported and guarded by a distinct MCP audience",
+      "check": "rpcEntrypoint",
+      "requiredFor": ["integration-ready"],
+      "owner": "#49 FLIG-32",
+      "evidence": [
+        "apps/flightdeck/src/index.ts",
+        "apps/flightdeck/src/lifecycle-mcp/entrypoint.ts",
+        "apps/lifecycle-mcp/wrangler.jsonc"
+      ],
+      "docs": [
+        "https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/rpc/"
+      ]
+    },
+    {
+      "id": "mcp-protocol",
+      "title": "MCP SDK v2 pinned exactly; stateless protocol version declared",
+      "check": "mcpProtocol",
+      "requiredFor": ["integration-ready"],
+      "owner": "#44 FLIG-23",
+      "evidence": ["apps/lifecycle-mcp/package.json", "apps/lifecycle-mcp/src/worker.ts"],
+      "docs": ["https://modelcontextprotocol.io/specification/"]
+    },
+    {
+      "id": "privacy-k-floor",
+      "title": "Small-cell suppression floor (k >= 5) in code, config and intended settings",
+      "check": "privacyFloor",
+      "requiredFor": ["integration-ready"],
+      "owner": "FLIG-36",
+      "evidence": ["apps/lifecycle-mcp/src/config.ts", "apps/lifecycle-mcp/wrangler.jsonc"]
+    },
+    {
+      "id": "pipeline-schema",
+      "title": "Lifecycle pipeline schema present, typed and free of personal-data fields",
+      "check": "pipelineSchema",
+      "requiredFor": ["integration-ready"],
+      "owner": "#45 FLIG-22",
+      "evidence": ["apps/flightdeck/pipelines/lifecycle_events.schema.json"],
+      "docs": ["https://developers.cloudflare.com/pipelines/"]
+    },
+    {
+      "id": "basin-sql-readonly",
+      "title": "Basin SQL is a single read-only SELECT (no DML/DDL)",
+      "check": "basinSql",
+      "requiredFor": ["integration-ready"],
+      "owner": "#34",
+      "evidence": ["packages/lifecycle-queries/src/sql.ts"],
+      "docs": ["https://developers.cloudflare.com/r2-sql/"]
+    },
+    {
+      "id": "local-quality",
+      "title": "pnpm lint, typecheck, test, build and tarball smoke pass in this run",
+      "check": "commands",
+      "commands": ["lint", "typecheck", "test", "build", "pack-smoke"],
+      "requiredFor": ["integration-ready"],
+      "owner": "FLIG-34",
+      "evidence": []
+    },
+    {
+      "id": "synthetic-fixtures",
+      "title": "Synthetic lifecycle fixtures validate in this run",
+      "check": "commands",
+      "commands": ["fixtures-test", "fixtures-validate"],
+      "requiredFor": ["integration-ready"],
+      "owner": "#37 FLIG-20",
+      "evidence": ["examples/lifecycle-fixtures"]
+    },
+    {
+      "id": "wrangler-dry-run",
+      "title": "wrangler deploy --dry-run bundles both Workers without credentials",
+      "check": "commands",
+      "commands": ["wrangler-dry-run-flightdeck", "wrangler-dry-run-mcp"],
+      "requiredFor": ["integration-ready"],
+      "owner": "FLIG-34",
+      "evidence": [],
+      "docs": ["https://developers.cloudflare.com/workers/wrangler/commands/#deploy"]
+    },
+    {
+      "id": "two-domain-acceptance",
+      "title": "Two-domain synthetic MCP acceptance passes in this run",
+      "check": "commands",
+      "commands": ["mcp-acceptance"],
+      "requiredFor": ["integration-ready"],
+      "owner": "#50 FLIG-31",
+      "evidence": [
+        "apps/lifecycle-mcp/test/acceptance.test.ts",
+        "docs/operations/lifecycle-mcp-acceptance.md"
+      ]
+    },
+    {
+      "id": "access-audiences",
+      "title": "Dashboard and MCP Access applications use distinct, well-formed AUD tags",
+      "check": "accessAudiences",
+      "requiredFor": ["production-safe"],
+      "owner": "#49 FLIG-32",
+      "evidence": [],
+      "docs": [
+        "https://developers.cloudflare.com/cloudflare-one/identity/authorization-cookie/validating-json/"
+      ]
+    },
+    {
+      "id": "rpc-service-binding",
+      "title": "Intended service binding targets the known Worker and named entrypoint",
+      "check": "serviceBinding",
+      "requiredFor": ["production-safe"],
+      "owner": "#49 FLIG-32",
+      "evidence": [],
+      "docs": ["https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/"]
+    },
+    {
+      "id": "staging-flag-plan",
+      "title": "Intended staging flags: grants enforced, dev bypasses off",
+      "check": "flagPlan",
+      "requiredFor": ["production-safe"],
+      "owner": "FLIG-34",
+      "evidence": []
+    },
+    {
+      "id": "oauth-metadata",
+      "title": "MCP OAuth protected-resource metadata served and well-formed",
+      "check": "oauthMetadata",
+      "requiredFor": ["production-safe"],
+      "owner": "OAuth track",
+      "evidence": [],
+      "docs": [
+        "https://www.rfc-editor.org/rfc/rfc9728",
+        "https://modelcontextprotocol.io/specification/"
+      ]
+    },
+    {
+      "id": "d1-retention",
+      "title": "D1 retention and erasure jobs integrated and retention enabled with bounded days",
+      "check": "retention",
+      "requiredFor": ["production-safe"],
+      "owner": "FLIG-35",
+      "evidence": []
+    },
+    {
+      "id": "query-budgets",
+      "title": "Durable query budgets integrated with positive, bounded limits",
+      "check": "budgets",
+      "requiredFor": ["production-safe"],
+      "owner": "FLIG-36",
+      "evidence": []
+    },
+    {
+      "id": "source-completeness",
+      "title": "Production switch on and live read-api source wired (future)",
+      "check": "sourceCompleteness",
+      "requiredFor": ["production-safe"],
+      "owner": "future",
+      "evidence": ["apps/lifecycle-mcp/src/config.ts"]
+    },
+    {
+      "id": "access-live",
+      "title": "Access, TLS and hostnames verified on the staging account",
+      "check": "attestation",
+      "requiredFor": ["production-safe"],
+      "owner": "operator",
+      "attestation": {
+        "checks": [
+          "dashboardAccessCoversAllHostnames",
+          "mcpAccessAppDistinctAud",
+          "workersDevAndPreviewDisabled",
+          "tlsCertificateValid",
+          "unauthenticatedRequestRejected",
+          "wrongAudienceRejected"
+        ]
+      },
+      "evidence": [],
+      "docs": [
+        "https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-public-app/",
+        "https://developers.cloudflare.com/workers/configuration/routing/workers-dev/"
+      ]
+    },
+    {
+      "id": "oauth-live",
+      "title": "OAuth token issuance, audience and expiry verified against staging",
+      "check": "attestation",
+      "requiredFor": ["production-safe"],
+      "owner": "operator",
+      "attestation": {
+        "checks": [
+          "metadataServedOverTls",
+          "tokenAudienceBoundToMcp",
+          "expiredTokenRejected",
+          "wrongResourceRejected",
+          "noTokenPassthrough"
+        ]
+      },
+      "evidence": [],
+      "docs": ["https://developers.cloudflare.com/agents/model-context-protocol/authorization/"]
+    },
+    {
+      "id": "basin-provisioned",
+      "title": "Pipelines stream, sink and R2 Data Catalog table provisioned on staging",
+      "check": "attestation",
+      "requiredFor": ["production-safe"],
+      "owner": "operator",
+      "attestation": {
+        "checks": [
+          "streamSchemaMatchesRepo",
+          "sinkWritesIcebergTable",
+          "catalogEnabled",
+          "readOnlyQueryTokenScoped",
+          "syntheticRowQueryable"
+        ]
+      },
+      "evidence": [],
+      "docs": [
+        "https://developers.cloudflare.com/pipelines/",
+        "https://developers.cloudflare.com/r2/data-catalog/"
+      ]
+    },
+    {
+      "id": "erasure-certificate",
+      "title": "Physical erasure certificate from an external Iceberg engine",
+      "check": "attestation",
+      "requiredFor": ["production-safe"],
+      "owner": "FLIG-35 / operator",
+      "attestation": {
+        "checks": [
+          "icebergDeleteCommitted",
+          "snapshotsExpired",
+          "orphanFilesRemoved",
+          "basinQueryConfirmsAbsence",
+          "d1TombstonesApplied"
+        ],
+        "fields": ["engine"]
+      },
+      "evidence": [],
+      "docs": [
+        "https://iceberg.apache.org/docs/latest/maintenance/",
+        "https://developers.cloudflare.com/r2/data-catalog/"
+      ]
+    },
+    {
+      "id": "audit-retention-live",
+      "title": "Audit log and retention job verified on staging",
+      "check": "attestation",
+      "requiredFor": ["production-safe"],
+      "owner": "operator",
+      "attestation": {
+        "checks": [
+          "auditRowsOpaque",
+          "retentionDryRunReviewed",
+          "retentionJobRanOnSynthetic",
+          "replayLogNotTruncatedEarly"
+        ]
+      },
+      "evidence": []
+    },
+    {
+      "id": "rollback-rehearsed",
+      "title": "Rollback rehearsed: flags off, binding removed, previous version restored",
+      "check": "attestation",
+      "requiredFor": ["production-safe"],
+      "owner": "operator",
+      "attestation": {
+        "checks": [
+          "flagsOffRestoresPreviousBehaviour",
+          "serviceBindingRemoved",
+          "previousWorkerVersionRestored",
+          "migrationsForwardCompatible"
+        ]
+      },
+      "evidence": [],
+      "docs": [
+        "https://developers.cloudflare.com/workers/configuration/versions-and-deployments/rollbacks/"
+      ]
+    }
+  ]
+}

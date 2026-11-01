@@ -1,0 +1,45 @@
+{
+  "$schema": "./findings.schema.json",
+  "kind": "flightdeck-lifecycle-findings",
+  "version": 1,
+  "description": "Known review findings against main. An open finding at a blocking severity blocks integration-ready and production-safe. A finding counts as resolved only when its regression tests exist in the tree and an independent review names this exact commit. A finding's `gates` are blocked while it is open, whatever their own check says.",
+  "findings": [
+    {
+      "id": "R52-P1-FUTURE-EVENT-DISCARDED",
+      "severity": "P1",
+      "title": "A future-dated lifecycle event is discarded from the queue instead of being retained",
+      "source": "Independent integration review of merged #52 (main 53a9382)",
+      "foundOn": "53a93826d16860f659fe088e0680a606cda41235",
+      "status": "open",
+      "owner": "lifecycle hotfix (separate draft PR, in progress)"
+    },
+    {
+      "id": "R52-P1-SINGLETON-DWELL",
+      "severity": "P1",
+      "title": "A stage with 1 completed and 4 censored cases exposes a singleton dwell time (small-cell suppression bypass)",
+      "source": "Independent integration review of merged #52 (main 53a9382)",
+      "foundOn": "53a93826d16860f659fe088e0680a606cda41235",
+      "status": "open",
+      "owner": "lifecycle hotfix (separate draft PR, in progress)",
+      "gates": ["privacy-k-floor"]
+    },
+    {
+      "id": "R52-P2-CONFLICTING-OUTCOMES",
+      "severity": "P2",
+      "title": "Conflicting case outcomes are not reconciled consistently",
+      "source": "Independent integration review of merged #52 (main 53a9382)",
+      "foundOn": "53a93826d16860f659fe088e0680a606cda41235",
+      "status": "open",
+      "owner": "lifecycle hotfix (separate draft PR, in progress)"
+    },
+    {
+      "id": "R52-P2-FAILED-REBUILD-VISIBILITY",
+      "severity": "P2",
+      "title": "A failed read-model rebuild is not visible to operators or readers",
+      "source": "Independent integration review of merged #52 (main 53a9382)",
+      "foundOn": "53a93826d16860f659fe088e0680a606cda41235",
+      "status": "open",
+      "owner": "lifecycle hotfix (separate draft PR, in progress)"
+    }
+  ]
+}
