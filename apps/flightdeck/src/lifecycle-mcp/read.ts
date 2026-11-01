@@ -1,10 +1,17 @@
 import type { LifecycleReadRequest } from "@flightdeckhq/schema";
 import type { AccessPrincipal } from "../access";
+import {
+  COST,
+  finishReservation,
+  isAggregateRead,
+  MAX_CASES,
+  MAX_DURATION,
+  MAX_INTERVALS,
+  type Reservation,
+} from "../lifecycle-privacy/guard";
 import { BadQuery, decodeCursor, encodeCursor } from "../lifecycle-serving/params";
 import { caseDetail, listProcesses, type ProcessDefinition } from "../lifecycle-serving/read";
 
-const MAX_CASES = 1000;
-const MAX_INTERVALS = 10_000;
 const unavailable = (): never => {
   throw new Error("unsupported or unavailable read model");
 };
@@ -87,9 +94,14 @@ export async function executeRead(
   db: D1Database,
   appId: string,
   q: Exclude<LifecycleReadRequest, { method: "grantsFor" }>,
+  reservation?: Reservation,
+  checkAccess?: () => Promise<void>,
 ) {
+  // Every aggregate path requires backend admission, including future tool aliases.
+  if (isAggregateRead(q) && (!reservation || !checkAccess)) return unavailable();
   const meta = await metadata(db, appId);
   const sourced = async <T>(data: T) => {
+    await checkAccess?.();
     const after = await metadata(db, appId);
     if (
       after.as_of !== meta.as_of ||
@@ -145,7 +157,11 @@ export async function executeRead(
         dimensions: {},
       });
     // H does not persist attempt identity. Only all-active histories preserve visits exactly.
-    if (c.intervals.some((i) => i.state !== "active")) return unavailable();
+    if (
+      c.intervals.length > 500 ||
+      c.intervals.some((i) => i.state !== "active" || !validInterval(i.entered_at, i.exited_at))
+    )
+      return unavailable();
     const scope = `mcp timeline ${appId} ${q.caseId} ${c.provenance.generation} ${c.provenance.source_watermark}`;
     const after = decodeCursor(new URLSearchParams(q.cursor ? { cursor: q.cursor } : {}), scope, [
       "number",
@@ -188,62 +204,117 @@ export async function executeRead(
     q.to - q.from > 366 * 86_400_000
   )
     return unavailable();
-  const { results: cases } = await db
-    .prepare(`SELECT case_id FROM lifecycle_case_snapshots
+  if (!reservation) return unavailable();
+  const began = Date.now();
+  const used = { rows: 0, scans: 0, time_ms: 0 };
+  const observe = (result: D1Result) => {
+    used.rows += result.results.length;
+    // Missing telemetry must fail closed, not silently account as zero.
+    if (!Number.isFinite(result.meta.rows_read) || !Number.isFinite(result.meta.duration))
+      return unavailable();
+    used.scans += result.meta.rows_read;
+    used.time_ms += result.meta.duration;
+    if (used.scans > COST.scans || used.time_ms > COST.time_ms) return unavailable();
+  };
+  try {
+    await checkAccess?.();
+    const caseResult = await db
+      .prepare(`SELECT case_id FROM lifecycle_case_snapshots
     WHERE app_id = ? AND process_key = ? AND process_version = ? AND deleted_at IS NULL
       AND started_at >= ? AND started_at < ? ORDER BY started_at, case_id LIMIT ?`)
-    .bind(appId, q.workflowKey, q.version, q.from, q.to, MAX_CASES + 1)
-    .all<{ case_id: string }>();
-  if (cases.length > MAX_CASES) return unavailable();
-  const { results: intervals } = await db
-    .prepare(`SELECT i.case_id, i.stage_key, i.state, i.entered_at, i.exited_at
+      .bind(appId, q.workflowKey, q.version, q.from, q.to, MAX_CASES + 1)
+      .all<{ case_id: string }>();
+    observe(caseResult);
+    const cases = caseResult.results;
+    if (cases.length > MAX_CASES) return unavailable();
+    await checkAccess?.();
+    const intervalResult = await db
+      .prepare(`SELECT i.case_id, i.stage_key, i.state, i.entered_at, i.exited_at
     FROM lifecycle_stage_intervals i JOIN lifecycle_case_snapshots c ON c.app_id = i.app_id AND c.case_id = i.case_id
     WHERE i.app_id = ? AND c.process_key = ? AND c.process_version = ? AND c.deleted_at IS NULL
       AND c.started_at >= ? AND c.started_at < ? ORDER BY i.case_id, i.seq LIMIT ?`)
-    .bind(appId, q.workflowKey, q.version, q.from, q.to, MAX_INTERVALS + 1)
-    .all<{
-      case_id: string;
-      stage_key: string;
-      state: string;
-      entered_at: number;
-      exited_at: number | null;
-    }>();
-  if (intervals.length > MAX_INTERVALS || intervals.some((i) => i.state !== "active"))
-    return unavailable();
-  const groups = new Map<string, { completed: Set<string>; open: Set<string>; values: number[] }>();
-  for (const iv of intervals) {
-    const g = groups.get(iv.stage_key) ?? {
-      completed: new Set<string>(),
-      open: new Set<string>(),
-      values: [],
-    };
-    groups.set(iv.stage_key, g);
-    if (iv.exited_at === null) g.open.add(iv.case_id);
-    else {
-      g.completed.add(iv.case_id);
-      g.values.push(iv.exited_at - iv.entered_at);
-    }
-  }
-  return sourced(
-    [...groups].map(([stage_key, g]) => {
-      // Do not expose small completed OR censored cohorts, including through residual counts.
-      const suppressed =
-        (g.completed.size > 0 && g.completed.size < 5) || (g.open.size > 0 && g.open.size < 5);
-      const values = g.values.sort((a, b) => a - b);
-      const pct = (p: number) => values[Math.ceil(values.length * p) - 1] ?? null;
-      return {
-        stage_key,
-        group: null,
-        n: suppressed ? 0 : g.completed.size,
-        open_n: suppressed ? 0 : g.open.size,
-        p50_ms: suppressed ? null : pct(0.5),
-        p90_ms: suppressed ? null : pct(0.9),
-        mean_ms:
-          suppressed || !values.length
-            ? null
-            : Math.round(values.reduce((n, x) => n + x, 0) / values.length),
-        suppressed,
+      .bind(appId, q.workflowKey, q.version, q.from, q.to, MAX_INTERVALS + 1)
+      .all<{
+        case_id: string;
+        stage_key: string;
+        state: string;
+        entered_at: number;
+        exited_at: number | null;
+      }>();
+    observe(intervalResult);
+    const intervals = intervalResult.results;
+    if (
+      intervals.length > MAX_INTERVALS ||
+      intervals.some(
+        (i) =>
+          i.state !== "active" ||
+          !reservation.stages.has(i.stage_key) ||
+          !validInterval(i.entered_at, i.exited_at),
+      )
+    )
+      return unavailable();
+    const groups = new Map<
+      string,
+      { completed: Set<string>; open: Set<string>; values: number[] }
+    >();
+    for (const iv of intervals) {
+      const g = groups.get(iv.stage_key) ?? {
+        completed: new Set<string>(),
+        open: new Set<string>(),
+        values: [],
       };
-    }),
+      groups.set(iv.stage_key, g);
+      if (iv.exited_at === null) g.open.add(iv.case_id);
+      else {
+        g.completed.add(iv.case_id);
+        g.values.push(iv.exited_at - iv.entered_at);
+      }
+    }
+    const small = (n: number) => n > 0 && n < 5;
+    // Whole-answer withholding also removes complementary stage populations/marginals.
+    // Stages overlap in membership, so treating them as disjoint groups is unsafe.
+    const withholdAll = [...groups.values()].some((g) => {
+      const observed = new Set([...g.completed, ...g.open]).size;
+      return (
+        small(g.completed.size) ||
+        small(g.open.size) ||
+        small(cases.length - observed) ||
+        small(cases.length - g.completed.size) ||
+        small(cases.length - g.open.size)
+      );
+    });
+    return await sourced(
+      [...groups].map(([stage_key, g]) => {
+        // Do not expose small completed OR censored cohorts, including through residual counts.
+        const suppressed = withholdAll;
+        const values = g.values.sort((a, b) => a - b);
+        const pct = (p: number) => values[Math.ceil(values.length * p) - 1] ?? null;
+        return {
+          stage_key,
+          group: null,
+          n: suppressed ? 0 : g.completed.size,
+          open_n: suppressed ? 0 : g.open.size,
+          p50_ms: suppressed ? null : pct(0.5),
+          p90_ms: suppressed ? null : pct(0.9),
+          mean_ms:
+            suppressed || !values.length
+              ? null
+              : Math.round(values.reduce((n, x) => n + x, 0) / values.length),
+          suppressed,
+        };
+      }),
+    );
+  } finally {
+    used.time_ms = Math.max(used.time_ms, Date.now() - began);
+    await finishReservation(db, reservation, used);
+  }
+}
+
+function validInterval(entered: number, exited: number | null) {
+  return (
+    Number.isSafeInteger(entered) &&
+    entered >= 0 &&
+    (exited === null ||
+      (Number.isSafeInteger(exited) && exited >= entered && exited - entered <= MAX_DURATION))
   );
 }

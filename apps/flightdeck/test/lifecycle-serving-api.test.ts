@@ -340,88 +340,26 @@ describe("case detail", () => {
   });
 });
 
-describe("aggregates", () => {
-  const WINDOW = `started_after=${new Date(T0).toISOString()}&started_before=${new Date(T0 + DAY).toISOString()}`;
-
-  it("summarizes dwell per stage, censoring open intervals and withholding small groups", async () => {
-    const { status, body } = await get(
-      `/api/apps/${APP}/lifecycle/summaries/stages?process_key=deploy&version=1&${WINDOW}`,
-    );
-    expect(status).toBe(200);
-    expect(body.cohort).toMatchObject({ process_key: "deploy", version: 1, min_cohort: 5 });
-    const build = body.data.find((g: Json) => g.stage_key === "build" && g.state === "active");
-    expect(build).toEqual({
-      stage_key: "build",
-      state: "active",
-      case_count: 7,
-      closed_intervals: 6,
-      open_intervals: 1,
-      dwell_ms: { mean: 35 * MIN, p50: 30 * MIN, p90: 60 * MIN, min: 10 * MIN, max: 60 * MIN },
-    });
-    expect(body.data.find((g: Json) => g.stage_key === "release")).toMatchObject({
-      case_count: 6,
-      dwell_ms: { p50: 5 * MIN },
-    });
-    // build/blocked covers only two cases.
-    expect(body.data.some((g: Json) => g.state === "blocked")).toBe(false);
-    expect(body.suppressed).toBe(true);
-    expect(body.sample_count).toBe(7);
-  });
-
-  it("summarizes outcomes, releasing only groups at or above the minimum cohort", async () => {
-    const { body } = await get(
-      `/api/apps/${APP}/lifecycle/summaries/outcomes?process_key=deploy&version=1&${WINDOW}`,
-    );
-    expect(body.data).toEqual([
-      {
-        status: "closed",
-        outcome: "success",
-        case_count: 5,
-        duration_ms: { mean: 35 * MIN, p50: 35 * MIN, p90: 55 * MIN },
-      },
-    ]);
-    expect(body).toMatchObject({ sample_count: 5, suppressed: true });
-
-    const lowered = await get(
-      `/api/apps/${APP}/lifecycle/summaries/outcomes?process_key=deploy&version=1&${WINDOW}`,
-      { authorize: allowAll(), minCohort: 1 },
-    );
-    // The floor is two, so a single failure or open case is still withheld.
-    expect(lowered.body.cohort.min_cohort).toBe(2);
-    expect(lowered.body.data).toHaveLength(1);
-  });
-
-  it("filters the cohort by status and window", async () => {
-    const open = await get(
-      `/api/apps/${APP}/lifecycle/summaries/stages?process_key=deploy&version=1&status=open&${WINDOW}`,
-      { authorize: allowAll(), minCohort: 2 },
-    );
-    expect(open.body).toMatchObject({ data: [], sample_count: 0, suppressed: true });
-    // The default window is the 30 days before now, which excludes the 90-day-old case.
-    const recent = await get(
-      `/api/apps/${APP}/lifecycle/summaries/outcomes?process_key=deploy&version=1`,
-    );
-    expect(recent.body.cohort.started_before).toBe(new Date(NOW).toISOString());
-    expect(recent.body.sample_count).toBe(5);
-  });
-
-  it("requires one process version and a bounded window", async () => {
-    for (const query of [
-      "",
-      "process_key=deploy",
-      "version=1",
-      "process_key=deploy&version=1&started_after=2025-01-01&started_before=2026-10-01",
-      "process_key=deploy&version=1&outcome=success",
-      "process_key=deploy&version=1&limit=5",
-    ]) {
-      expect(
-        (await get(`/api/apps/${APP}/lifecycle/summaries/stages?${query}`)).status,
-        query,
-      ).toBe(400);
+describe("legacy aggregate routes cannot bypass private privacy admission", () => {
+  it("denies after authorization even with narrow windows, filters, lowered k or malformed params", async () => {
+    for (const kind of ["stages", "outcomes"]) {
+      for (const query of [
+        "",
+        "process_key=deploy&version=1",
+        "status=open&limit=1",
+        "started_after=2026-03-10T00:00:00.001Z&started_before=2026-03-11",
+      ]) {
+        const response = await get(`/api/apps/${APP}/lifecycle/summaries/${kind}?${query}`, {
+          authorize: allowAll(),
+          minCohort: 1,
+        });
+        expect(response.status).toBe(503);
+        expect(response.body).toEqual({ error: "Lifecycle aggregate adapter unavailable" });
+        expect(JSON.stringify(response.body)).not.toMatch(/sample_count|cohort|case_count|dwell/);
+      }
     }
   });
-
-  it("drops soft-deleted cases from lists and aggregates", async () => {
+  it("still removes soft-deleted cases from authorized case lists", async () => {
     const app = "app_serving_deleted";
     const { repo: r } = repo(env.DB);
     await seed(
@@ -429,11 +367,7 @@ describe("aggregates", () => {
       app,
       [0, 1, 2, 3, 4].map((i) => snap(`c${i}`, { started_at: T0 + i })),
     );
-    const path = `/api/apps/${app}/lifecycle/summaries/outcomes?process_key=deploy&version=1&${WINDOW}`;
-    expect((await get(path)).body.sample_count).toBe(5);
     await r.tombstoneCase(app, "c0", prov(1, 200));
-    const after = await get(path);
-    expect(after.body).toMatchObject({ data: [], sample_count: 0, suppressed: true });
     const list = await get(`/api/apps/${app}/lifecycle/cases`);
     expect(list.body.data.map((c: { case_id: string }) => c.case_id)).toEqual([
       "c4",

@@ -120,7 +120,14 @@ export function decodeCursor(
   if (typeof parsed !== "object" || parsed === null) throw invalid;
   const { s, k } = parsed as { s?: unknown; k?: unknown };
   if (s !== digest(scope) || !Array.isArray(k) || k.length !== shape.length) throw invalid;
-  if (!k.every((part, i) => typeof part === shape[i])) throw invalid;
+  if (
+    !k.every(
+      (part, i) =>
+        typeof part === shape[i] &&
+        (typeof part !== "number" || (Number.isSafeInteger(part) && part >= 0)),
+    )
+  )
+    throw invalid;
   return k;
 }
 

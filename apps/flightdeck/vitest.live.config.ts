@@ -16,6 +16,9 @@ export default defineConfig(async () => {
             ACCESS_AUD: "dashboard-aud",
             LIFECYCLE_MCP_READ_ENABLED: "1",
             LIFECYCLE_MCP_ACCESS_AUD: "mcp-aud",
+            LIFECYCLE_PRIVACY_MODE: "enforce",
+            LIFECYCLE_PRIVACY_RESTRICTED: "deny",
+            LIFECYCLE_PRIVACY_KEY: "synthetic-only-stable-key-32-characters",
           },
           serviceBindings: {
             TEST_LIFECYCLE_READ: { name: "flightdeck", entrypoint: "LifecycleReadEntrypoint" },

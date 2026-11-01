@@ -271,3 +271,12 @@ is used in any environment:
 Funnel/path variants, general state-segment-to-attempt reconstruction, privacy/retention
 and Basin erasure gates, OAuth delegation and production account/deployment evidence
 remain outside this fix. No merge or deployment is authorized or performed.
+
+## Stacked privacy hardening (FLIG-36)
+
+The draft privacy change against main (after integration PR #52 landed) supersedes the arbitrary-window/query-budget behavior
+above: see [privacy admission, migration order and precise limitations](lifecycle-privacy-guard.md).
+Aggregate reads require canonical weeks, registered operator approvals and durable
+D1 admission. Legacy dashboard summaries are denied pending integration. Restricted
+processes default to denied. This does not establish formal privacy or production
+readiness, and no merge, remote migration or deployment is authorized.

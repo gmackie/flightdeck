@@ -14,6 +14,7 @@ import { privateLifecycleRead } from "../src/lifecycle-mcp/entrypoint";
 import { LifecycleSnapshotRepository } from "../src/lifecycle-serving/repository";
 import { adaptFixtures } from "./support/fixture-adapter";
 import { deliver, grant, type Json, producerApp, project } from "./support/harness";
+import { approveAggregate, budgets } from "./support/privacy";
 
 const TEAM = "https://mcp-live.cloudflareaccess.com";
 const AUD = "mcp-aud";
@@ -85,6 +86,8 @@ beforeAll(async () => {
   const adapted = await adaptFixtures([...recruiting.records, ...deployment.records]);
   for (const events of adapted.byApp.values()) await deliver(producer, events);
   await project(APP);
+  await budgets(APP);
+  await approveAggregate(APP, "recruiting.assessment");
 });
 afterAll(() => vi.restoreAllMocks());
 
@@ -309,8 +312,8 @@ describe("private named entrypoint -> verified MCP assertion -> migrated D1 -> M
     const q = {
       workflowKey: "recruiting.assessment",
       version: 1,
-      from: Date.parse("2026-03-01"),
-      to: Date.parse("2026-04-01"),
+      from: Date.parse("2026-03-02"),
+      to: Date.parse("2026-03-09"),
       groupBy: null,
       filters: {},
     };
@@ -342,14 +345,16 @@ describe("private named entrypoint -> verified MCP assertion -> migrated D1 -> M
         await deliver(key, events);
     }
     await project(aggregateApp);
+    await budgets(aggregateApp);
+    await approveAggregate(aggregateApp, "recruiting.assessment");
     const client = await connect();
     try {
       const args = {
         app_id: aggregateApp,
         workflow_key: "recruiting.assessment",
         version: 1,
-        from: "2026-03-01",
-        to: "2026-04-01",
+        from: "2026-03-02",
+        to: "2026-03-09",
       };
       const result = await call(client, "get_stage_dwell", args);
       expect(result.error).toBeNull();
@@ -574,14 +579,16 @@ describe("private named entrypoint -> verified MCP assertion -> migrated D1 -> M
     }
     await deliver(key, events);
     await project(appId);
+    await budgets(appId);
+    await approveAggregate(appId, definition.processId);
     const client = await connect();
     try {
       const args = {
         app_id: appId,
         workflow_key: definition.processId,
         version: 1,
-        from: "2026-03-10",
-        to: "2026-03-11",
+        from: "2026-03-09",
+        to: "2026-03-16",
       };
       const defs = await call(client, "list_workflow_definitions", {
         app_id: appId,
@@ -638,5 +645,59 @@ describe("private named entrypoint -> verified MCP assertion -> migrated D1 -> M
     } finally {
       await client.close();
     }
+  });
+  it("charges dwell and bottleneck tool aliases together; rejects without cohort counts; revoked grants spend nothing", async () => {
+    const budgetApp = "app_mcp_budget";
+    const producer = await producerApp(budgetApp);
+    await grant("live-analyst", "analyst", budgetApp);
+    for (const events of (await adaptFixtures(recruiting.records)).byApp.values())
+      await deliver(producer, events);
+    await project(budgetApp);
+    await budgets(budgetApp, 1);
+    await approveAggregate(budgetApp, "recruiting.assessment");
+    const client = await connect();
+    const args = {
+      app_id: budgetApp,
+      workflow_key: "recruiting.assessment",
+      version: 1,
+      from: "2026-03-02",
+      to: "2026-03-09",
+    };
+    const n = async () =>
+      (
+        await env.DB.prepare("SELECT count(*) AS n FROM lifecycle_privacy_ledger").first<{
+          n: number;
+        }>()
+      )?.n;
+    try {
+      const before = await n();
+      expect((await call(client, "get_stage_dwell", args)).error).toBeNull();
+      expect(await n()).toBe((before ?? 0) + 1);
+      const denied = await call(client, "list_bottlenecks", args);
+      expect(denied.error.code).toBe("source_unavailable");
+      expect(JSON.stringify(denied.error)).not.toMatch(/cohort|sample|remaining|\bn\b|mean/);
+      expect(await n()).toBe((before ?? 0) + 1);
+    } finally {
+      await client.close();
+    }
+    const subject = "live-aggregate-revoked";
+    await grant(subject, "analyst", budgetApp);
+    const signed = await jwt(subject);
+    await env.DB.prepare("UPDATE authz_grants SET revoked_at = 1 WHERE principal_subject = ?")
+      .bind(subject)
+      .run();
+    const before = await n();
+    expect(
+      await env.TEST_LIFECYCLE_READ.read(signed, budgetApp, {
+        method: "getStageDwell",
+        workflowKey: args.workflow_key,
+        version: 1,
+        from: Date.parse(args.from),
+        to: Date.parse(args.to),
+        groupBy: null,
+        filters: {},
+      }),
+    ).toEqual({ ok: false, code: "forbidden" });
+    expect(await n()).toBe(before);
   });
 });

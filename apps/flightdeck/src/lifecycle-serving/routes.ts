@@ -2,7 +2,6 @@ import type { AccessPrincipal } from "../access";
 import { fail, json } from "../api/http";
 import { projectionDiagnostics } from "../lifecycle-projection/diagnostics";
 import {
-  aggregateWindow,
   BadQuery,
   decodeCursor,
   encodeCursor,
@@ -13,16 +12,7 @@ import {
   startedRange,
   versionParam,
 } from "./params";
-import {
-  type CaseFilters,
-  type CaseSummary,
-  type Cohort,
-  caseDetail,
-  listCases,
-  listProcesses,
-  outcomeSummary,
-  stageSummary,
-} from "./read";
+import { type CaseFilters, type CaseSummary, caseDetail, listCases, listProcesses } from "./read";
 import type { ProjectionState } from "./repository";
 
 /**
@@ -124,7 +114,9 @@ export async function lifecycleServingRoutes(
     if (endpoint === "cases") return await cases(ctx);
     if (endpoint === "diagnostics") return await diagnostics(ctx);
     if (match[3]) return await detail(ctx, match[3]);
-    return await summary(ctx, endpoint === "summaries/stages" ? "stages" : "outcomes");
+    // Legacy aggregate SQL has different interval semantics and no durable accounting.
+    // Deny after authorization: it cannot bypass the private guarded source.
+    return fail(503, "Lifecycle aggregate adapter unavailable");
   } catch (error) {
     if (error instanceof BadQuery) return fail(400, error.message);
     // Missing migration, D1 outage, etc. Never echo errors: they could carry query values.
@@ -290,44 +282,6 @@ async function detail(ctx: Ctx, caseId: string): Promise<Response> {
     sample_count: 1,
     suppressed: false,
     data: found,
-  });
-}
-
-/** Aggregates need one process version (versions are not comparable) and a bounded window. */
-async function summary(ctx: Ctx, kind: "stages" | "outcomes"): Promise<Response> {
-  const p = ctx.params;
-  onlyParams(p, ["process_key", "version", "status", "started_after", "started_before"]);
-  const processKey = slugParam(p, "process_key");
-  const version = versionParam(p);
-  if (processKey === null || version === null) {
-    throw new BadQuery("process_key and version are required");
-  }
-  const window = aggregateWindow(p, ctx.now);
-  const cohort: Cohort = {
-    processKey,
-    version,
-    status: statusParam(p),
-    startedAfter: window.after,
-    startedBefore: window.before,
-  };
-  const [fresh, result] = await Promise.all([
-    freshness(ctx),
-    kind === "stages"
-      ? stageSummary(ctx.db, ctx.appId, cohort, ctx.minCohort)
-      : outcomeSummary(ctx.db, ctx.appId, cohort, ctx.minCohort),
-  ]);
-  return respond(ctx, fresh, {
-    cohort: {
-      process_key: processKey,
-      version,
-      status: cohort.status,
-      started_after: iso(window.after),
-      started_before: iso(window.before),
-      min_cohort: ctx.minCohort,
-    },
-    sample_count: result.sample_count,
-    suppressed: result.suppressed,
-    data: result.groups,
   });
 }
 

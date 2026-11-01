@@ -8,6 +8,7 @@ import type { JWTVerifyGetKey } from "jose";
 import * as v from "valibot";
 import { verifyAccessPrincipal } from "../access";
 import { authorizeLifecycleRead } from "../api/authorization";
+import { audit, isAggregateRead, reserveAggregate } from "../lifecycle-privacy/guard";
 import { BadQuery } from "../lifecycle-serving/params";
 import { executeRead, readGrants } from "./read";
 
@@ -54,7 +55,7 @@ export async function privateLifecycleRead(
     }
     // App id and capability are untrusted request selectors, never proof of access.
     if (typeof appId !== "string") return { ok: false, code: "forbidden" };
-    const aggregate = ["getStageDwell", "getFunnel", "getVariantStats"].includes(q.method);
+    const aggregate = isAggregateRead(q);
     const scope = await authorizeLifecycleRead(
       env,
       principal,
@@ -63,9 +64,41 @@ export async function privateLifecycleRead(
     );
     if (scope instanceof Response)
       return { ok: false, code: scope.status === 403 ? "forbidden" : "source_unavailable" };
-    const value = await executeRead(env.DB, scope.appId, q);
+    const reservation = isAggregateRead(q)
+      ? await reserveAggregate(env, principal, scope.appId, q)
+      : undefined;
+    const recheck = () =>
+      authorizeLifecycleRead(
+        env,
+        principal,
+        scope.appId,
+        aggregate ? "process:read" : "lifecycle:read",
+      );
+    // Recheck after accounting and immediately before reading; a revoked scope is not a grant.
+    if ((await recheck()) instanceof Response) {
+      if (reservation) await audit(env.DB, reservation, "withheld");
+      return { ok: false, code: "forbidden" };
+    }
+    let value: Awaited<ReturnType<typeof executeRead>>;
+    try {
+      value = await executeRead(env.DB, scope.appId, q, reservation, async () => {
+        if ((await recheck()) instanceof Response) throw new Error("Read unavailable");
+      });
+      // Do not release data if access was revoked while executing the read.
+      if ((await recheck()) instanceof Response) {
+        if (reservation) await audit(env.DB, reservation, "withheld");
+        return { ok: false, code: "forbidden" };
+      }
+    } catch (error) {
+      if (reservation) await audit(env.DB, reservation, "withheld");
+      throw error;
+    }
     // No oversized or arbitrary response bodies cross the private boundary.
-    if (JSON.stringify(value).length > 60_000) return { ok: false, code: "source_unavailable" };
+    if (JSON.stringify(value).length > 60_000) {
+      if (reservation) await audit(env.DB, reservation, "withheld");
+      return { ok: false, code: "source_unavailable" };
+    }
+    if (reservation) await audit(env.DB, reservation, "released");
     return { ok: true, appId: scope.appId, value };
   } catch (error) {
     return {
