@@ -1,3 +1,5 @@
+import { isMcpResource } from "./oauth-preflight";
+
 /**
  * Production stays off in this build. Flip it only in a reviewed change once the Workstream H read
  * API is integrated, app grants come from the FLIG-18 policy, and the rollout checklist in
@@ -17,6 +19,8 @@ export type Config = {
   source: Exclude<SourceMode, "disabled">;
   /** null only for the local development bypass. */
   access: { teamDomain: string; audience: string } | null;
+  /** Exact externally reachable resource. Mandatory for a live source, never inferred from Host. */
+  resource: string | null;
   minCohort: number;
   allowedOrigins: Set<string>;
 };
@@ -31,6 +35,7 @@ export type ConfigEnv = {
   LIFECYCLE_MCP_ALLOWED_ORIGINS?: string;
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
+  LIFECYCLE_MCP_RESOURCE?: string;
 };
 
 const ENVIRONMENTS: readonly Environment[] = ["development", "staging", "production"];
@@ -51,6 +56,11 @@ export function readConfig(env: ConfigEnv): Config | Refusal {
     return { status: 503, error: "Lifecycle MCP is misconfigured" };
   }
   if (source === "disabled") return { status: 503, error: "Lifecycle MCP is disabled" };
+
+  const resource = env.LIFECYCLE_MCP_RESOURCE ?? "";
+  if ((source === "read-api" && !resource) || (resource && !isMcpResource(resource))) {
+    return { status: 503, error: "MCP resource not configured" };
+  }
 
   const teamDomain = env.ACCESS_TEAM_DOMAIN?.trim() ?? "";
   const audience = env.ACCESS_AUD?.trim() ?? "";
@@ -74,6 +84,7 @@ export function readConfig(env: ConfigEnv): Config | Refusal {
     environment,
     source: source as Config["source"],
     access,
+    resource: resource || null,
     minCohort: parseMinCohort(env.LIFECYCLE_MCP_MIN_COHORT),
     allowedOrigins,
   };
