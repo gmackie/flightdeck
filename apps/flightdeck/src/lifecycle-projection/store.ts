@@ -15,6 +15,8 @@ const DIAGNOSTICS = "lifecycle_projection_diagnostics";
 /** Outbox rows sent per Pipelines call, and the retry backoff ceiling. */
 export const FORWARD_BATCH = 100;
 const MAX_BACKOFF_MS = 60 * 60_000;
+/** Tombstone reason written when retention compacts a case's replay log (not an erasure). */
+export const RETIRED_REASON = "retention_expired";
 
 export const backoff = (attempts: number) =>
   Math.min(MAX_BACKOFF_MS, 1_000 * 2 ** Math.min(attempts, 20));
@@ -22,7 +24,7 @@ export const backoff = (attempts: number) =>
 const encoder = new TextEncoder();
 
 /** Canonical JSON: sorted keys, so equal payloads serialize identically. */
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object") {
     return `{${Object.keys(value)
@@ -44,7 +46,7 @@ export type AppendResult = {
   /** New log rows. Exact retries of stored events are not counted. */
   stored: number;
   duplicates: number;
-  /** Events for erased cases: accepted, never stored or forwarded, and counted. */
+  /** Events for erased or retention-retired cases: accepted, never stored or forwarded, counted. */
   suppressed: number;
 };
 
@@ -59,12 +61,13 @@ export async function appendLifecycle(
   const cases = [...new Set(rows.map((r) => r.case_id))];
   const { results: erased } = await db
     .prepare(
-      `SELECT case_id FROM ${TOMBSTONES} WHERE app_id = ?
+      `SELECT case_id, reason FROM ${TOMBSTONES} WHERE app_id = ?
        AND case_id IN (SELECT value FROM json_each(?))`,
     )
     .bind(appId, JSON.stringify(cases))
-    .all<{ case_id: string }>();
+    .all<{ case_id: string; reason: string }>();
   const gone = new Set(erased.map((e) => e.case_id));
+  const retired = new Set(erased.filter((e) => e.reason === RETIRED_REASON).map((e) => e.case_id));
   const keep = rows.filter((r) => !gone.has(r.case_id));
   const suppressed = rows.length - keep.length;
   const notErased = `NOT EXISTS (SELECT 1 FROM ${TOMBSTONES} WHERE app_id = ? AND case_id = ?)`;
@@ -103,8 +106,17 @@ export async function appendLifecycle(
         .bind(appId, caseId, now, appId, caseId),
     );
   }
-  if (suppressed)
-    statements.push(countAppDiagnostic(db, appId, "erased_case_event", suppressed, now));
+  const suppressedRetired = rows.filter((r) => retired.has(r.case_id)).length;
+  if (suppressed - suppressedRetired) {
+    statements.push(
+      countAppDiagnostic(db, appId, "erased_case_event", suppressed - suppressedRetired, now),
+    );
+  }
+  if (suppressedRetired) {
+    statements.push(
+      countAppDiagnostic(db, appId, "retention_expired_case_event", suppressedRetired, now),
+    );
+  }
   const results = await db.batch(statements);
   const stored = results.slice(0, keep.length).reduce((n, r) => n + (r.meta.changes ?? 0), 0);
   return { stored, duplicates: keep.length - stored, suppressed };
@@ -155,7 +167,19 @@ export async function eraseCase(
   reason: string,
   now: number,
 ): Promise<void> {
-  await db.batch([
+  await db.batch(eraseCaseStatements(db, appId, caseId, servedId, reason, now));
+}
+
+/** The statements of `eraseCase`, so a caller can run them atomically with its own bookkeeping. */
+export function eraseCaseStatements(
+  db: D1Database,
+  appId: string,
+  caseId: string,
+  servedId: string,
+  reason: string,
+  now: number,
+): D1PreparedStatement[] {
+  return [
     db
       .prepare(
         `INSERT INTO ${TOMBSTONES} (app_id, case_id, reason, erased_at) VALUES (?, ?, ?, ?)
@@ -174,7 +198,7 @@ export async function eraseCase(
     db
       .prepare("DELETE FROM lifecycle_case_snapshots WHERE app_id = ? AND case_id = ?")
       .bind(appId, servedId),
-  ]);
+  ];
 }
 
 export type ForwardResult = { sent: number; failed: number; pending: number; bound: boolean };
