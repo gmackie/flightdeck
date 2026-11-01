@@ -28,7 +28,7 @@
     "flags": {
       "type": "object",
       "propertyNames": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
-      "additionalProperties": { "type": "string", "pattern": "^[a-z0-9-]{1,32}$" }
+      "additionalProperties": { "type": "string", "pattern": "^[a-z0-9_-]{1,32}$" }
     },
     "services": {
       "type": "array",

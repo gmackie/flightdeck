@@ -20,7 +20,11 @@
     "LIFECYCLE_MCP_ENVIRONMENT": "staging",
     "LIFECYCLE_MCP_SOURCE": "read-api",
     "LIFECYCLE_MCP_DEV": "0",
-    "LIFECYCLE_MCP_MIN_COHORT": "5"
+    "LIFECYCLE_MCP_MIN_COHORT": "5",
+    "LIFECYCLE_PRIVACY_MODE": "enforce",
+    "LIFECYCLE_PRIVACY_RESTRICTED": "deny",
+    "LIFECYCLE_ERASURE_MODE": "dry_run",
+    "LIFECYCLE_RETENTION_MODE": "enforce"
   },
   "services": [
     {
