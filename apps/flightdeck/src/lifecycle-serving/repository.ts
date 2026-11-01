@@ -86,6 +86,9 @@ const EDGES = "lifecycle_case_edges";
 const STATE = "lifecycle_projection_state";
 const REPLAYS = "lifecycle_replay_requests";
 const TOMBSTONES = "lifecycle_snapshot_tombstones";
+const RETENTION = "lifecycle_retention_policy";
+const SOURCE_ERASED =
+  "EXISTS (SELECT 1 FROM lifecycle_case_tombstones WHERE app_id = ? AND case_id = ?)";
 
 /** Newer generation wins; within one generation, the higher (or equal) watermark wins. */
 const NOT_OLDER = (table: string) =>
@@ -96,7 +99,7 @@ const NOT_OLDER = (table: string) =>
  * than the deletion. Binds (app_id, case_id, source_watermark).
  */
 const NOT_TOMBSTONED = `NOT EXISTS (SELECT 1 FROM ${TOMBSTONES} t WHERE t.app_id = ?
-  AND t.case_id = ? AND (t.restored_at IS NULL OR ? <= t.source_watermark))`;
+  AND t.case_id = ? AND (t.reason = 'source_erased' OR t.restored_at IS NULL OR ? <= t.source_watermark))`;
 /** Children are rewritten only when the case row now holds exactly this write. */
 const CASE_HOLDS_WRITE = (
   cases: string,
@@ -154,7 +157,33 @@ export class LifecycleSnapshotRepository {
     const now = this.now();
     const gen = p.generation;
     const active = `EXISTS (SELECT 1 FROM ${STATE} WHERE app_id = ? AND building_generation = ?)`;
-    const [cases, definitions, , , , , , , commit] = await this.db.batch([
+    const results = await this.db.batch([
+      this.db
+        .prepare(
+          `DELETE FROM ${CASES}_staging WHERE app_id = ? AND generation = ? AND ${active}
+         AND EXISTS (SELECT 1 FROM ${TOMBSTONES} t WHERE t.app_id = ${CASES}_staging.app_id
+           AND t.case_id = ${CASES}_staging.case_id
+           AND (t.reason = 'source_erased' OR t.restored_at IS NULL OR ${CASES}_staging.source_watermark <= t.source_watermark))`,
+        )
+        .bind(appId, gen, appId, gen),
+      this.db
+        .prepare(
+          `UPDATE ${CASES}_staging SET deleted_at = coalesce(deleted_at, ?), deleted_reason = 'retention'
+         WHERE app_id = ? AND generation = ? AND ${active} AND status = 'closed'
+           AND ended_at < (SELECT closed_before FROM ${RETENTION} WHERE app_id = ?)`,
+        )
+        .bind(now, appId, gen, appId, gen, appId),
+      ...[INTERVALS, EDGES].map((table) =>
+        this.db
+          .prepare(
+            `DELETE FROM ${table}_staging WHERE app_id = ? AND generation = ? AND ${active}
+         AND NOT EXISTS (SELECT 1 FROM ${CASES}_staging c
+           WHERE c.app_id = ${table}_staging.app_id
+             AND c.case_id = ${table}_staging.${table === EDGES ? "from_case_id" : "case_id"}
+             AND c.generation = ? AND c.deleted_at IS NULL)`,
+          )
+          .bind(appId, gen, appId, gen, gen),
+      ),
       this.db
         .prepare(
           `UPDATE ${CASES} SET deleted_at = ?, deleted_reason = 'superseded'
@@ -214,6 +243,9 @@ export class LifecycleSnapshotRepository {
           .bind(appId, gen, appId, gen),
       ),
     ]);
+    const cases = results[4];
+    const definitions = results[5];
+    const commit = results[12];
     if (!commit?.meta.changes) {
       throw new SnapshotRejected("generation", "generation is not being rebuilt");
     }
@@ -245,7 +277,7 @@ export class LifecycleSnapshotRepository {
     const result = await this.db
       .prepare(
         `UPDATE ${STATE} SET source_watermark = ?, as_of = ?, updated_at = ?
-         WHERE app_id = ? AND active_generation > 0
+         WHERE app_id = ? AND active_generation > 0 AND building_generation IS NULL
            AND (source_watermark IS NULL OR source_watermark <= ?)`,
       )
       .bind(mark.source_watermark, mark.as_of, this.now(), appId, mark.source_watermark)
@@ -313,6 +345,7 @@ export class LifecycleSnapshotRepository {
     appId: string,
     snapshot: CaseSnapshotInput,
     provenance: Provenance,
+    sourceCaseId = snapshot.case_id,
   ): Promise<WriteResult> {
     const c = parseInput(CaseSnapshotInput, snapshot);
     const p = parseInput(Provenance, provenance);
@@ -340,9 +373,11 @@ export class LifecycleSnapshotRepository {
         .prepare(
           `INSERT INTO ${cases} (app_id, case_id, process_key, process_version, status, outcome,
              current_stage, parent_case_id, started_at, ended_at, last_event_at, generation,
-             source_watermark, reducer_version, as_of, updated_at)
-           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-           WHERE ${target.accepts} AND ${NOT_TOMBSTONED}
+             source_watermark, reducer_version, as_of, updated_at, deleted_at, deleted_reason)
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             CASE WHEN EXISTS (SELECT 1 FROM ${RETENTION} WHERE app_id = ? AND ? = 'closed' AND ? < closed_before) THEN ? ELSE NULL END,
+             CASE WHEN EXISTS (SELECT 1 FROM ${RETENTION} WHERE app_id = ? AND ? = 'closed' AND ? < closed_before) THEN 'retention' ELSE NULL END
+           WHERE ${target.accepts} AND ${NOT_TOMBSTONED} AND NOT ${SOURCE_ERASED}
            ON CONFLICT (app_id, case_id) DO UPDATE SET
              process_key = excluded.process_key, process_version = excluded.process_version,
              status = excluded.status, outcome = excluded.outcome,
@@ -351,7 +386,7 @@ export class LifecycleSnapshotRepository {
              last_event_at = excluded.last_event_at, generation = excluded.generation,
              source_watermark = excluded.source_watermark,
              reducer_version = excluded.reducer_version, as_of = excluded.as_of,
-             updated_at = excluded.updated_at, deleted_at = NULL, deleted_reason = NULL
+             updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, deleted_reason = excluded.deleted_reason
            WHERE ${NOT_OLDER(cases)}`,
         )
         .bind(
@@ -372,11 +407,20 @@ export class LifecycleSnapshotRepository {
           p.as_of,
           now,
           appId,
+          c.status,
+          c.ended_at ?? null,
+          now,
+          appId,
+          c.status,
+          c.ended_at ?? null,
+          appId,
           p.generation,
           p.generation,
           appId,
           c.case_id,
           p.source_watermark,
+          appId,
+          sourceCaseId,
         ),
       this.db
         .prepare(`DELETE FROM ${intervals} WHERE app_id = ? AND case_id = ? AND ${holdsWrite}`)
@@ -433,6 +477,7 @@ export class LifecycleSnapshotRepository {
     const [upsert] = await this.db.batch(statements);
     return this.outcome(appId, p.generation, upsert?.meta.changes ?? 0, {
       caseId: c.case_id,
+      sourceCaseId,
       sourceWatermark: p.source_watermark,
     });
   }
@@ -474,7 +519,7 @@ export class LifecycleSnapshotRepository {
           `INSERT INTO ${TOMBSTONES} (app_id, case_id, reason, source_watermark, as_of, deleted_at)
            VALUES (?, ?, ?, ?, ?, ?)
            ON CONFLICT (app_id, case_id) DO UPDATE SET
-             reason = excluded.reason,
+             reason = CASE WHEN reason = 'source_erased' THEN reason ELSE excluded.reason END,
              source_watermark = max(source_watermark, excluded.source_watermark),
              as_of = max(as_of, excluded.as_of), deleted_at = excluded.deleted_at,
              restored_at = NULL, restore_reason = NULL, restore_ref = NULL`,
@@ -518,6 +563,16 @@ export class LifecycleSnapshotRepository {
         p.source_watermark,
       )
       .run();
+    if (!result.meta.changes) {
+      const absent = await this.db
+        .prepare(
+          `SELECT 1 AS ok WHERE ${accepts}
+         AND NOT EXISTS (SELECT 1 FROM ${table} WHERE app_id = ? AND case_id = ?)`,
+        )
+        .bind(appId, p.generation, p.generation, appId, caseId)
+        .first();
+      if (absent) return "written";
+    }
     return this.outcome(appId, p.generation, result.meta.changes);
   }
 
@@ -553,7 +608,7 @@ export class LifecycleSnapshotRepository {
     const result = await this.db
       .prepare(
         `UPDATE ${TOMBSTONES} SET restored_at = ?, restore_reason = ?, restore_ref = ?
-         WHERE app_id = ? AND case_id = ? AND restored_at IS NULL`,
+         WHERE app_id = ? AND case_id = ? AND restored_at IS NULL AND reason != 'source_erased'`,
       )
       .bind(this.now(), approval.reason, approval.approval_ref, appId, caseId)
       .run();
@@ -562,14 +617,25 @@ export class LifecycleSnapshotRepository {
 
   /** Retention: soft-deletes closed cases that ended before the cutoff. Open cases are kept. */
   async applyRetention(appId: string, closedBefore: number): Promise<number> {
-    const result = await this.db
-      .prepare(
-        `UPDATE ${CASES} SET deleted_at = ?, deleted_reason = 'retention'
-         WHERE app_id = ? AND status = 'closed' AND ended_at < ? AND deleted_at IS NULL`,
-      )
-      .bind(this.now(), appId, closedBefore)
-      .run();
-    return result.meta.changes;
+    const [, result] = await this.db.batch([
+      this.db
+        .prepare(
+          `INSERT INTO ${RETENTION} (app_id, closed_before, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT (app_id) DO UPDATE SET closed_before = max(closed_before, excluded.closed_before),
+           updated_at = excluded.updated_at`,
+        )
+        .bind(appId, closedBefore, this.now()),
+      ...[CASES, `${CASES}_staging`].map((table) =>
+        this.db
+          .prepare(
+            `UPDATE ${table} SET deleted_at = ?, deleted_reason = 'retention'
+         WHERE app_id = ? AND status = 'closed' AND deleted_at IS NULL
+           AND ended_at < (SELECT closed_before FROM ${RETENTION} WHERE app_id = ?)`,
+          )
+          .bind(this.now(), appId, appId),
+      ),
+    ]);
+    return result?.meta.changes ?? 0;
   }
 
   /** Hard-deletes rows soft-deleted before the cutoff, with their intervals and relations. */
@@ -734,13 +800,19 @@ export class LifecycleSnapshotRepository {
     appId: string,
     generation: number,
     changes: number,
-    blocked?: { caseId: string; sourceWatermark: number },
+    blocked?: { caseId: string; sourceCaseId?: string; sourceWatermark: number },
   ): Promise<WriteResult> {
     if (changes > 0) return "written";
     if (blocked) {
       const refused = await this.db
-        .prepare(`SELECT NOT ${NOT_TOMBSTONED} AS hit`)
-        .bind(appId, blocked.caseId, blocked.sourceWatermark)
+        .prepare(`SELECT (NOT ${NOT_TOMBSTONED}) OR ${SOURCE_ERASED} AS hit`)
+        .bind(
+          appId,
+          blocked.caseId,
+          blocked.sourceWatermark,
+          appId,
+          blocked.sourceCaseId ?? blocked.caseId,
+        )
         .first<{ hit: number }>();
       if (refused?.hit) return "tombstoned";
     }

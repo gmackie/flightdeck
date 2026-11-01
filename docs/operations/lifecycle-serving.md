@@ -67,7 +67,12 @@ soft-deleted rows for good.
   `tombstoneCase`.
 - These serving tombstones key the opaque served id. The projector's evidence-level erasure
   (`eraseCase`, `lifecycle_case_tombstones`, migration 0030) keys the source case id and stops
-  evidence at ingest; see [lifecycle-projection.md](lifecycle-projection.md).
+  evidence at ingest. Erasure also writes a `source_erased` serving tombstone in the same
+  transaction; serving-only restore cannot lift it. Persistence checks the original source id
+  too; see [lifecycle-projection.md](lifecycle-projection.md).
+- `applyRetention` persists the maximum closed-case cutoff in `lifecycle_retention_policy`
+  (migration 0042). Writes and publication apply that cutoff, including after purge or rebuild.
+  Open cases remain eligible. A complete detail response is read in one D1 batch transaction.
 
 ## Read API (`routes.ts`)
 

@@ -326,7 +326,7 @@ describe("local hold and idempotence", () => {
         appId,
         served,
       ),
-    ).toEqual([{ reason: "erased", restored_at: null }]);
+    ).toEqual([{ reason: "source_erased", restored_at: null }]);
     const repo = new LifecycleSnapshotRepository(env.DB, () => clock);
     expect(
       await repo.restoreCase(
@@ -335,8 +335,8 @@ describe("local hold and idempotence", () => {
         { reason: "operator_error", approval_ref: "appr_1" },
         async () => true,
       ),
-    ).toBe(true);
-    // The evidence is gone and ingest still drops the case, so a restore has nothing to show.
+    ).toBe(false);
+    // A serving-only approval cannot lift the source erasure fence, even for an in-flight replay.
     await deliver(await producerApp(`${appId}_x`), []);
     await appendLifecycle(env.DB, appId, [], clock);
     await project(appId);

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
 import { caseDetail } from "../src/lifecycle-serving/read";
-import { openSnap, prov, repo, seed, snap } from "./lifecycle-fixtures";
+import { HOUR, openSnap, prov, repo, seed, snap, T0 } from "./lifecycle-fixtures";
 
 /** Minimal D1-compatible transaction harness over a real, private in-memory SQLite database. */
 function sqlite() {
@@ -10,6 +10,7 @@ function sqlite() {
   const migration = (name) =>
     sql.exec(readFileSync(new URL(`../migrations/${name}`, import.meta.url), "utf8"));
   migration("0020_lifecycle_serving.sql");
+  migration("0030_lifecycle_projection.sql");
   const prepare = (query, values = []) => ({
     bind: (...bound) => prepare(query, bound),
     async first() {
@@ -48,6 +49,7 @@ it("SQLite: staged publication rolls back all tables and state on failure", asyn
   try {
     migration("0031_lifecycle_snapshot_tombstones.sql");
     migration("0032_lifecycle_rebuild_staging.sql");
+    migration("0042_lifecycle_serving_retention.sql");
     const { repo: r } = repo(db);
     const app = "app_sqlite_atomic";
     await seed(r, app, [
@@ -88,6 +90,39 @@ it("SQLite: staged publication rolls back all tables and state on failure", asyn
     expect(await caseDetail(db, app, "target")).toBeNull();
     await expect(r.commitRebuild(app, prov(retry, 201))).rejects.toThrow();
     expect(await caseDetail(db, app, "keep")).toEqual(committed);
+  } finally {
+    sql.close();
+  }
+});
+
+it("SQLite: publication preserves retention after purge and rechecks tombstones", async () => {
+  const { db, sql, migration } = sqlite();
+  try {
+    migration("0031_lifecycle_snapshot_tombstones.sql");
+    migration("0032_lifecycle_rebuild_staging.sql");
+    migration("0042_lifecycle_serving_retention.sql");
+    const { repo: r, clock } = repo(db);
+    const app = "app_sqlite_retention";
+    await seed(r, app, [snap("expired"), openSnap("open_case")]);
+    const gen = await r.beginRebuild(app);
+    await r.upsertCase(app, snap("expired"), prov(gen, 200));
+    await r.upsertCase(app, openSnap("open_case"), prov(gen, 200));
+    expect(await r.applyRetention(app, T0 + 3 * HOUR)).toBe(1);
+    clock.now += HOUR;
+    await r.purgeDeleted(app, clock.now);
+    // Simulate a tombstone appearing after staging, without relying on proactive staging cleanup.
+    sql
+      .prepare(
+        "INSERT INTO lifecycle_snapshot_tombstones (app_id, case_id, reason, source_watermark, as_of, deleted_at) VALUES (?, ?, 'source_erased', 0, ?, ?)",
+      )
+      .run(app, "open_case", T0, T0);
+    await r.commitRebuild(app, prov(gen, 200));
+    expect(await caseDetail(db, app, "expired")).toBeNull();
+    expect(await caseDetail(db, app, "open_case")).toBeNull();
+    expect(
+      sql.prepare("SELECT count(*) AS n FROM lifecycle_stage_intervals WHERE app_id = ?").get(app)
+        .n,
+    ).toBe(0);
   } finally {
     sql.close();
   }

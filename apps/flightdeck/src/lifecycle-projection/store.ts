@@ -175,6 +175,20 @@ export function eraseCaseStatements(
          ON CONFLICT (app_id, case_id) DO NOTHING`,
       )
       .bind(appId, caseId, reason, now),
+    // The replay log uses producer ids while serving uses opaque ids. Record both fences
+    // before deleting the log, so even a replay already held in memory is refused by D1.
+    db
+      .prepare(
+        `INSERT INTO lifecycle_snapshot_tombstones
+         (app_id, case_id, reason, source_watermark, as_of, deleted_at)
+       SELECT ?, ?, 'source_erased', coalesce(max(seq), 0), ?, ? FROM ${LOG}
+         WHERE app_id = ? AND case_id = ?
+       ON CONFLICT (app_id, case_id) DO UPDATE SET reason = 'source_erased',
+         source_watermark = max(source_watermark, excluded.source_watermark),
+         as_of = max(as_of, excluded.as_of), deleted_at = excluded.deleted_at,
+         restored_at = NULL, restore_reason = NULL, restore_ref = NULL`,
+      )
+      .bind(appId, servedId, now, now, appId, caseId),
     ...["lifecycle_case_snapshots", "lifecycle_stage_intervals"].map((table) =>
       db
         .prepare(`DELETE FROM ${table}_staging WHERE app_id = ? AND case_id = ?`)
