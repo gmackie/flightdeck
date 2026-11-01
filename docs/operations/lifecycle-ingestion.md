@@ -174,6 +174,16 @@ Use the same Cloudflare account and D1 database as the rest of Flightdeck.
    deploys-lifecycle.key`), then delete the file. Rotate and revoke as described in
    [server-ingestion.md](server-ingestion.md).
 
+7. **Optionally, rate-limit each app** (FLIG-27). Add a rate-limit binding named
+   `LIFECYCLE_RATE_LIMIT` (the commented `ratelimits` block in `wrangler.jsonc`) with a
+   `namespace_id` you pick (a positive integer, unique among the account's rate limiters) and
+   a `simple` limit, for example 120 requests per 60 s. The limit counts lifecycle requests
+   (batches, RPC calls, registrations) per app, after authentication, so an unknown key cannot
+   use up an app's budget. Over the limit, HTTP answers 429 with `Retry-After: 10` and RPC
+   throws `lifecycle throttled`. Without the binding, lifecycle writes are unlimited apart
+   from the batch, event and body limits. The binding's counters are approximate and per
+   Cloudflare location, so treat the limit as abuse protection rather than an exact quota.
+
 ## Send events
 
 ### Service binding (Workers)
@@ -187,8 +197,8 @@ await lifecycle.trackLifecycle(event); // one event
 ```
 
 These do not fail open, unlike `track`. A thrown error means nothing was stored. Errors
-starting with `lifecycle rejected (<code>)` are permanent. `lifecycle forbidden` (no grant)
-and transport errors are retryable.
+starting with `lifecycle rejected (<code>)` are permanent. `lifecycle forbidden` (no grant),
+`lifecycle throttled` (rate limit) and transport errors are retryable.
 `isPermanentLifecycleError` tells them apart.
 
 ### HTTP (trusted servers)
@@ -207,6 +217,7 @@ Content-Type: application/json
 | 400 `{ "error", "issues": [{ "index", "code", "message" }] }` | Permanent rejection; at most 20 issues, values never echoed. | Fix or quarantine the listed events; resend the rest. |
 | 401 | Missing, unknown, expired or revoked key. | Stop; rotate the key. |
 | 403 | Key lacks `lifecycle.write`, or the app lacks the grant. | Stop; fix provisioning. Retry later without losing events. |
+| 429 + `Retry-After: 10` | The app is over its lifecycle rate limit (when configured). | Back off and retry the same batch. |
 | 413 / 415 | Body over 256 KiB, or not `application/json`. | Send smaller batches / fix the client. |
 | 503 + `Retry-After` | Evidence log (D1) unavailable (5 s). | Retry with backoff and the same event ids. |
 
@@ -300,4 +311,3 @@ complete onboarding.
 ## Not yet implemented
 
 - No query API, dedup view or correction-application view over `lifecycle_events` (FLIG-16).
-- No per-app rate limits or quotas beyond the batch, event and body limits.

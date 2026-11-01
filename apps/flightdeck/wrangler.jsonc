@@ -35,6 +35,12 @@
     // printed fd_lifecycle_events stream id:
     // { "binding": "LIFECYCLE_EVENTS", "stream": "<fd_lifecycle_events stream id>" }
   ],
+  // Opt-in per-app lifecycle rate limit (docs/operations/lifecycle-ingestion.md). namespace_id
+  // is a positive integer you choose, unique among rate limiters in the account:
+  // "ratelimits": [
+  //   { "name": "LIFECYCLE_RATE_LIMIT", "namespace_id": "<unique integer>",
+  //     "simple": { "limit": 120, "period": 60 } }
+  // ],
   // Cloudflare Access must protect every hostname that serves the dashboard and /api/*,
   // including the workers.dev one; otherwise disable workers_dev and use a custom domain.
   "vars": {

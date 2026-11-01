@@ -1,10 +1,20 @@
 import { getApp } from "../apps";
+import { limits, THROTTLE_RETRY_AFTER } from "../limits";
 import { registerDefinition } from "../processes";
 import { lifecycleDeps } from "./entrypoint";
 import { ingestLifecycle, LifecycleRejected, LifecycleUnavailable } from "./lifecycle";
 import { readJsonBody, reply, serverKey, unavailable } from "./server-auth";
 
 const MAX_BYTES = 256 * 1024;
+
+const throttled = () =>
+  Response.json(
+    { error: "Rate limit exceeded" },
+    {
+      status: 429,
+      headers: { "Cache-Control": "no-store", "Retry-After": String(THROTTLE_RETRY_AFTER) },
+    },
+  );
 /** A definition at its schema bounds (64 stages, 16 dimensions of 64 values) fits easily. */
 const MAX_DEFINITION_BYTES = 128 * 1024;
 
@@ -26,6 +36,7 @@ export async function lifecycleIngest(
     const app = await getApp(env.DB, key.appId);
     if (!app) return reply(401, "Unauthorized");
     if (!key.scopes.has("lifecycle.write") || !key.lifecycleGranted) return reply(403, "Forbidden");
+    if (!(await limits.lifecycle(env, app.id))) return throttled();
     const body = await readJsonBody(request, MAX_BYTES, "Invalid lifecycle batch");
     if (body instanceof Response) return body;
     const result = await ingestLifecycle(
@@ -58,6 +69,7 @@ export async function processRegistration(request: Request, env: Env): Promise<R
     const app = await getApp(env.DB, key.appId);
     if (!app) return reply(401, "Unauthorized");
     if (!key.scopes.has("lifecycle.write") || !key.lifecycleGranted) return reply(403, "Forbidden");
+    if (!(await limits.lifecycle(env, app.id))) return throttled();
     const body = await readJsonBody(request, MAX_DEFINITION_BYTES, "Invalid process definition");
     if (body instanceof Response) return body;
     const result = await registerDefinition(env.DB, app.id, body.value);

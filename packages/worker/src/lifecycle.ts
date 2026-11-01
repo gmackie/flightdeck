@@ -18,7 +18,8 @@ export function flightdeckLifecycle<E extends object>(
 /**
  * True when Flightdeck rejected the batch for good (invalid, unsupported version, personal-data
  * keys, duplicate ids): retrying the same events fails the same way, so quarantine them.
- * Anything else is retryable: `lifecycle forbidden`, `lifecycle unavailable`, network errors,
+ * Anything else is retryable: `lifecycle forbidden`, `lifecycle unavailable`,
+ * `lifecycle throttled`, network errors,
  * `future_occurred_at` (clock skew, which passes once Flightdeck's clock catches up) and
  * `unknown_process` (passes once the process version is registered).
  */
