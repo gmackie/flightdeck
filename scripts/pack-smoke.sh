@@ -76,6 +76,27 @@ init({ redactProps: ["email"], beforeSend: (event) => event });
 track("search.submitted", { results: 3 });
 identify("user_1");
 EOF
+cat >src/lifecycle.ts <<'EOF'
+import { executeInvestigation, type InvestigationRequest } from "@flightdeckhq/lifecycle-investigations";
+import { createFakeAdapter, type QueryRegistry } from "@flightdeckhq/lifecycle-queries";
+const registry: QueryRegistry = {
+  appId: "synthetic", definitionId: "pipeline", metricVersion: "lifecycle.v1",
+  availableFrom: "2026-01-01T00:00:00.000Z", maxWindowDays: 31, minSampleSize: 3,
+  versions: { v1: { comparisonKey: "same", stages: { work: "work" }, checkpoints: {}, variants: { main: "main" } } },
+  filterValues: { caseMix: ["standard"], cohortId: ["control"], definitionVersion: ["v1"], variantId: ["main"], outcome: ["open", "completed", "cancelled", "failed"] },
+};
+const request: InvestigationRequest = {
+  recipe: "process-health", appId: registry.appId, definitionId: registry.definitionId,
+  definitionVersions: ["v1"], metricVersion: "lifecycle.v1", asOf: "2026-02-01T00:00:00.000Z",
+  window: { from: "2026-01-01T00:00:00.000Z", to: "2026-01-15T00:00:00.000Z" },
+  cohort: { id: "control", caseMix: ["standard"] },
+};
+void executeInvestigation(request, {
+  catalog: { revision: "r1", registry, stages: [{ id: "work", lane: "main" }], allowedGroupBy: [] },
+  adapter: createFakeAdapter([], registry, request.asOf),
+  authorize: () => ({ allowed: true, appId: registry.appId, scopeKey: "smoke-scope-r1" }),
+});
+EOF
 cat >tsconfig.worker.json <<'EOF'
 {
   "compilerOptions": {
@@ -87,7 +108,7 @@ cat >tsconfig.worker.json <<'EOF'
     "strict": true,
     "noEmit": true
   },
-  "files": ["src/worker.ts"]
+  "files": ["src/worker.ts", "src/lifecycle.ts"]
 }
 EOF
 cat >tsconfig.browser.json <<'EOF'
@@ -120,7 +141,24 @@ for (const name of ["flightdeck", "handleFlightdeck", "withFlightdeck"])
 const browser = await import("@flightdeckhq/browser");
 for (const name of ["init", "track", "identify"])
   if (typeof browser[name] !== "function") throw new Error(`browser: ${name} missing`);
-console.log("libraries import in Node");
+const queries = await import("@flightdeckhq/lifecycle-queries");
+const investigations = await import("@flightdeckhq/lifecycle-investigations");
+const registry = queries.demoRegistry;
+const request = {
+  recipe: "process-health", appId: registry.appId, definitionId: registry.definitionId,
+  definitionVersions: queries.demoQuery.definitionVersions, metricVersion: registry.metricVersion,
+  asOf: queries.demoQuery.asOf, window: { from: queries.demoQuery.from, to: queries.demoQuery.to },
+  cohort: queries.demoQuery.cohort,
+};
+const result = await investigations.executeInvestigation(request, {
+  catalog: { revision: "smoke-r1", registry, stages: Object.values(registry.versions[request.definitionVersions[0]].stages).map(id => ({ id, lane: "main" })), allowedGroupBy: [] },
+  adapter: queries.createFakeAdapter(queries.syntheticFacts(), registry, queries.demoWatermark),
+  authorize: () => ({ allowed: true, appId: registry.appId, scopeKey: "smoke-scope-r1" }),
+});
+if (!result.pack.evidence.some(entry => entry.status === "ok")) throw new Error("investigations: no evidence");
+if (investigations.parseEvidencePack(investigations.serializeEvidencePack(result.pack)).digest !== result.pack.digest)
+  throw new Error("investigations: pack round-trip");
+console.log("libraries import in Node; installed investigation executes");
 '
 
 node node_modules/@flightdeckhq/create/dist/cli.js --help | grep -q "@flightdeckhq/create apps add"
