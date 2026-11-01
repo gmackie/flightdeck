@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "processId": "incident.remediation",
+  "version": 1,
+  "name": "Incident remediation",
+  "caseType": "remediation",
+  "sensitivity": "standard",
+  "stages": [
+    {
+      "stageId": "todo",
+      "name": "To do",
+      "kind": "wait",
+      "group": "todo",
+      "canonicalStageId": "todo"
+    },
+    {
+      "stageId": "in_progress",
+      "name": "In progress",
+      "kind": "work",
+      "group": "in_progress",
+      "canonicalStageId": "in_progress",
+      "ageLimitMs": 604800000
+    },
+    {
+      "stageId": "done",
+      "name": "Done",
+      "kind": "terminal",
+      "outcome": "success",
+      "group": "outcome",
+      "canonicalStageId": "done"
+    },
+    {
+      "stageId": "wont_do",
+      "name": "Won't do",
+      "kind": "terminal",
+      "outcome": "neutral",
+      "group": "outcome",
+      "canonicalStageId": "wont_do"
+    }
+  ],
+  "dimensions": [],
+  "relations": [
+    {
+      "type": "parent",
+      "objectType": "incident",
+      "processId": "incident.response"
+    }
+  ],
+  "maxDepth": 2,
+  "calendar": "wall"
+}

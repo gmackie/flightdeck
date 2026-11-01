@@ -1,11 +1,13 @@
-import { Button } from "@cloudflare/kumo/components/button";
+import { Button, LinkButton } from "@cloudflare/kumo/components/button";
 import { Surface } from "@cloudflare/kumo/components/surface";
 import { useState } from "react";
+import { pageHref } from "../router";
 import {
   demoWorkflowAdapter,
   diagnoseWorkflowSnapshot,
   type WorkflowDataAdapter,
 } from "../workflows/adapter";
+import { TimingDiagnostics } from "../workflows/diagnostics";
 import { StateBadge } from "../workflows/lifecycle-bar";
 import { LifecycleTree } from "../workflows/lifecycle-tree";
 import { filterHierarchy, flattenNodes, LIFECYCLE_STATES } from "../workflows/model";
@@ -23,7 +25,8 @@ const INITIAL_EXPANDED = [
   "incident-01",
 ];
 
-export function WorkflowsPage({
+/** The explicit `?view=demo` route: invented fixtures only, never mixed with live data. */
+export function DemoWorkflowsPage({
   adapter = demoWorkflowAdapter,
 }: {
   adapter?: WorkflowDataAdapter;
@@ -48,7 +51,14 @@ export function WorkflowsPage({
       <PageHeader
         title="Workflows"
         subtitle="Every lifecycle, in one line. Expand the work behind it."
-        actions={<span className="wf-demo-badge">DEMO · SYNTHETIC</span>}
+        actions={
+          <>
+            <span className="wf-demo-badge">DEMO · SYNTHETIC</span>
+            <LinkButton size="sm" variant="secondary" href={pageHref("workflows")}>
+              Back to live data
+            </LinkButton>
+          </>
+        }
       />
       <aside className="wf-demo-notice" aria-label="Demo data notice">
         <strong>Invented examples. No live system data.</strong>
@@ -61,24 +71,7 @@ export function WorkflowsPage({
           UTC
         </span>
       </aside>
-      {diagnostics.length ? (
-        <aside className="wf-demo-notice" aria-label="Workflow timing diagnostics">
-          <strong>
-            {diagnostics.length} invalid stage timing samples · durations unavailable and excluded
-            from percentiles
-          </strong>
-          <details>
-            <summary>Review timestamp problems</summary>
-            <ul>
-              {diagnostics.map((diagnostic) => (
-                <li key={`${diagnostic.portfolioId}:${diagnostic.nodeId}:${diagnostic.stageId}`}>
-                  {diagnostic.nodeLabel} · {diagnostic.stageLabel}: {diagnostic.message}
-                </li>
-              ))}
-            </ul>
-          </details>
-        </aside>
-      ) : null}
+      <TimingDiagnostics diagnostics={diagnostics} />
       <div className="wf-controls">
         <fieldset className="fd-segmented" aria-label="Workflow domain">
           {snapshot.portfolios.map((item) => (

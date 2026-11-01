@@ -1,0 +1,145 @@
+{
+  "asOf": "2026-10-12T00:00:00Z",
+  "foldSemantics": "RFC 04",
+  "ingest": {
+    "linesReceived": 20,
+    "distinctEventIds": 19,
+    "duplicates": 1,
+    "conflictingDuplicates": 0,
+    "retracted": [
+      "hire-0013"
+    ],
+    "effectiveTransitions": 17
+  },
+  "cases": [
+    {
+      "caseId": "appl_7d21c9",
+      "processId": "hiring.application",
+      "definitionVersion": 1,
+      "parent": {
+        "objectType": "requisition",
+        "caseId": "req_4b8e10",
+        "resolved": false
+      },
+      "status": "closed",
+      "outcome": "success",
+      "outcomeStageId": "hired",
+      "createdAt": "2026-09-05T09:00:00Z",
+      "firstClosedAt": "2026-09-29T00:00:00Z",
+      "closedAt": "2026-09-29T00:00:00Z",
+      "reopenCount": 0,
+      "elapsedMs": 2041200000,
+      "time": {
+        "workingMs": 1652400000,
+        "blockedMs": 302400000,
+        "pausedMs": 86400000,
+        "betweenMs": 0,
+        "closedGapMs": 0
+      },
+      "derived": {
+        "activeMs": 1954800000,
+        "flowEfficiency": 0.8453,
+        "blockedShare": 0.1547,
+        "timeToStage": {
+          "offer": 1436400000
+        }
+      },
+      "stageInstances": [
+        {
+          "stageInstanceId": "appl_7d21c9.applied.1",
+          "stageId": "applied",
+          "canonicalStageId": "applied",
+          "visit": 1,
+          "enteredAt": "2026-09-05T09:00:00Z",
+          "exitedAt": "2026-09-08T00:00:00Z",
+          "censored": false,
+          "wallMs": 226800000,
+          "workingMs": 226800000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "appl_7d21c9.screen.1",
+          "stageId": "screen",
+          "canonicalStageId": "screen",
+          "visit": 1,
+          "enteredAt": "2026-09-08T00:00:00Z",
+          "exitedAt": "2026-09-15T00:00:00Z",
+          "censored": false,
+          "wallMs": 604800000,
+          "workingMs": 604800000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "appl_7d21c9.onsite.1",
+          "stageId": "onsite",
+          "canonicalStageId": "interview",
+          "visit": 1,
+          "enteredAt": "2026-09-15T00:00:00Z",
+          "exitedAt": "2026-09-22T00:00:00Z",
+          "censored": false,
+          "wallMs": 604800000,
+          "workingMs": 216000000,
+          "blockedMs": 302400000,
+          "pausedMs": 86400000,
+          "blockedByReason": {
+            "interviewer_availability": 216000000,
+            "awaiting_feedback": 86400000
+          }
+        },
+        {
+          "stageInstanceId": "appl_7d21c9.offer.1",
+          "stageId": "offer",
+          "canonicalStageId": "offer",
+          "visit": 1,
+          "enteredAt": "2026-09-22T00:00:00Z",
+          "exitedAt": "2026-09-29T00:00:00Z",
+          "censored": false,
+          "wallMs": 604800000,
+          "workingMs": 604800000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "appl_7d21c9.hired.1",
+          "stageId": "hired",
+          "canonicalStageId": "hired",
+          "visit": 1,
+          "enteredAt": "2026-09-29T00:00:00Z",
+          "exitedAt": null,
+          "terminal": true
+        }
+      ],
+      "intervals": [
+        {
+          "kind": "block",
+          "stageInstanceId": "appl_7d21c9.onsite.1",
+          "reason": "interviewer_availability",
+          "startAt": "2026-09-15T00:00:00Z",
+          "endAt": "2026-09-18T00:00:00Z",
+          "rawMs": 259200000,
+          "attributedMs": 216000000
+        },
+        {
+          "kind": "block",
+          "stageInstanceId": "appl_7d21c9.onsite.1",
+          "reason": "awaiting_feedback",
+          "startAt": "2026-09-17T00:00:00Z",
+          "endAt": "2026-09-19T00:00:00Z",
+          "rawMs": 172800000,
+          "attributedMs": 86400000
+        },
+        {
+          "kind": "pause",
+          "stageInstanceId": "",
+          "reason": "requested_delay",
+          "startAt": "2026-09-18T12:00:00Z",
+          "endAt": "2026-09-19T12:00:00Z",
+          "rawMs": 86400000
+        }
+      ],
+      "diagnostics": []
+    }
+  ]
+}

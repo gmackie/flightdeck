@@ -1,17 +1,35 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import type { EventSource, IngestResult, IngestRpc, StoredEvent } from "@flightdeckhq/schema";
+import type {
+  EventSource,
+  IngestResult,
+  IngestRpc,
+  LifecycleIngestResult,
+  LifecycleRpc,
+  ProcessRegistration,
+  StoredEvent,
+} from "@flightdeckhq/schema";
 import { ulid } from "ulid";
 import { verifyAccessUser } from "../access";
 import { type AppRecord, getApp } from "../apps";
 import { appShard, sessionStub } from "../do/shards";
 import { DOGFOOD_APP_ID } from "../dogfood";
+import { LifecycleProjector } from "../lifecycle-projection/projector";
+import { appendLifecycle, forwardOutbox } from "../lifecycle-projection/store";
+import { getDefinitions, registerDefinition } from "../processes";
 import { sinks } from "../sinks";
+import {
+  ingestLifecycle,
+  type LifecycleDeps,
+  LifecycleForbidden,
+  LifecycleRejected,
+} from "./lifecycle";
+import { lifecycleGranted } from "./server-auth";
 import { type IngestDeps, IngestError, ingestBatch } from "./service";
 
 export type IngestProps = { appId?: string };
 
 /** Service binding target for app Workers: `env.FLIGHTDECK.ingest(...)`, `.track(...)`, `.identify(...)`. */
-export class Ingest extends WorkerEntrypoint<Env, IngestProps> implements IngestRpc {
+export class Ingest extends WorkerEntrypoint<Env, IngestProps> implements IngestRpc, LifecycleRpc {
   ingest(batch: unknown): Promise<IngestResult> {
     return this.run(batch, "browser");
   }
@@ -29,12 +47,64 @@ export class Ingest extends WorkerEntrypoint<Env, IngestProps> implements Ingest
     );
   }
 
+  /** One lifecycle event; see `ingestLifecycleBatch`. */
+  trackLifecycle(event: unknown): Promise<LifecycleIngestResult> {
+    return this.lifecycle({ events: [event] });
+  }
+
+  /**
+   * A lifecycle batch, accepted or rejected whole. Server-only: the bound app needs an
+   * operator-granted `lifecycle.write`, checked on every call. There is no browser path.
+   */
+  ingestLifecycleBatch(batch: unknown): Promise<LifecycleIngestResult> {
+    return this.lifecycle(batch);
+  }
+
   private async run(input: unknown, source: EventSource): Promise<IngestResult> {
     const appId = this.ctx.props?.appId;
     if (!appId) throw new IngestError("service binding is missing props.appId");
     const app = await getApp(this.env.DB, appId);
     if (!app) throw new IngestError(`unknown app ${appId}`);
     return ingestBatch(appId, input, source, deps(this.env, this.ctx, app));
+  }
+
+  /**
+   * Registers a `ProcessDefinitionV1` for the bound app; events must name a registered version.
+   * Idempotent for identical content; changing a registered version is rejected.
+   */
+  async registerProcess(definition: unknown): Promise<ProcessRegistration> {
+    const appId = await this.lifecycleApp();
+    const result = await registerDefinition(this.env.DB, appId, definition);
+    if (result.status === "invalid") {
+      throw new LifecycleRejected([
+        { index: null, code: "invalid_definition", message: result.message },
+      ]);
+    }
+    if (result.status === "conflict") {
+      const message = "this process version is registered with different content";
+      throw new LifecycleRejected([{ index: null, code: "definition_conflict", message }]);
+    }
+    return { created: result.status === "created" };
+  }
+
+  private async lifecycle(input: unknown): Promise<LifecycleIngestResult> {
+    const appId = await this.lifecycleApp();
+    return ingestLifecycle(
+      appId,
+      input,
+      "binding",
+      lifecycleDeps(this.env, appId, (work) => this.ctx.waitUntil(work)),
+    );
+  }
+
+  /** The bound app, once it is registered and granted `lifecycle.write`. */
+  private async lifecycleApp(): Promise<string> {
+    const appId = this.ctx.props?.appId;
+    if (!appId) throw new IngestError("service binding is missing props.appId");
+    const app = await getApp(this.env.DB, appId);
+    if (!app) throw new IngestError(`unknown app ${appId}`);
+    if (!(await lifecycleGranted(this.env.DB, appId))) throw new LifecycleForbidden();
+    return appId;
   }
 }
 
@@ -71,3 +141,24 @@ export function deps(env: Env, ctx: ExecutionContext, app: AppRecord): IngestDep
     defer: (work) => ctx.waitUntil(work),
   };
 }
+
+/**
+ * The commit point is the D1 evidence log (appendLifecycle). Basin forwarding is then attempted
+ * at once and retried from the outbox; projection runs after the response when `defer` is given,
+ * and on the scheduled drain otherwise.
+ */
+export const lifecycleDeps = (
+  env: Env,
+  appId: string,
+  defer?: (work: Promise<unknown>) => void,
+): LifecycleDeps => ({
+  now: Date.now,
+  send: async (rows) => {
+    const now = Date.now();
+    await appendLifecycle(env.DB, appId, rows, now);
+    const eventIds = rows.map((r) => r.event_id);
+    await forwardOutbox(env, now, { appId, eventIds }).catch(() => undefined);
+    defer?.(new LifecycleProjector(env.DB).drain(appId).catch(() => undefined));
+  },
+  definitions: (keys) => getDefinitions(env.DB, appId, keys),
+});

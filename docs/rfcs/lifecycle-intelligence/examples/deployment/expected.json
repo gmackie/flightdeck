@@ -1,0 +1,208 @@
+{
+  "asOf": "2026-10-12T00:00:00Z",
+  "foldSemantics": "RFC 04",
+  "ingest": {
+    "linesReceived": 26,
+    "distinctEventIds": 26,
+    "duplicates": 0,
+    "conflictingDuplicates": 0,
+    "retracted": [],
+    "effectiveTransitions": 26
+  },
+  "cases": [
+    {
+      "caseId": "dpl_3c91e0",
+      "processId": "delivery.deploy",
+      "definitionVersion": 1,
+      "parent": {
+        "objectType": "release",
+        "caseId": "rel_2026_10_08",
+        "resolved": false
+      },
+      "status": "closed",
+      "outcome": "success",
+      "outcomeStageId": "succeeded",
+      "createdAt": "2026-10-08T10:00:00Z",
+      "startedAt": "2026-10-08T10:05:00Z",
+      "firstClosedAt": "2026-10-08T14:20:00Z",
+      "closedAt": "2026-10-08T14:20:00Z",
+      "reopenCount": 0,
+      "elapsedMs": 15600000,
+      "time": {
+        "workingMs": 9300000,
+        "blockedMs": 2700000,
+        "pausedMs": 3600000,
+        "betweenMs": 0,
+        "closedGapMs": 0
+      },
+      "derived": {
+        "queueMs": 300000,
+        "activeMs": 12000000,
+        "flowEfficiency": 0.775,
+        "blockedShare": 0.225,
+        "attempts": {
+          "build": 2
+        },
+        "firstPassYield": {
+          "build": false,
+          "test": true
+        },
+        "retryMs": {
+          "build": 720000
+        }
+      },
+      "stageInstances": [
+        {
+          "stageInstanceId": "dpl_3c91e0.queued.1",
+          "stageId": "queued",
+          "canonicalStageId": "queued",
+          "visit": 1,
+          "enteredAt": "2026-10-08T10:00:00Z",
+          "exitedAt": "2026-10-08T10:05:00Z",
+          "censored": false,
+          "wallMs": 300000,
+          "workingMs": 300000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "dpl_3c91e0.build.1",
+          "stageId": "build",
+          "canonicalStageId": "build",
+          "visit": 1,
+          "enteredAt": "2026-10-08T10:05:00Z",
+          "exitedAt": "2026-10-08T10:15:00Z",
+          "censored": false,
+          "wallMs": 600000,
+          "workingMs": 600000,
+          "blockedMs": 0,
+          "pausedMs": 0,
+          "exitReason": "failed"
+        },
+        {
+          "stageInstanceId": "dpl_3c91e0.build.2",
+          "stageId": "build",
+          "canonicalStageId": "build",
+          "visit": 2,
+          "enteredAt": "2026-10-08T10:15:00Z",
+          "exitedAt": "2026-10-08T10:27:00Z",
+          "censored": false,
+          "wallMs": 720000,
+          "workingMs": 720000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "dpl_3c91e0.test.1",
+          "stageId": "test",
+          "canonicalStageId": "test",
+          "visit": 1,
+          "enteredAt": "2026-10-08T10:27:00Z",
+          "exitedAt": "2026-10-08T10:45:00Z",
+          "censored": false,
+          "wallMs": 1080000,
+          "workingMs": 1080000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "dpl_3c91e0.approval.1",
+          "stageId": "approval",
+          "canonicalStageId": "approval",
+          "visit": 1,
+          "enteredAt": "2026-10-08T10:45:00Z",
+          "exitedAt": "2026-10-08T13:00:00Z",
+          "censored": false,
+          "wallMs": 8100000,
+          "workingMs": 1800000,
+          "blockedMs": 2700000,
+          "pausedMs": 3600000,
+          "blockedByReason": {
+            "awaiting_approver": 2700000
+          }
+        },
+        {
+          "stageInstanceId": "dpl_3c91e0.rollout_staging.1",
+          "stageId": "rollout_staging",
+          "canonicalStageId": "rollout_staging",
+          "visit": 1,
+          "enteredAt": "2026-10-08T13:00:00Z",
+          "exitedAt": "2026-10-08T13:10:00Z",
+          "censored": false,
+          "wallMs": 600000,
+          "workingMs": 600000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "dpl_3c91e0.verify_staging.1",
+          "stageId": "verify_staging",
+          "canonicalStageId": "verify_staging",
+          "visit": 1,
+          "enteredAt": "2026-10-08T13:10:00Z",
+          "exitedAt": "2026-10-08T13:30:00Z",
+          "censored": false,
+          "wallMs": 1200000,
+          "workingMs": 1200000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "dpl_3c91e0.rollout_production.1",
+          "stageId": "rollout_production",
+          "canonicalStageId": "rollout_production",
+          "visit": 1,
+          "enteredAt": "2026-10-08T13:30:00Z",
+          "exitedAt": "2026-10-08T13:50:00Z",
+          "censored": false,
+          "wallMs": 1200000,
+          "workingMs": 1200000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "dpl_3c91e0.verify_production.1",
+          "stageId": "verify_production",
+          "canonicalStageId": "verify_production",
+          "visit": 1,
+          "enteredAt": "2026-10-08T13:50:00Z",
+          "exitedAt": "2026-10-08T14:20:00Z",
+          "censored": false,
+          "wallMs": 1800000,
+          "workingMs": 1800000,
+          "blockedMs": 0,
+          "pausedMs": 0
+        },
+        {
+          "stageInstanceId": "dpl_3c91e0.succeeded.1",
+          "stageId": "succeeded",
+          "canonicalStageId": "succeeded",
+          "visit": 1,
+          "enteredAt": "2026-10-08T14:20:00Z",
+          "exitedAt": null,
+          "terminal": true
+        }
+      ],
+      "intervals": [
+        {
+          "kind": "block",
+          "stageInstanceId": "dpl_3c91e0.approval.1",
+          "reason": "awaiting_approver",
+          "startAt": "2026-10-08T10:45:00Z",
+          "endAt": "2026-10-08T12:30:00Z",
+          "rawMs": 6300000,
+          "attributedMs": 2700000
+        },
+        {
+          "kind": "pause",
+          "stageInstanceId": "",
+          "reason": "change_freeze",
+          "startAt": "2026-10-08T11:00:00Z",
+          "endAt": "2026-10-08T12:00:00Z",
+          "rawMs": 3600000
+        }
+      ],
+      "diagnostics": []
+    }
+  ]
+}

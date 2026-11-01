@@ -2,8 +2,9 @@ import type { JWTVerifyGetKey } from "jose";
 import * as v from "valibot";
 import { forgetApp } from "../apps";
 import { trackDogfood } from "../dogfood";
+import { lifecycleServingRoutes } from "../lifecycle-serving/routes";
 import { authenticate } from "./auth";
-import { authorizeApp, legacyReadMode } from "./authorization";
+import { authorizeApp, authorizeLifecycleRead, legacyReadMode } from "./authorization";
 import { fail, json, readJson } from "./http";
 import { lifecycleRead } from "./lifecycle";
 import { liveSocket, liveView, parseHours } from "./live";
@@ -38,6 +39,13 @@ export async function apiRoutes(
   const { pathname } = url;
   const { method } = request;
 
+  // The served lifecycle read model, behind a per-request grant check for exactly this app and
+  // capability. Same 403 for unknown and ungranted apps, so it never enumerates apps.
+  const served = await lifecycleServingRoutes(request, env, principal, {
+    authorize: ({ principal, appId, capability }) =>
+      authorizeLifecycleRead(env, principal, appId, capability),
+  });
+  if (served) return served;
   const lifecycle = pathname.match(LIFECYCLE_ROUTE);
   if (lifecycle?.[1]) {
     return lifecycleRead(request, env, principal, lifecycle[1], lifecycle[2] ?? "");

@@ -1,0 +1,46 @@
+{
+  "name": "@flightdeckhq/lifecycle-insights",
+  "version": "0.1.1",
+  "description": "Deterministic aggregate-only lifecycle alerts and descriptive variant comparisons.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gmackie/flightdeck.git",
+    "directory": "packages/lifecycle-insights"
+  },
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fixtures": "./src/fixtures.ts"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./fixtures": {
+        "types": "./dist/fixtures.d.ts",
+        "import": "./dist/fixtures.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepack": "pnpm run build",
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  }
+}

@@ -57,6 +57,8 @@ export interface LifecycleNode {
   stages: readonly LifecycleStage[];
   children?: readonly LifecycleNode[];
   relationship?: string;
+  /** Raw outcome recorded by the source system, when it has one. */
+  outcome?: string;
 }
 
 export interface WorkflowPortfolio {
@@ -166,7 +168,7 @@ export function filterHierarchy(
   if (!term) return roots;
   return roots.flatMap((node) => {
     if (
-      `${node.label} ${node.kind} ${node.owner} ${STATE_LABELS[node.state]}`
+      `${node.label} ${node.kind} ${node.owner} ${STATE_LABELS[node.state]} ${node.outcome ?? ""}`
         .toLowerCase()
         .includes(term)
     )

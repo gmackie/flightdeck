@@ -1,13 +1,16 @@
 # Releasing the SDKs and CLI to npm (FLIG-14)
 
-Four packages are published to the public npm registry, all at the same version:
+Five packages are configured for public npm publication, all at the same version:
 
 | Package | Contents |
 |---|---|
 | `@flightdeckhq/schema` | Event schema, limits, route normalization; ESM + `.d.ts` |
 | `@flightdeckhq/worker` | `withFlightdeck`, `handleFlightdeck`, `flightdeck(env)`; ESM + `.d.ts` |
 | `@flightdeckhq/browser` | `init`, `track`, `identify`; ESM + `.d.ts`, under 3 KB gzip |
+| `@flightdeckhq/lifecycle-insights` | Aggregate-only deterministic alerts/comparisons; ESM + `.d.ts`, optional synthetic fixtures |
 | `@flightdeckhq/create` | The CLI, one bundled `dist/cli.js` with a shebang (Node 24+) |
+
+`lifecycle-insights` is newly added for a future release; this draft does not publish it.
 
 Everything else in the workspace is `private` and never published. The code is
 licensed MIT (`LICENSE` at the root, copied into each package).
@@ -34,11 +37,11 @@ outside that list or a leftover `workspace:` range, installs the tarballs with
 npm into a scratch project outside the workspace, typechecks a Worker using
 `withFlightdeck` and `flightdeck(env).track` and a browser file calling `init`
 (with TypeScript 5 and the repo's TypeScript), imports each library in Node, and
-runs `@flightdeckhq/create --help` from the installed bin. CI runs it on every PR.
+runs `@flightdeckhq/create --help` from the installed bin, and evaluates synthetic lifecycle alerts/comparisons through the packed insights API and fixture subpath. CI runs it on every PR.
 
 ## Cutting a release
 
-1. On a branch, set the version in all four packages and open a PR:
+1. On a branch, set the version in all publishable packages and open a PR:
 
    ```bash
    pnpm release:version set 0.2.0
@@ -75,9 +78,9 @@ The workflow authenticates with a granular npm access token in the `NPM_TOKEN`
 GitHub Actions secret (repository secret, or on the `npm` environment the job
 runs in). Create it on npmjs.com as a granular token with an expiry, "bypass
 two-factor authentication" enabled (CI cannot answer a 2FA prompt), and read and
-write access to all packages, since the four packages do not exist yet. After
+write access to all packages, including any new package names. After
 the first publish, narrow it to the `flightdeckhq` organization and the
-`@flightdeckhq/create` package, or switch to trusted publishing (below). The
+packages being released, or switch to trusted publishing (below). The
 job writes `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` to `~/.npmrc`;
 pnpm expands the variable when it reads the file, so the token is never written
 to disk or logged. The `id-token: write` permission lets npm sign provenance.
@@ -91,7 +94,7 @@ token expires or is revoked, create a new one as above and replace the secret.
 Once the packages exist on npm, replace the long-lived token with npm trusted
 publishing, which mints a short-lived credential from the workflow's OIDC token:
 
-1. On npmjs.com, for each of the four packages: Settings -> Trusted publishing
+1. On npmjs.com, for each publishable package: Settings -> Trusted publishing
    -> GitHub Actions, repository `gmackie/flightdeck`, workflow `release.yml`,
    environment `npm`.
 2. In `release.yml`, delete the `NODE_AUTH_TOKEN` env, the empty-token check and
