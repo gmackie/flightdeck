@@ -57,6 +57,14 @@ export class LifecycleUnavailable extends Error {
   }
 }
 
+/** The app is over its lifecycle rate limit. Retryable after a short wait. */
+export class LifecycleThrottled extends Error {
+  constructor() {
+    super("lifecycle throttled: rate limit exceeded");
+    this.name = "LifecycleThrottled";
+  }
+}
+
 /** The app or credential lacks `lifecycle.write`. Operator-fixable, so also not permanent. */
 export class LifecycleForbidden extends Error {
   constructor() {
