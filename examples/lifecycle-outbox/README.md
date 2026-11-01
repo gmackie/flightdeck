@@ -13,3 +13,8 @@ curl "localhost:8787/__scheduled?cron=*+*+*+*+*"   # drain now
 
 Flightdeck must be running with the `LIFECYCLE_EVENTS` binding and must have granted
 `app_deploys` `lifecycle.write`; until then the drain keeps rows pending and retries.
+
+`pnpm test` at the repo root runs [`test/outbox.test.ts`](test/outbox.test.ts) against a local D1
+and a stand-in `FLIGHTDECK` binding that applies the real `@flightdeckhq/schema` contract and
+the registered process definition: transactional enqueue, ordering, retries, quarantine,
+clock skew, batch size and concurrent transitions.
