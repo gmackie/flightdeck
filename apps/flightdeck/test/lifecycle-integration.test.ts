@@ -147,9 +147,8 @@ describe("served lifecycle routes under read grants", () => {
     const path = `/api/apps/${APP}/lifecycle/summaries/outcomes?process_key=recruiting.candidate&version=1&started_after=2026-01-01&started_before=2026-12-31`;
     expect((await read(path, await token(READER))).status).toBe(403);
     const analyst = await read(path, await token(ANALYST));
-    expect(analyst.status).toBe(200);
-    // Three candidates: every group is below the minimum cohort, so nothing is released.
-    expect(analyst.body).toMatchObject({ suppressed: true, data: [] });
+    expect(analyst.status).toBe(503);
+    expect(analyst.body).toEqual({ error: "Lifecycle aggregate adapter unavailable" });
   });
 
   it("caps service tokens at app-scoped reader and needs an Access assertion at all", async () => {
