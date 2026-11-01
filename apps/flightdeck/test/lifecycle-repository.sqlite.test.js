@@ -46,7 +46,8 @@ function sqlite() {
 it("SQLite: staged publication rolls back all tables and state on failure", async () => {
   const { db, sql, migration } = sqlite();
   try {
-    migration("0031_lifecycle_rebuild_staging.sql");
+    migration("0031_lifecycle_snapshot_tombstones.sql");
+    migration("0032_lifecycle_rebuild_staging.sql");
     const { repo: r } = repo(db);
     const app = "app_sqlite_atomic";
     await seed(r, app, [

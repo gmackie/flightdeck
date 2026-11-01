@@ -296,6 +296,10 @@ describe("delivery invariants", () => {
     expect(rows.results).toHaveLength(1);
     await grant(READER, "reader", appId);
     const diagnostics = await read(`/api/apps/${appId}/lifecycle/diagnostics`, await token(READER));
+    expect(diagnostics.body).toMatchObject({
+      sample_count: 0,
+      suppression: { policy: "not_applicable", withheld: false, sample_count_of: "none" },
+    });
     expect(diagnostics.body.data.diagnostics).toContainEqual({
       code: "duplicate_conflict",
       count: 1,

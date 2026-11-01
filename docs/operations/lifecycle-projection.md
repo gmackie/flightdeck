@@ -27,7 +27,7 @@ evidence log → replay engine (FLIG-16) → serving tables (FLIG-21) → read A
    writes it with provenance `(generation, source_watermark, as_of, reducer_version)`. Late,
    reordered and corrected events need no special path: the whole case is replayed.
 4. An app that was never projected is **rebuilt**: a new generation is written from the log and
-   activated at once. Migration `0031` adds separate staging tables for cases, definitions,
+   activated at once. Migration `0032` adds separate staging tables for cases, definitions,
    intervals and edges. Readers keep the committed tables while a rebuild runs or fails;
    one D1 batch transaction publishes all four tables and their generation metadata.
    `LifecycleProjector.rebuild(appId)` repeats that on demand (for example after bumping
