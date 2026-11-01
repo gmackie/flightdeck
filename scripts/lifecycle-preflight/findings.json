@@ -40,6 +40,74 @@
       "foundOn": "53a93826d16860f659fe088e0680a606cda41235",
       "status": "open",
       "owner": "lifecycle hotfix (separate draft PR, in progress)"
+    },
+    {
+      "id": "R57-P1-FUTURE-CHECKPOINTS",
+      "severity": "P1",
+      "title": "Erasure proof accepts future-dated checkpoints",
+      "source": "Independent review of PR #57 (FLIG-35)",
+      "foundOn": "351d696e1d66ced9470698a67f1d636cceefddaf",
+      "status": "open",
+      "owner": "PR #57 author (updating PR #57; independent re-review of the exact new head required)",
+      "gates": ["d1-retention", "erasure-certificate"]
+    },
+    {
+      "id": "R57-P1-INFLIGHT-FORWARDING",
+      "severity": "P1",
+      "title": "In-flight forwarding of an erased case can outlive the erasure proof",
+      "source": "Independent review of PR #57 (FLIG-35)",
+      "foundOn": "351d696e1d66ced9470698a67f1d636cceefddaf",
+      "status": "open",
+      "owner": "PR #57 author (updating PR #57; independent re-review of the exact new head required)",
+      "gates": ["d1-retention", "erasure-certificate"]
+    },
+    {
+      "id": "R57-P1-MOR-BYTES",
+      "severity": "P1",
+      "title": "Erasure proof does not cover MOR (merge-on-read) bytes",
+      "source": "Independent review of PR #57 (FLIG-35)",
+      "foundOn": "351d696e1d66ced9470698a67f1d636cceefddaf",
+      "status": "open",
+      "owner": "PR #57 author (updating PR #57; independent re-review of the exact new head required)",
+      "gates": ["d1-retention", "erasure-certificate"]
+    },
+    {
+      "id": "R56-P1-OVERLAP-ACK-LOST",
+      "severity": "P1",
+      "title": "Overlapping drain and rebuild lose an ACK",
+      "source": "Independent re-review of PR #56 (FLIG-39) head 99e30df",
+      "foundOn": "99e30df5136ebb7ad1e9aba3f35f6c1c79a59bfb",
+      "status": "open",
+      "owner": "PR #56 author (revising PR #56; independent re-review of the exact new head required)"
+    },
+    {
+      "id": "R56-P1-SOURCE-ERASURE-RESURRECTION",
+      "severity": "P1",
+      "title": "Source erasure can be resurrected by projection",
+      "source": "Independent re-review of PR #56 (FLIG-39) head 99e30df",
+      "foundOn": "99e30df5136ebb7ad1e9aba3f35f6c1c79a59bfb",
+      "status": "open",
+      "owner": "PR #56 author (revising PR #56; independent re-review of the exact new head required)",
+      "gates": ["d1-retention", "erasure-certificate"]
+    },
+    {
+      "id": "R56-P2-STAGING-REINTRODUCES-RETAINED-ROWS",
+      "severity": "P2",
+      "title": "Rebuild staging reintroduces retained rows",
+      "source": "Independent re-review of PR #56 (FLIG-39) head 99e30df",
+      "foundOn": "99e30df5136ebb7ad1e9aba3f35f6c1c79a59bfb",
+      "status": "open",
+      "owner": "PR #56 author (revising PR #56; independent re-review of the exact new head required)",
+      "gates": ["d1-retention"]
+    },
+    {
+      "id": "R56-P2-CASEDETAIL-CROSS-GENERATION",
+      "severity": "P2",
+      "title": "caseDetail can return a cross-generation response",
+      "source": "Independent re-review of PR #56 (FLIG-39) head 99e30df",
+      "foundOn": "99e30df5136ebb7ad1e9aba3f35f6c1c79a59bfb",
+      "status": "open",
+      "owner": "PR #56 author (revising PR #56; independent re-review of the exact new head required)"
     }
   ]
 }

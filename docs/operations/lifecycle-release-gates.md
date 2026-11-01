@@ -41,8 +41,8 @@ a usage or config error, such as a secret in the config or an unknown flag.
 
 - `source-completeness`: `PRODUCTION_ENABLED = false` in `apps/lifecycle-mcp/src/config.ts`.
 - `oauth-metadata`: the MCP Worker doesn't serve `/.well-known/oauth-protected-resource`.
-- `d1-retention`: `0041_lifecycle_erasure_retention` (FLIG-35) isn't integrated.
-- `query-budgets`: `0040_lifecycle_privacy_budget` (#54, FLIG-36) isn't integrated.
+- `d1-retention` and `erasure-certificate`: open P1 findings from the independent review of PR #57 (future-dated checkpoints, in-flight forwarding, MOR bytes). `0041_lifecycle_erasure_retention` is in the tree only in the hardening rehearsal; see [lifecycle-hardening-rehearsal.md](lifecycle-hardening-rehearsal.md).
+- `query-budgets`: `0040_lifecycle_privacy_budget` (#54, FLIG-36) is present in the rehearsal tree, but its applied state is never observed locally.
 - Every live gate is `unknown` until an operator attests to it.
 
 `flags-default-off` *requires* `PRODUCTION_ENABLED = false`, while `source-completeness` blocks
