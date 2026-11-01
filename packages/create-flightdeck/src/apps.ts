@@ -54,11 +54,12 @@ export async function addApp(
 export async function addKey(
   request: Request,
   deps: Deps,
-  opts: { appId: string; days: number; out?: string; json: boolean },
+  opts: { appId: string; days: number; out?: string; json: boolean; scopes?: string[] },
 ): Promise<void> {
   if (!Number.isInteger(opts.days) || opts.days < 1 || opts.days > MAX_KEY_DAYS) {
     throw new CliError(`--days must be a whole number from 1 to ${MAX_KEY_DAYS}.`);
   }
+  const scopes = opts.scopes?.length ? checkScopes(opts.scopes) : undefined;
   // Claim the output file first: a key the server accepted but nobody holds is a live credential.
   let file: SecretFile | undefined;
   if (opts.out) {
@@ -76,6 +77,7 @@ export async function addKey(
     await request("POST", `/api/apps/${encodeURIComponent(opts.appId)}/server-keys`, {
       token_hash,
       expires_at,
+      ...(scopes ? { scopes } : {}),
     });
   } catch (error) {
     await file?.discard();
@@ -98,14 +100,15 @@ export async function addKey(
   }
   if (opts.json) {
     const out = opts.out ? { file: opts.out } : { key };
+    const extra = { ...(scopes ? { scopes } : {}), ...out };
     deps.stdout(
-      `${JSON.stringify({ app_id: opts.appId, token_hash, expires_at, ...out }, null, 2)}\n`,
+      `${JSON.stringify({ app_id: opts.appId, token_hash, expires_at, ...extra }, null, 2)}\n`,
     );
   } else if (!opts.out) {
     deps.stdout(`${key}\n`);
   }
   const notes = [
-    `Key for ${opts.appId}, digest ${token_hash}, expires ${expires}.`,
+    `Key for ${opts.appId}, digest ${token_hash}, expires ${expires}${scopes ? `, scopes ${scopes.join(" ")}` : ""}.`,
     "Store it as a secret now (e.g. wrangler secret put); it is not shown again and cannot be recovered.",
     `Revoke it with: ${revoke}`,
   ];
@@ -121,6 +124,40 @@ export async function revokeKey(
   if (!/^[0-9a-f]{64}$/.test(opts.hash)) throw new CliError("Expected a SHA-256 hex digest.");
   await request("DELETE", `/api/apps/${encodeURIComponent(opts.appId)}/server-keys/${opts.hash}`);
   deps.stderr(`Revoked ${opts.hash} for ${opts.appId}.\n`);
+}
+
+export const SCOPES = ["events.write", "lifecycle.write"];
+
+function checkScopes(scopes: string[]): string[] {
+  const bad = scopes.find((s) => !SCOPES.includes(s));
+  if (bad) throw new CliError(`Unknown scope ${bad}; expected ${SCOPES.join(" or ")}.`);
+  return [...new Set(scopes)];
+}
+
+/** Grants or revokes an app's lifecycle.write (needs a principal in LIFECYCLE_ADMINS). */
+export async function setLifecycle(
+  request: Request,
+  deps: Deps,
+  opts: { appId: string; grant: boolean },
+): Promise<void> {
+  const path = `/api/apps/${encodeURIComponent(opts.appId)}/capabilities/lifecycle.write`;
+  const { status } = await request(opts.grant ? "PUT" : "DELETE", path);
+  const what = opts.grant ? (status === 201 ? "Granted" : "Already granted") : "Revoked";
+  deps.stderr(`${what} lifecycle.write for ${opts.appId}.\n`);
+}
+
+/** Replaces a key's scopes by digest (needs a principal in LIFECYCLE_ADMINS). */
+export async function setKeyScopes(
+  request: Request,
+  deps: Deps,
+  opts: { appId: string; hash: string; scopes: string[] },
+): Promise<void> {
+  if (!/^[0-9a-f]{64}$/.test(opts.hash)) throw new CliError("Expected a SHA-256 hex digest.");
+  if (!opts.scopes.length) throw new CliError("Pass at least one --scope.");
+  const scopes = checkScopes(opts.scopes);
+  const app = encodeURIComponent(opts.appId);
+  await request("PUT", `/api/apps/${app}/server-keys/${opts.hash}/scopes`, { scopes });
+  deps.stderr(`Set scopes of ${opts.hash} for ${opts.appId}: ${scopes.join(" ")}.\n`);
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
