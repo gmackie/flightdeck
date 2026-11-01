@@ -30,7 +30,7 @@
     { "binding": "EVENTS", "stream": "ff8610cd69224104bafad28a00accabd" },
     { "binding": "SESSIONS", "stream": "a8da4675e9bc42bf838cf3fc2b8fd947" }
     // Opt-in lifecycle stream (docs/operations/lifecycle-ingestion.md). Until it is bound,
-    // lifecycle writes answer 503 and nothing else changes. Provision it with
+    // accepted lifecycle writes remain in the D1 outbox for forwarding. Provision it with
     // `scripts/provision-dev.sh --lifecycle`, then add a comma above and this entry with the
     // printed fd_lifecycle_events stream id:
     // { "binding": "LIFECYCLE_EVENTS", "stream": "<fd_lifecycle_events stream id>" }

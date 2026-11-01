@@ -1,7 +1,7 @@
 {
   "_comment": "Golden evidence summaries for test/acceptance.test.ts. Synthetic, invented fixtures at a fixed as_of (2026-10-30T00:05Z). evidence_id is the content address of the full pack. Regenerate only for an intended fixture or contract change, and review the diff.",
   "interview_loop_regression": {
-    "evidence_id": "sha256:cb5a6d07b807ee01e239c29998b3dde1c8a1edfddcf377cb128da80f2633672f",
+    "evidence_id": "sha256:ce7599922dc5324d474e4e71082617f655ab0954bfe84a748f3771e5bfaaf608",
     "app_id": "synthetic-recruiting",
     "workflow_key": "interview-loop",
     "as_of": "2026-10-30T00:05:00.000Z",
@@ -113,7 +113,7 @@
     }
   },
   "service_rollout_variants": {
-    "evidence_id": "sha256:df1e27686304c1c4d8d10c04b556b5b7bbb22e18db14d116fc5d54284512c3a3",
+    "evidence_id": "sha256:c2b27fee91fa58eee53b45197626ff18ca74155eac17bf2b61da873c90df919f",
     "app_id": "synthetic-delivery",
     "workflow_key": "service-rollout",
     "as_of": "2026-10-30T00:05:00.000Z",

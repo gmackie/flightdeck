@@ -16,3 +16,5 @@ Design and implementation plans live in [`docs/plans/`](docs/plans/). RFCs live 
 ## License
 
 MIT; see [`LICENSE`](LICENSE).
+
+Draft lifecycle + MCP integration provenance, checks and release gates: [integration matrix](docs/operations/lifecycle-mcp-integration.md).
