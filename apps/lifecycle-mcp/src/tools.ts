@@ -147,6 +147,7 @@ function interpretation(
     ctx.source.kind === "lifecycle-read-api" && kind !== "reference"
       ? [
           "Event-time completeness is unknown. A fresh status means only a recent projection; producer delivery and event coverage are unverified.",
+          "Canonical cohorts, suppression and query budgets reduce disclosure risk; they are not formal privacy guarantees. Restricted processes require explicit operator review.",
         ]
       : [];
   return {

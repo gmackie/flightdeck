@@ -44,6 +44,10 @@
     // Private MCP RPC is opt-in; its audience MUST differ from the dashboard audience.
     "LIFECYCLE_MCP_READ_ENABLED": "0",
     "LIFECYCLE_MCP_ACCESS_AUD": "",
+    // Guard is optional to install; aggregate reads are denied until explicitly enforced.
+    // LIFECYCLE_PRIVACY_KEY is a separate stable HMAC secret (>=32 chars), never a var.
+    "LIFECYCLE_PRIVACY_MODE": "disabled",
+    "LIFECYCLE_PRIVACY_RESTRICTED": "deny",
     // Explicit compatibility rollout for live/live/ws/trends only. Lifecycle always requires grants.
     // Apply 0010 + provision grants, then set to "enforce". Unknown values fail closed.
     "READ_AUTHZ_MODE": "legacy",
