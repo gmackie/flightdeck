@@ -77,12 +77,16 @@ export async function handleRequest(
 
   const config = readConfig(env);
   if ("error" in config) return fail(config.status, config.error);
+  if (url.search || url.hash || (config.resource && request.url !== config.resource)) {
+    return fail(404, "Not found");
+  }
 
   // Browsers attach the Access cookie cross-site; only listed origins may call (DNS rebinding too).
   const origin = request.headers.get("Origin");
   if (origin !== null && !config.allowedOrigins.has(origin)) return fail(403, "Origin not allowed");
 
   const principal = await authenticate(request, config, deps.keys);
+  // Managed OAuth owns the public edge challenge. Never publish a second OAuth 401 here.
   if (!principal) return fail(401, "Unauthorized");
 
   const method = request.headers.get("Mcp-Method");

@@ -158,7 +158,7 @@ a projector or write any data. There is no atomic cross-tool snapshot or histori
    service binding permissions. Test in isolated staging with
    `LIFECYCLE_MCP_ENVIRONMENT=staging`, `LIFECYCLE_MCP_SOURCE=read-api`,
    `ACCESS_TEAM_DOMAIN=<same team>`, `ACCESS_AUD=<MCP AUD>`,
-   `LIFECYCLE_MCP_DEV=0`, min cohort >=5, and explicit allowed browser origins.
+   `LIFECYCLE_MCP_DEV=0`, `LIFECYCLE_MCP_RESOURCE=https://<staging-host>/mcp`, min cohort >=5, and explicit allowed browser origins.
    Never configure synthetic mode as a live data fallback.
 7. Keep `workers_dev=false`, `preview_urls=false` and no public MCP routes by default.
    An eventual custom hostname needs Access protecting **every** reachable route;
@@ -207,11 +207,13 @@ change if needed. Deletion must cover the event log, outbox, serving snapshots,
 intervals, edges, diagnostics, registry as appropriate and Basin history, with an approved
 retention policy. D1 soft deletion alone is not erasure evidence.
 
-CloudflareOS needs a **separate user-delegated OAuth flow**: resource metadata,
+CloudflareOS needs verified **user-delegated OAuth**: resource metadata,
 authorization server/client registration, PKCE, consent, scopes, audience/resource-bound
 tokens, revocation and subject-to-app-grant mapping, with backend validation. This
 implementation supports verified Access assertions only. It does **not** implement or
-claim OAuth, user delegation, token exchange, or permission inheritance from an agent.
+claim a working browser OAuth flow, user delegation, token exchange, or permission inheritance from an agent.
+The [Managed OAuth preflight](lifecycle-mcp-oauth-preflight.md) validates a mock edge
+contract while preserving these Access assertions; real staging behavior remains gated.
 
 ## Independent review fixes and remaining release blockers
 
