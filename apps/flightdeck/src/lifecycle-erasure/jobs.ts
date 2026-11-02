@@ -115,6 +115,10 @@ export type JobRow = {
   logical_snapshot_id: string | null;
   logical_committed_at: number | null;
   logical_rows_deleted: number | null;
+  logical_delete_mode: "copy_on_write" | "merge_on_read" | null;
+  logical_affected_digest: string | null;
+  logical_affected_files: number | null;
+  cleanup_not_before: number | null;
   logical_receipt_checksum: string | null;
   logical_verified_at: number | null;
   physical_receipt_checksum: string | null;
@@ -268,20 +272,7 @@ export async function requestErasure(
         config.policyVersion,
         repurge,
       ),
-    // Serving-side tombstone (0031), so the read model refuses the case even if the ingest-side
-    // one were bypassed. Re-arms a restored tombstone; a later authorized restore cannot revive
-    // the case because its evidence is gone and ingest still drops it.
-    db
-      .prepare(
-        `INSERT INTO lifecycle_snapshot_tombstones (app_id, case_id, reason, source_watermark, as_of, deleted_at)
-         SELECT ?1, ?2, 'erased', coalesce(max(seq), 0), ?3, ?3 FROM ${LOG} WHERE app_id = ?1
-         ON CONFLICT (app_id, case_id) DO UPDATE SET reason = 'erased',
-           source_watermark = max(source_watermark, excluded.source_watermark),
-           as_of = max(as_of, excluded.as_of), deleted_at = excluded.deleted_at,
-           restored_at = NULL, restore_reason = NULL, restore_ref = NULL`,
-      )
-      .bind(appId, served, now),
-    ...eraseCaseStatements(db, appId, caseId, served, input.reason, now),
+    ...hideStatements(db, { app_id: appId, case_id: caseId, reason: input.reason }, served, now),
     // A case retention already retired is now erased: say so (it only changes diagnostics' label).
     db
       .prepare(
@@ -304,6 +295,35 @@ export async function requestErasure(
   const created = latest.nonce === nonce;
   const job = created ? await drainJob(deps, keyOf(latest)) : summarize(latest);
   return { status: created ? "created" : "existing", job: job ?? summarize(latest) };
+}
+
+/**
+ * Everything that hides a case locally, in one list so the request, the verification step and
+ * the completion gate apply exactly the same fences: the serving-side tombstone (0031) first, so
+ * a projection already in flight cannot re-create the served row, then the ingest-side tombstone
+ * and the removal of evidence, queue, diagnostics and served rows. Re-arms a restored serving
+ * tombstone; a later authorized restore has nothing to show because the evidence is gone and
+ * ingest still drops the case.
+ */
+function hideStatements(
+  db: D1Database,
+  job: { app_id: string; case_id: string; reason: string },
+  served: string,
+  now: number,
+): D1PreparedStatement[] {
+  return [
+    db
+      .prepare(
+        `INSERT INTO lifecycle_snapshot_tombstones (app_id, case_id, reason, source_watermark, as_of, deleted_at)
+         SELECT ?1, ?2, 'erased', coalesce(max(seq), 0), ?3, ?3 FROM ${LOG} WHERE app_id = ?1
+         ON CONFLICT (app_id, case_id) DO UPDATE SET reason = 'erased',
+           source_watermark = max(source_watermark, excluded.source_watermark),
+           as_of = max(as_of, excluded.as_of), deleted_at = excluded.deleted_at,
+           restored_at = NULL, restore_reason = NULL, restore_ref = NULL`,
+      )
+      .bind(job.app_id, served, now),
+    ...eraseCaseStatements(db, job.app_id, job.case_id, served, job.reason, now),
+  ];
 }
 
 async function plan(
@@ -358,6 +378,10 @@ type Patch = Partial<
     | "logical_snapshot_id"
     | "logical_committed_at"
     | "logical_rows_deleted"
+    | "logical_delete_mode"
+    | "logical_affected_digest"
+    | "logical_affected_files"
+    | "cleanup_not_before"
     | "logical_receipt_checksum"
     | "logical_verified_at"
     | "physical_receipt_checksum"
@@ -412,7 +436,8 @@ async function commit(
       `UPDATE ${JOBS} SET stage = ?, failed_stage = ?, attempts = ?, next_attempt_at = ?,
          last_error_code = ?, settle_until = ?, last_verified_at = ?, evidence_checksum = ?,
          logical_snapshot_id = ?, logical_committed_at = ?, logical_rows_deleted = ?,
-         logical_receipt_checksum = ?, logical_verified_at = ?, physical_receipt_checksum = ?,
+         logical_delete_mode = ?, logical_affected_digest = ?, logical_affected_files = ?,
+         cleanup_not_before = ?, logical_receipt_checksum = ?, logical_verified_at = ?, physical_receipt_checksum = ?,
          physical_verified_at = ?, completed_at = ?, lease_until = NULL, version = version + 1,
          updated_at = ?
        WHERE app_id = ? AND case_id = ? AND purge_generation = ? AND version = ?`,
@@ -429,6 +454,10 @@ async function commit(
       next.logical_snapshot_id,
       next.logical_committed_at,
       next.logical_rows_deleted,
+      next.logical_delete_mode,
+      next.logical_affected_digest,
+      next.logical_affected_files,
+      next.cleanup_not_before,
       next.logical_receipt_checksum,
       next.logical_verified_at,
       next.physical_receipt_checksum,
@@ -507,12 +536,15 @@ async function recordRejection(
   ]);
 }
 
-const bindingOf = (r: JobRow): JobBinding => ({
+const bindingOf = (r: JobRow, settleUntil: number | null = r.settle_until): JobBinding => ({
   appId: r.app_id,
   caseDigest: r.case_digest,
   purgeGeneration: r.purge_generation,
   nonce: r.nonce,
-  settleUntil: r.settle_until,
+  settleUntil,
+  logicalDeleteMode: r.logical_delete_mode,
+  logicalAffectedDigest: r.logical_affected_digest,
+  cleanupNotBefore: r.cleanup_not_before,
   logicalSnapshotId: r.logical_snapshot_id,
   logicalCommittedAt: r.logical_committed_at,
   logicalReceiptChecksum: r.logical_receipt_checksum,
@@ -530,8 +562,19 @@ async function evaluateReceipt(
   if (row.stage === "basin_pending") {
     const parsed = await authenticate(signed, "logical_delete", deps.verifier);
     if (!parsed.ok) return parsed;
-    const code = checkLogical(parsed.receipt, bindingOf(row), deps.config.table, now);
+    // Recomputed here, not trusted from the job row, so an out-of-band receipt is held to the
+    // same writer fence as an executor result.
+    const gate = await drainGate(deps, row);
+    if (gate.live) return { ok: false, code: "forward_in_flight" };
+    const code = checkLogical(parsed.receipt, bindingOf(row, gate.until), deps.config.table, now);
     if (code) return { ok: false, code };
+    if (now < gate.until) return { ok: false, code: "receipt_before_settle" };
+    // The DELETE must also be followed by a post-drain verification of the table.
+    const served = await servingId(row.case_id);
+    if (!(await localState(deps.db, row.app_id, row.case_id, served)).clean) {
+      await deps.db.batch(hideStatements(deps.db, row, served, now));
+      return { ok: false, code: "local_fence_broken" };
+    }
     return {
       ok: true,
       event: { type: "logical_accepted" },
@@ -540,6 +583,9 @@ async function evaluateReceipt(
         logical_snapshot_id: parsed.receipt.snapshot_id,
         logical_committed_at: parsed.receipt.committed_at,
         logical_rows_deleted: parsed.receipt.rows_deleted,
+        logical_delete_mode: parsed.receipt.delete_mode,
+        logical_affected_digest: parsed.receipt.affected_files_digest,
+        logical_affected_files: parsed.receipt.affected_files,
         logical_receipt_checksum: parsed.checksum,
         logical_verified_at: now,
         evidence_checksum: await sha256Hex(
@@ -557,6 +603,18 @@ async function evaluateReceipt(
     if (!parsed.ok) return parsed;
     const code = checkPhysical(parsed.receipt, bindingOf(row), deps.config.table, now);
     if (code) return { ok: false, code };
+    if (now < (row.cleanup_not_before ?? Number.POSITIVE_INFINITY)) {
+      return { ok: false, code: "receipt_before_cleanup_deadline" };
+    }
+    // Completion also requires the local hold to be intact at this moment. A projection or a
+    // forward that was in flight when the case was erased may have written something back; if
+    // so, re-hide and refuse rather than report erased.
+    const served = await servingId(row.case_id);
+    const local = await localState(deps.db, row.app_id, row.case_id, served);
+    if (!local.clean) {
+      await deps.db.batch(hideStatements(deps.db, row, served, now));
+      return { ok: false, code: "local_fence_broken" };
+    }
     return {
       ok: true,
       event: { type: "physical_accepted" },
@@ -588,11 +646,9 @@ async function runStage(deps: ErasureDeps, row: JobRow): Promise<void> {
   switch (row.stage) {
     case "requested": {
       const served = await servingId(row.case_id);
-      await deps.db.batch(
-        eraseCaseStatements(deps.db, row.app_id, row.case_id, served, row.reason, now),
-      );
-      const residue = await localResidue(deps.db, row.app_id, row.case_id, served);
-      if (residue.rows > 0 || !residue.tombstoned) {
+      await deps.db.batch(hideStatements(deps.db, row, served, now));
+      const local = await localState(deps.db, row.app_id, row.case_id, served);
+      if (!local.clean) {
         await commit(deps, row, { type: "local_residue" }, {}, "system", "local");
         return;
       }
@@ -635,18 +691,41 @@ async function runStage(deps: ErasureDeps, row: JobRow): Promise<void> {
           type: "cleanup_scheduled",
           notBefore: (row.logical_committed_at ?? now) + deps.config.cleanupDelayMs,
         },
-        {},
+        {
+          cleanup_not_before: (row.logical_committed_at ?? now) + deps.config.cleanupDelayMs,
+        },
         "system",
         "local",
       );
       return;
     case "basin_pending":
     case "files_cleanup_pending": {
-      if (row.stage === "basin_pending" && (row.settle_until ?? 0) > now) {
+      const blocked = (code: string, retryAfterMs: number) =>
+        commit(deps, row, { type: "step_blocked", code, retryAfterMs }, {}, "system", "local");
+      let notBefore = row.settle_until ?? now;
+      if (row.stage === "basin_pending") {
+        // Writer fence + drain: nothing may still be on its way to Basin when the DELETE runs.
+        const gate = await drainGate(deps, row);
+        if (gate.live) return void (await blocked("forward_in_flight", 60_000));
+        notBefore = gate.until;
+        if (now < gate.until) {
+          return void (await blocked("draining", Math.min(gate.until - now, 15 * 60_000)));
+        }
+      } else {
+        notBefore = row.cleanup_not_before ?? now;
+        if (now < notBefore) {
+          return void (await blocked("cleanup_window", Math.min(notBefore - now, 15 * 60_000)));
+        }
+      }
+      // A projection or send that was in flight when the case was erased may have written
+      // something back since. Re-hide before asking the runner to touch Basin.
+      const served = await servingId(row.case_id);
+      if (!(await localState(deps.db, row.app_id, row.case_id, served)).clean) {
+        await deps.db.batch(hideStatements(deps.db, row, served, now));
         await commit(
           deps,
           row,
-          { type: "step_blocked", code: "settling", retryAfterMs: (row.settle_until ?? now) - now },
+          { type: "step_failed", code: "local_fence_broken", retryable: true },
           {},
           "system",
           "local",
@@ -662,7 +741,7 @@ async function runStage(deps: ErasureDeps, row: JobRow): Promise<void> {
           purgeGeneration: row.purge_generation,
           nonce: row.nonce,
           table: deps.config.table,
-          notBefore: row.settle_until ?? now,
+          notBefore,
         };
         signed =
           row.stage === "basin_pending"
@@ -672,6 +751,9 @@ async function runStage(deps: ErasureDeps, row: JobRow): Promise<void> {
                 deleteSnapshotId: row.logical_snapshot_id ?? "",
                 deleteCommittedAt: row.logical_committed_at ?? 0,
                 logicalReceiptChecksum: row.logical_receipt_checksum ?? "",
+                deleteMode: row.logical_delete_mode ?? "copy_on_write",
+                affectedFilesDigest: row.logical_affected_digest ?? "",
+                cleanupNotBefore: row.cleanup_not_before ?? now,
               });
       } catch (error) {
         const event: MachineEvent =
@@ -705,8 +787,9 @@ async function runStage(deps: ErasureDeps, row: JobRow): Promise<void> {
   }
 }
 
-async function localResidue(db: D1Database, appId: string, caseId: string, served: string) {
-  const [log, queue, diag, snap, intervals, edges, tomb] = await db.batch<{ n: number }>([
+/** True when nothing of the case remains in D1 and both tombstones hold. */
+async function localState(db: D1Database, appId: string, caseId: string, served: string) {
+  const [log, queue, diag, snap, intervals, edges, tomb, stomb] = await db.batch<{ n: number }>([
     db
       .prepare(`SELECT count(*) AS n FROM ${LOG} WHERE app_id = ? AND case_id = ?`)
       .bind(appId, caseId),
@@ -740,11 +823,43 @@ async function localResidue(db: D1Database, appId: string, caseId: string, serve
         "SELECT count(*) AS n FROM lifecycle_case_tombstones WHERE app_id = ? AND case_id = ?",
       )
       .bind(appId, caseId),
+    db
+      .prepare(
+        `SELECT count(*) AS n FROM lifecycle_snapshot_tombstones WHERE app_id = ? AND case_id = ?
+         AND restored_at IS NULL`,
+      )
+      .bind(appId, served),
   ]);
   const n = (r: D1Result<{ n: number }> | undefined) => Number(r?.results?.[0]?.n ?? 0);
+  const residue = n(log) + n(queue) + n(diag) + n(snap) + n(intervals) + n(edges);
+  return { residue, clean: residue === 0 && n(tomb) > 0 && n(stomb) > 0 };
+}
+
+/**
+ * The outbox writer fence for a case: whether a send for it is still live, and the earliest
+ * moment the Iceberg DELETE may commit. A send is "live" until it releases its claim or its lease
+ * expires (a Worker invocation cannot outlive the lease). Rows it handed to Pipelines can still
+ * be arriving for `drainMs` after that, so the DELETE waits for both, and for the settle window.
+ * New claims for a tombstoned case are refused, so this deadline only moves while a send that
+ * began before the erasure is outstanding.
+ */
+async function drainGate(
+  deps: ErasureDeps,
+  row: JobRow,
+): Promise<{ live: boolean; until: number }> {
+  const now = deps.now();
+  const r = await deps.db
+    .prepare(
+      `SELECT coalesce(sum(released_at IS NULL AND lease_until > ?1), 0) AS live,
+         max(coalesce(released_at, lease_until)) AS last
+       FROM lifecycle_forward_claims WHERE app_id = ?2 AND case_id = ?3`,
+    )
+    .bind(now, row.app_id, row.case_id)
+    .first<{ live: number; last: number | null }>();
+  const last = r?.last ?? 0;
   return {
-    rows: n(log) + n(queue) + n(diag) + n(snap) + n(intervals) + n(edges),
-    tombstoned: n(tomb) > 0,
+    live: Number(r?.live ?? 0) > 0,
+    until: Math.max(row.settle_until ?? 0, last ? last + deps.config.drainMs : 0),
   };
 }
 
@@ -892,7 +1007,8 @@ export async function erasureHealth(
       .prepare(
         `SELECT min(requested_at) AS oldest,
            coalesce(sum(requested_at < ?), 0) AS overdue,
-           coalesce(sum(last_error_code IN ('executor_unconfigured', 'executor_pending')), 0) AS blocked
+           coalesce(sum(last_error_code IN ('executor_unconfigured', 'executor_pending',
+             'forward_in_flight', 'draining', 'cleanup_window')), 0) AS blocked
          FROM ${JOBS} WHERE app_id = ? AND stage != 'complete'`,
       )
       .bind(now - deps.config.overdueMs, appId),

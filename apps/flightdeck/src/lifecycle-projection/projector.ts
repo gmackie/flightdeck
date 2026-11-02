@@ -1,5 +1,6 @@
 import { replay } from "@flightdeckhq/lifecycle";
 import type { ProcessDefinitionV1 } from "@flightdeckhq/schema";
+import { retiredServedIds } from "../lifecycle-erasure/retired";
 import type { ProcessDefinitionInput, Provenance } from "../lifecycle-serving/model";
 import { SnapshotRejected } from "../lifecycle-serving/model";
 import { LifecycleSnapshotRepository } from "../lifecycle-serving/repository";
@@ -124,6 +125,8 @@ export class LifecycleProjector {
       await this.repo.commitRebuild(
         appId,
         this.provenance(generation, Math.min(watermark, await this.safeWatermark(appId))),
+        // Cases whose replay log retention retired cannot be recomputed: keep what is served.
+        await retiredServedIds(this.db, appId),
       );
       // Only acknowledge cases actually covered by the committed rebuild; future and failed
       // cases remain pending, and evidence arriving after the captured watermark stays queued.

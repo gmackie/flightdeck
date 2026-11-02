@@ -29,6 +29,11 @@ export type CleanupRequest = ExecutorRequest & {
   deleteSnapshotId: string;
   deleteCommittedAt: number;
   logicalReceiptChecksum: string;
+  deleteMode: "copy_on_write" | "merge_on_read";
+  /** The files that held the rows; the cleanup must show exactly these gone. */
+  affectedFilesDigest: string;
+  /** Neither expiration nor orphan removal may have run before this. */
+  cleanupNotBefore: number;
 };
 
 export interface BasinErasureExecutor {

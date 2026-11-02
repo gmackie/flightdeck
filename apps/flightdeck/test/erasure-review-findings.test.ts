@@ -240,7 +240,7 @@ describe("P1-3: zero query-visible rows plus orphan removal does not prove physi
       rows_deleted: 3,
       rows_remaining: 0,
     });
-    await submitReceipt(d, OP, { ...key, receipt: logical });
+    const first = await submitReceipt(d, OP, { ...key, receipt: logical });
     const checksum = (
       await rows(
         "SELECT logical_receipt_checksum AS c FROM lifecycle_erasure_jobs WHERE app_id = ?",
@@ -262,9 +262,12 @@ describe("P1-3: zero query-visible rows plus orphan removal does not prove physi
       retained_snapshots_with_rows: 0,
       orphan_files_removed: true,
     });
-    await submitReceipt(d, OP, { ...key, receipt: physical });
+    const second = await submitReceipt(d, OP, { ...key, receipt: physical });
+    // Neither receipt of the old shape is accepted: the logical one does not say how the DELETE
+    // was written, and the physical one cannot show the bytes are gone.
+    expect(first.accepted).toBe(false);
+    expect(second.accepted).toBe(false);
     const job = await getJob(env.DB, OP, appId, caseId);
-    expect(checksum).not.toBeNull();
     expect(job?.stage).not.toBe("complete");
     expect(job?.proof).not.toBe("physical_verified");
   });
@@ -426,10 +429,17 @@ describe("P2-7: an in-flight projector cannot recreate residue after an erasure"
       reason: "subject_request",
     });
     const projector = new LifecycleProjector(env.DB) as unknown as {
-      finish(a: string, c: string, s: number, d: Map<string, number>, ack: boolean): Promise<void>;
+      finish(
+        a: string,
+        c: string,
+        s: number,
+        d: Map<string, number>,
+        ack: boolean,
+        gen: number,
+      ): Promise<void>;
       requeue(a: string, c: string, n: number, code: string): Promise<void>;
     };
-    await projector.finish(appId, caseId, 1, new Map([["late_diagnostic", 1]]), true);
+    await projector.finish(appId, caseId, 1, new Map([["late_diagnostic", 1]]), true, 1);
     await projector.requeue(appId, caseId, 1, "projection_error");
     expect(await residue(appId, caseId, served)).toEqual([0, 0, 0, 0, 0]);
   });

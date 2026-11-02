@@ -1,5 +1,6 @@
 import type { LifecycleRecord } from "@flightdeckhq/schema";
 import { LifecycleUnavailable } from "../ingest/lifecycle";
+import { parseMode } from "../lifecycle-erasure/config";
 import { sinks } from "../sinks";
 import { canonical } from "./identity";
 
@@ -16,6 +17,12 @@ const DIAGNOSTICS = "lifecycle_projection_diagnostics";
 /** Outbox rows sent per Pipelines call, and the retry backoff ceiling. */
 export const FORWARD_BATCH = 100;
 const MAX_BACKOFF_MS = 60 * 60_000;
+const CLAIMS = "lifecycle_forward_claims";
+/**
+ * How long a send may hold a case before it is presumed dead. A Worker invocation cannot outlive
+ * this (assumption: documented as a release gate), so an expired claim no longer blocks erasure.
+ */
+export const FORWARD_LEASE_MS = 15 * 60_000;
 /** Tombstone reason written when retention compacts a case's replay log (not an erasure). */
 export const RETIRED_REASON = "retention_expired";
 
@@ -224,16 +231,87 @@ export async function forwardOutbox(
   now: number,
   only?: { appId: string; eventIds: string[] },
 ): Promise<ForwardResult> {
+  // The writer fence exists only while erasure is enabled, so the default path is unchanged.
+  if (parseMode((env as { LIFECYCLE_ERASURE_MODE?: unknown }).LIFECYCLE_ERASURE_MODE) === "off") {
+    return forwardBatch(env, now, only, null);
+  }
+  const claimId = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+  const started = Date.now();
+  try {
+    return await forwardBatch(env, now, only, claimId);
+  } finally {
+    // Released after the send returns or fails; a sender that died is covered by the lease.
+    await env.DB.prepare(`UPDATE ${CLAIMS} SET released_at = ? WHERE claim_id = ?`)
+      .bind(now + (Date.now() - started), claimId)
+      .run()
+      .catch(() => undefined);
+  }
+}
+
+/**
+ * Claims the cases of `rows` for this send, refusing tombstoned ones in the same statement, and
+ * returns the claimed case keys. Erasure tombstones a case first and then waits for live claims
+ * on it, so a row is either dropped here or its sender is waited for.
+ */
+async function claimCases(
+  env: Env,
+  claimId: string,
+  rows: { app_id: string; case_id: string }[],
+  now: number,
+) {
+  const cases = new Map(rows.map((r) => [`${r.app_id}\u0000${r.case_id}`, r]));
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM ${CLAIMS} WHERE coalesce(released_at, lease_until) < ?`).bind(
+      now - 2 * 24 * 60 * 60_000,
+    ),
+    ...[...cases.values()].map((c) =>
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO ${CLAIMS} (claim_id, app_id, case_id, claimed_at, lease_until)
+         SELECT ?1, ?2, ?3, ?4, ?5 WHERE NOT EXISTS (
+           SELECT 1 FROM ${TOMBSTONES} WHERE app_id = ?2 AND case_id = ?3)`,
+      ).bind(claimId, c.app_id, c.case_id, now, now + FORWARD_LEASE_MS),
+    ),
+  ]);
+  const { results } = await env.DB.prepare(
+    `SELECT app_id, case_id FROM ${CLAIMS} WHERE claim_id = ?`,
+  )
+    .bind(claimId)
+    .all<{ app_id: string; case_id: string }>();
+  return new Set(results.map((r) => `${r.app_id}\u0000${r.case_id}`));
+}
+
+async function forwardBatch(
+  env: Env,
+  now: number,
+  only: { appId: string; eventIds: string[] } | undefined,
+  claimId: string | null,
+): Promise<ForwardResult> {
   const filter = only
     ? "AND app_id = ? AND event_id IN (SELECT value FROM json_each(?))"
     : "AND forward_next_at <= ?";
   const binds = only ? [only.appId, JSON.stringify(only.eventIds)] : [now];
   const { results } = await env.DB.prepare(
-    `SELECT seq, forward_attempts, record_json FROM ${LOG}
+    `SELECT seq, app_id, case_id, forward_attempts, record_json FROM ${LOG}
      WHERE forwarded_at IS NULL ${filter} ORDER BY seq LIMIT ?`,
   )
     .bind(...binds, FORWARD_BATCH)
-    .all<{ seq: number; forward_attempts: number; record_json: string }>();
+    .all<{
+      seq: number;
+      app_id: string;
+      case_id: string;
+      forward_attempts: number;
+      record_json: string;
+    }>();
+  if (claimId && results.length) {
+    // Rows of a case erased since the read are dropped here, not sent.
+    const claimed = await claimCases(env, claimId, results, now);
+    for (let i = results.length - 1; i >= 0; i--) {
+      const r = results[i];
+      if (r && !claimed.has(`${r.app_id}\u0000${r.case_id}`)) results.splice(i, 1);
+    }
+  }
   if (!results.length) return { sent: 0, failed: 0, pending: 0, bound: true };
   const seqs = JSON.stringify(results.map((r) => r.seq));
   try {

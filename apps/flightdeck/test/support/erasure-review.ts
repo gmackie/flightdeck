@@ -47,7 +47,13 @@ export const count = async (sql: string, ...binds: unknown[]) =>
 /** A mutable clock shared by deps and runner, so a test can move time deliberately. */
 export function clockAt(start: number) {
   const clock = { t: start };
-  return { clock, now: () => clock.t, advance: (ms: number) => void (clock.t += ms) };
+  return {
+    clock,
+    now: () => clock.t,
+    advance: (ms: number) => {
+      clock.t += ms;
+    },
+  };
 }
 
 export function erasureDeps(

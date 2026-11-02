@@ -5,9 +5,11 @@ import { retentionConfig } from "../src/lifecycle-erasure/config";
 import { type ErasureActor, ErasureForbidden } from "../src/lifecycle-erasure/jobs";
 import { rejectAll } from "../src/lifecycle-erasure/receipt";
 import {
+  allocatedSeq,
   applyRetention,
   inspectRetention,
   recordReconciliation,
+  rowsDigest,
 } from "../src/lifecycle-erasure/retention";
 import { maintainErasure } from "../src/lifecycle-erasure/schedule";
 import { LifecycleProjector } from "../src/lifecycle-projection/projector";
@@ -79,17 +81,20 @@ const logRows = (appId: string) =>
 
 async function attest(appId: string, through?: number, over: Record<string, unknown> = {}) {
   const t = through ?? (await maxSeq(appId));
-  const events_ = await count(
-    "SELECT count(*) AS n FROM lifecycle_event_log WHERE app_id = ? AND seq <= ?",
+  const after = await count(
+    "SELECT coalesce(max(reconciled_through_seq), 0) AS n FROM lifecycle_retention_checkpoints WHERE app_id = ?",
     appId,
-    t,
   );
+  const evidence = await rowsDigest(env.DB, appId, after, t);
   return signer.sign({
     v: 1,
     kind: "basin_reconciliation",
     app_id: appId,
+    after_seq: after,
     through_seq: t,
-    event_count: events_,
+    allocated_seq: await allocatedSeq(env.DB),
+    event_count: evidence.count,
+    rows_digest: evidence.digest,
     issued_at: NOW,
     ...over,
   });
@@ -390,10 +395,22 @@ describe("no orphan resurrection", () => {
     await forwardOutbox(env, Date.now() + DAY);
     expect(sent.filter((c) => retired.includes(c))).toEqual([]);
     vi.restoreAllMocks();
-    // A rebuild from the log never creates a partial case from stragglers.
+    // A rebuild neither creates a partial case from stragglers nor loses the original one: the
+    // retired case keeps exactly the snapshot (rows, intervals, relations) it was served with.
+    const retiredServed = await Promise.all(retired.map((c) => servingId(c)));
+    const only = (m: Awaited<ReturnType<typeof servedModel>>) => ({
+      cases: m.cases.filter((c) => retiredServed.includes((c as { case_id: string }).case_id)),
+      intervals: m.intervals.filter((i) =>
+        retiredServed.includes((i as { case_id: string }).case_id),
+      ),
+      edges: m.edges.filter((e) =>
+        retiredServed.includes((e as { from_case_id: string }).from_case_id),
+      ),
+    });
+    const beforeRebuild = only(await servedModel(appId));
+    expect(beforeRebuild.cases.length).toBe(retired.length);
     await new LifecycleProjector(env.DB).rebuild(appId);
-    const served = (await servedModel(appId)).cases.map((c) => (c as { case_id: string }).case_id);
-    for (const id of retired) expect(served).not.toContain(await servingId(id));
+    expect(only(await servedModel(appId))).toEqual(beforeRebuild);
   });
 
   it("an erasure of a retired case still works and relabels the tombstone", async () => {
@@ -567,5 +584,126 @@ describe("reconciliation checkpoints cannot be forged", () => {
       recorded: false,
       code: "receipt_reconciliation_mismatch",
     });
+  });
+});
+
+describe("reconciliation boundary and row evidence (review P1-1)", () => {
+  const d = () => ({ ...deps(), verifier: signer.verifier });
+
+  it("rejects coverage beyond the highest sequence ever allocated", async () => {
+    const { appId } = await seed();
+    const allocated = await allocatedSeq(env.DB);
+    for (const over of [
+      { through_seq: allocated + 1 },
+      { through_seq: 1_000_000, allocated_seq: 1_000_000 },
+    ]) {
+      expect(
+        await recordReconciliation(d(), OP, appId, await attest(appId, undefined, over)),
+      ).toEqual({
+        recorded: false,
+        code: "receipt_reconciliation_future",
+      });
+    }
+    expect(
+      await count(
+        "SELECT count(*) AS n FROM lifecycle_retention_checkpoints WHERE app_id = ?",
+        appId,
+      ),
+    ).toBe(0);
+  });
+
+  it("an honest empty-app checkpoint covers nothing that arrives later", async () => {
+    const appId = `app_ret_empty_${++n}`;
+    const key = await producerApp(appId);
+    // Empty app, covering everything allocated so far (other apps' rows included in the sequence).
+    const res = await recordReconciliation(
+      d(),
+      OP,
+      appId,
+      await attest(appId, await allocatedSeq(env.DB)),
+    );
+    expect(res).toMatchObject({ recorded: true });
+    await deliver(key, events);
+    await project(appId);
+    vi.spyOn(sinks, "lifecycle").mockResolvedValue();
+    while ((await forwardOutbox(env, Date.now())).sent > 0);
+    vi.restoreAllMocks();
+    expect(await applyRetention(deps(), appId)).toMatchObject({ retired_cases: 0 });
+    const report = await inspectRetention(deps(), appId);
+    expect(report.eligible.cases).toBe(0);
+    expect(report.blocked.beyond_checkpoint).toBeGreaterThan(0);
+    // After reconciling the new rows under the same rules, they become eligible.
+    expect(
+      await recordReconciliation(d(), OP, appId, await attest(appId, await maxSeq(appId))),
+    ).toMatchObject({ recorded: true });
+    expect((await inspectRetention(deps(), appId)).eligible.cases).toBeGreaterThan(0);
+  });
+
+  it("binds the checkpoint to the exact rows: a different digest, a gap or no progress is refused", async () => {
+    const { appId } = await seed();
+    const through = await maxSeq(appId);
+    expect(
+      await recordReconciliation(
+        d(),
+        OP,
+        appId,
+        await attest(appId, through, { rows_digest: "0".repeat(64) }),
+      ),
+    ).toEqual({
+      recorded: false,
+      code: "receipt_reconciliation_mismatch",
+    });
+    // Same count, different content: a swapped row id changes the digest.
+    const good = await attest(appId, through);
+    await env.DB.prepare(
+      "UPDATE lifecycle_event_log SET event_id = event_id || 'x' WHERE seq = (SELECT min(seq) FROM lifecycle_event_log WHERE app_id = ?)",
+    )
+      .bind(appId)
+      .run();
+    expect(await recordReconciliation(d(), OP, appId, good)).toEqual({
+      recorded: false,
+      code: "receipt_reconciliation_mismatch",
+    });
+    await env.DB.prepare(
+      "UPDATE lifecycle_event_log SET event_id = substr(event_id, 1, length(event_id) - 1) WHERE seq = (SELECT min(seq) FROM lifecycle_event_log WHERE app_id = ?)",
+    )
+      .bind(appId)
+      .run();
+    // A range that skips rows (starts above the current checkpoint) is a gap.
+    expect(
+      await recordReconciliation(d(), OP, appId, await attest(appId, through, { after_seq: 5 })),
+    ).toEqual({
+      recorded: false,
+      code: "receipt_reconciliation_gap",
+    });
+    expect(await recordReconciliation(d(), OP, appId, await attest(appId, through))).toMatchObject({
+      recorded: true,
+    });
+    expect(await recordReconciliation(d(), OP, appId, await attest(appId, through))).toEqual({
+      recorded: false,
+      code: "checkpoint_not_advanced",
+    });
+  });
+
+  it("D1 itself refuses a checkpoint outside the allocated range or without a digest", async () => {
+    const appId = "app_ret_triggers";
+    const insert = (through: number, allocated: number, digest: string) =>
+      env.DB.prepare(
+        `INSERT INTO lifecycle_retention_checkpoints (app_id, reconciled_through_seq, allocated_seq, rows_digest, verified_at, evidence_checksum, updated_at)
+         VALUES (?, ?, ?, ?, 1, ?, 1)`,
+      )
+        .bind(appId, through, allocated, digest, "a".repeat(64))
+        .run();
+    await expect(insert(10, 5, "b".repeat(64))).rejects.toThrow();
+    await expect(insert(1, 5, "")).rejects.toThrow();
+    await expect(insert(1, 5, "B".repeat(64))).rejects.toThrow();
+    await insert(3, 5, "b".repeat(64));
+    await expect(
+      env.DB.prepare(
+        "UPDATE lifecycle_retention_checkpoints SET reconciled_through_seq = 1 WHERE app_id = ?",
+      )
+        .bind(appId)
+        .run(),
+    ).rejects.toThrow();
   });
 });
