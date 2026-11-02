@@ -13,7 +13,7 @@ You own the client entry and components. Do not edit the worker entry or wrangle
 
 `pnpm add @flightdeckhq/browser` (or the repo's package manager) in the web app's package. It ships compiled ESM with types, so no `transpilePackages` or bundler changes are needed.
 
-Until 0.1.0 is published, `npm view @flightdeckhq/browser version` returns 404. If it does, stop and report on FLIG-14 (the npm release). Never vendor copies of the SDK or install it from a Flightdeck checkout.
+Until the public npm release (FLIG-14) lands, `npm view @flightdeckhq/browser version` returns 404. Install it from the ForgeGraph registry: add `@flightdeckhq:registry=https://npm.forgegraf.com/` to the repo's `.npmrc` (anonymous reads, no token); if it is not there either, stop and report on FLIG-14. Never vendor copies of the SDK or install it from a Flightdeck checkout.
 
 ## 2. Init once in the client entry
 

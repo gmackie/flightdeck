@@ -24,7 +24,7 @@ For each target repo, follow the `kanbanger-workflow` skill: resolve the repo's 
 
 ## 3. Dispatch
 
-Before the first wave, check the SDKs are on npm: `npm view @flightdeckhq/worker version` and `npm view @flightdeckhq/browser version`. Until 0.1.0 is published they return 404; then stop, report on FLIG-14 (the npm release), and don't hand agents tarballs or vendored copies.
+Before the first wave, check the SDKs are installable: `npm view @flightdeckhq/worker version` and `npm view @flightdeckhq/browser version`. Until the public npm release (FLIG-14) lands they return 404; until then the SDKs are on the ForgeGraph registry: add `@flightdeckhq:registry=https://npm.forgegraf.com/` to the repo's `.npmrc` (anonymous reads, no token), and `npm view ... --registry https://npm.forgegraf.com/` checks them (docs/operations/releasing.md). Never hand agents tarballs or vendored copies.
 
 Register each wave's apps first (`npx @flightdeckhq/create apps add`, see `flightdeck-instrument-worker/references/registration.md`) and put the production and staging appIds in each brief. Per repo, one worktree (`worktrunk-worktrees` skill) and a brief from [references/agent-brief.md](references/agent-brief.md).
 

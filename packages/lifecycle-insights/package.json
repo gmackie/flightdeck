@@ -1,6 +1,6 @@
 {
   "name": "@flightdeckhq/lifecycle-insights",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Deterministic aggregate-only lifecycle alerts and descriptive variant comparisons.",
   "repository": {
     "type": "git",

@@ -13,7 +13,7 @@ Work in a worktree (`worktrunk-worktrees` skill). You own the worker entry, wran
 
 - Find the deployable Worker: the `wrangler.*` whose `main` serves the app, and every env/stage config (top-level `env.*` blocks, `wrangler.<stage>.*` files, or generated configs). See [references/wrangler-bindings.md](references/wrangler-bindings.md).
 - Install the SDK from npm in the Worker's package: `pnpm add @flightdeckhq/worker` (or the repo's package manager). It ships compiled ESM with types; it uses the repo's own Workers types, so nothing else is needed.
-- Until 0.1.0 is published, `npm view @flightdeckhq/worker version` returns 404. If it does, stop and report on FLIG-14 (the npm release). Never vendor copies of the SDK or install it from a Flightdeck checkout.
+- Until the public npm release (FLIG-14) lands, `npm view @flightdeckhq/worker version` returns 404. Install it from the ForgeGraph registry: add `@flightdeckhq:registry=https://npm.forgegraf.com/` to the repo's `.npmrc` (anonymous reads, no token); if it is not there either, stop and report on FLIG-14. Never vendor copies of the SDK or install it from a Flightdeck checkout.
 
 ## 2. Register the app
 

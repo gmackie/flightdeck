@@ -72,6 +72,28 @@ Run workflow) with `dry_run` checked; it runs every step and publishes with
 `pnpm -r publish --dry-run --no-git-checks --access public --json` lists each
 tarball's files without credentials.
 
+## Interim registry: npm.forgegraf.com
+
+Until the tag workflow can publish to public npm (it needs an npm token that bypasses 2FA), each
+release is also published by hand to the ForgeGraph registry, which serves `@flightdeckhq`
+locally and to anyone without a token (FORGE-291). Consumers add one line to their `.npmrc`:
+
+```ini
+@flightdeckhq:registry=https://npm.forgegraf.com/
+```
+
+To publish there, from the release's merge commit, with a ForgeGraph registry token
+(`forge registry token create --label flightdeck-publish`) in `FG_REGISTRY_TOKEN`:
+
+```bash
+echo '//npm.forgegraf.com/:_authToken=${FG_REGISTRY_TOKEN}' > "$TMPDIR/fg.npmrc"
+pnpm -r publish --registry https://npm.forgegraf.com/ \
+  --userconfig "$TMPDIR/fg.npmrc" --access public --no-git-checks
+```
+
+It publishes what the tag workflow does (`private` packages are skipped), the same versions and tarballs as the npm release, so switching a consumer back to npm is removing
+that line. Publish the same version to npm before bumping again.
+
 ## Credentials
 
 The workflow authenticates with a granular npm access token in the `NPM_TOKEN`
