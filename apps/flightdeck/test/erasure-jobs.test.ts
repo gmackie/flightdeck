@@ -26,7 +26,7 @@ import { servingId } from "../src/lifecycle-projection/snapshot";
 import { appendLifecycle, forwardOutbox } from "../src/lifecycle-projection/store";
 import { LifecycleSnapshotRepository } from "../src/lifecycle-serving/repository";
 import { sinks } from "../src/sinks";
-import { makeSigner, type Signer, syntheticRunner } from "./support/erasure";
+import { filesDigest, makeSigner, type Signer, syntheticRunner } from "./support/erasure";
 import { adaptFixtures, type DeliveryRecord } from "./support/fixture-adapter";
 import { deliver, producerApp, project, servedModel } from "./support/harness";
 
@@ -79,6 +79,7 @@ async function seed(appId: string) {
   return { caseId, cases: model.cases.length };
 }
 
+const count = async (sql: string, ...binds: unknown[]) => Number((await rows(sql, ...binds))[0]?.n);
 const rows = (sql: string, ...binds: unknown[]) =>
   env.DB.prepare(sql)
     .bind(...binds)
@@ -562,7 +563,37 @@ describe("receipts drive completion", () => {
       { expired_before: T0 },
       "receipt_snapshots_retained",
     ],
-    ["orphan files remain", { orphan_files_removed: false }, "receipt_orphans_not_removed"],
+    [
+      "orphans were removed before the cleanup deadline",
+      { orphans_removed_at: T0 },
+      "receipt_before_cleanup_deadline",
+    ],
+    [
+      "snapshots were expired before the cleanup deadline",
+      { expired_at: T0 },
+      "receipt_before_cleanup_deadline",
+    ],
+    [
+      "the rewrite is dated after the expiration",
+      { materialized_at: T0 * 2 },
+      "receipt_out_of_order",
+    ],
+    [
+      "data files that held the rows still exist",
+      { affected_files_remaining: 1 },
+      "receipt_files_remain",
+    ],
+    ["delete files still apply", { delete_files_applying: 2 }, "receipt_files_remain"],
+    [
+      "it covers other files than the DELETE touched",
+      { affected_files_digest: "d".repeat(64) },
+      "receipt_wrong_files",
+    ],
+    [
+      "it describes a different delete mode",
+      { delete_mode: "merge_on_read" },
+      "receipt_delete_mode_mismatch",
+    ],
     ["it is for a different delete snapshot", { snapshot_id: "123" }, "receipt_wrong_snapshot"],
     [
       "it does not match the logical receipt",
@@ -651,6 +682,9 @@ describe("receipts drive completion", () => {
       committed_at: nonce.settle_until + MIN,
       rows_deleted: 4,
       rows_remaining: 0,
+      delete_mode: "copy_on_write",
+      affected_files_digest: await filesDigest(digest),
+      affected_files: 2,
     };
     const key = { appId, caseId, purgeGeneration: 1 };
     for (let i = 0; i < 20; i++) {
@@ -802,5 +836,283 @@ describe("database invariants and audit hygiene", () => {
       "CALL r2dc.system.remove_orphan_files(table => 'flightdeck.lifecycle_events')",
     );
     expect(() => deleteStatement("x; DROP TABLE y")).toThrow("invalid_iceberg_identifier");
+  });
+});
+
+describe("physical contract: merge-on-read, file removal and the cleanup deadline", () => {
+  async function chain(
+    appId: string,
+    opts: Parameters<typeof syntheticRunner>[0] extends infer O ? Partial<O> : never,
+  ) {
+    const { caseId } = await seed(appId);
+    const { runner, calls } = syntheticRunner({ signer, now, ...opts });
+    const d = deps({ executor: runner });
+    await requestErasure(d, OP, { appId, caseId, reason: "subject_request" });
+    await pass(d, appId, caseId);
+    return { d, caseId, calls };
+  }
+
+  it("a merge-on-read delete completes only with a separate rewrite after it", async () => {
+    const { d, caseId } = await chain("app_mor_ok", { deleteMode: "merge_on_read" });
+    const job = await pass(d, "app_mor_ok", caseId, 1, 90);
+    expect(job).toMatchObject({ stage: "complete", proof: "physical_verified" });
+    expect(
+      (
+        await rows(
+          "SELECT logical_delete_mode AS m FROM lifecycle_erasure_jobs WHERE app_id = 'app_mor_ok'",
+        )
+      )[0]?.m,
+    ).toBe("merge_on_read");
+  });
+
+  it("a merge-on-read delete never completes when the rewrite is the DELETE itself", async () => {
+    const { d, caseId } = await chain("app_mor_norewrite", {
+      deleteMode: "merge_on_read",
+      tamperPhysical: (req) => ({ materialized_at: req.deleteCommittedAt }),
+    });
+    const job = await pass(d, "app_mor_norewrite", caseId, 1, 90);
+    expect(job).toMatchObject({
+      stage: "files_cleanup_pending",
+      proof: "logical_only",
+      last_error_code: "receipt_not_materialized",
+    });
+  });
+
+  it("zero visible rows and removed orphans are not enough while the original files remain", async () => {
+    const { d, caseId } = await chain("app_mor_files", {
+      deleteMode: "merge_on_read",
+      affectedFilesRemaining: 1,
+      deleteFilesApplying: 1,
+    });
+    expect(await pass(d, "app_mor_files", caseId, 1, 90)).toMatchObject({
+      stage: "files_cleanup_pending",
+      last_error_code: "receipt_files_remain",
+    });
+  });
+
+  it("expiration must postdate the rewrite, not only the DELETE", async () => {
+    const { d, caseId } = await chain("app_mor_expiry", {
+      deleteMode: "merge_on_read",
+      tamperPhysical: (req) => ({ expired_before: req.deleteCommittedAt }),
+    });
+    expect((await pass(d, "app_mor_expiry", caseId, 1, 90))?.last_error_code).toBe(
+      "receipt_snapshots_retained",
+    );
+  });
+
+  it("an out-of-band physical receipt cannot skip the cleanup delay, and is accepted after it", async () => {
+    const appId = "app_deadline";
+    const { caseId } = await seed(appId);
+    const d = deps();
+    await requestErasure(d, OP, { appId, caseId, reason: "subject_request" });
+    clock += 30 * MIN;
+    const j = (
+      await rows("SELECT nonce, settle_until FROM lifecycle_erasure_jobs WHERE app_id = ?", appId)
+    )[0] as { nonce: string; settle_until: number };
+    const digest = await caseDigest(appId, caseId);
+    const base = {
+      v: 1,
+      app_id: appId,
+      case_digest: digest,
+      purge_generation: 1,
+      nonce: j.nonce,
+      table: TABLE,
+    };
+    const key = { appId, caseId, purgeGeneration: 1 };
+    const committed = j.settle_until + MIN;
+    clock = committed + MIN;
+    const logical = await signer.sign({
+      ...base,
+      kind: "logical_delete",
+      issued_at: clock,
+      predicate: "digest_v1",
+      snapshot_id: "9000000000000000003",
+      committed_at: committed,
+      rows_deleted: 1,
+      rows_remaining: 0,
+      delete_mode: "copy_on_write",
+      affected_files_digest: await filesDigest(digest),
+      affected_files: 1,
+    });
+    expect((await submitReceipt(d, OP, { ...key, receipt: logical })).accepted).toBe(true);
+    const row = (
+      await rows(
+        "SELECT logical_receipt_checksum AS c, cleanup_not_before AS n FROM lifecycle_erasure_jobs WHERE app_id = ?",
+        appId,
+      )
+    )[0] as { c: string; n: number };
+    expect(row.n).toBe(committed + 60 * MIN);
+    const physical = async (at: number) =>
+      signer.sign({
+        ...base,
+        kind: "physical_cleanup",
+        issued_at: at,
+        logical_receipt_checksum: row.c,
+        snapshot_id: "9000000000000000003",
+        delete_mode: "copy_on_write",
+        affected_files_digest: await filesDigest(digest),
+        materialized_at: committed,
+        affected_files_remaining: 0,
+        delete_files_applying: 0,
+        expired_at: at,
+        expired_before: committed,
+        oldest_retained_committed_at: committed,
+        retained_snapshots_with_rows: 0,
+        orphans_removed_at: at,
+      });
+    // Early: operation times before the deadline, and the submission itself is early.
+    expect(await submitReceipt(d, OP, { ...key, receipt: await physical(clock) })).toEqual({
+      accepted: false,
+      code: "receipt_before_cleanup_deadline",
+    });
+    // A receipt claiming the work happened after the deadline, submitted before it, is also refused.
+    expect(
+      await submitReceipt(d, OP, { ...key, receipt: await physical(row.n + 10 * MIN) }),
+    ).toMatchObject({ accepted: false });
+    expect((await getJob(env.DB, OP, appId, caseId))?.stage).toBe("files_cleanup_pending");
+    clock = row.n + 20 * MIN;
+    expect(
+      (await submitReceipt(d, OP, { ...key, receipt: await physical(row.n + 10 * MIN) })).accepted,
+    ).toBe(true);
+    expect((await getJob(env.DB, OP, appId, caseId))?.stage).toBe("complete");
+  });
+});
+
+describe("completion requires the local fences to hold", () => {
+  async function toCleanup(appId: string) {
+    const { caseId } = await seed(appId);
+    const { runner } = syntheticRunner({ signer, now });
+    const d = deps({ executor: runner });
+    await requestErasure(d, OP, { appId, caseId, reason: "subject_request" });
+    await pass(d, appId, caseId);
+    return { d, caseId, served: await servingId(caseId) };
+  }
+
+  it.each([
+    [
+      "residue written back by an in-flight projection",
+      (a: string, c: string) =>
+        env.DB.prepare(
+          "INSERT INTO lifecycle_projection_diagnostics (app_id, case_id, code, count, updated_at) VALUES (?, ?, 'late', 1, 0)",
+        )
+          .bind(a, c)
+          .run(),
+    ],
+    [
+      "a requeued case",
+      (a: string, c: string) =>
+        env.DB.prepare(
+          "INSERT INTO lifecycle_projection_queue (app_id, case_id, enqueued_seq, next_attempt_at) VALUES (?, ?, 1, 0)",
+        )
+          .bind(a, c)
+          .run(),
+    ],
+    [
+      "a lost ingest tombstone",
+      (a: string, c: string) =>
+        env.DB.prepare("DELETE FROM lifecycle_case_tombstones WHERE app_id = ? AND case_id = ?")
+          .bind(a, c)
+          .run(),
+    ],
+    [
+      "a lost serving tombstone",
+      (a: string, c: string) =>
+        servingId(c).then((sv) =>
+          env.DB.prepare(
+            "DELETE FROM lifecycle_snapshot_tombstones WHERE app_id = ? AND case_id = ?",
+          )
+            .bind(a, sv)
+            .run(),
+        ),
+    ],
+    [
+      "a restored serving tombstone",
+      (a: string, c: string) =>
+        servingId(c).then((sv) =>
+          env.DB.prepare(
+            "UPDATE lifecycle_snapshot_tombstones SET restored_at = 1 WHERE app_id = ? AND case_id = ?",
+          )
+            .bind(a, sv)
+            .run(),
+        ),
+    ],
+  ])("re-hides and refuses to complete after %s", async (name, breakIt) => {
+    const appId = `app_gate_${name.replace(/\W+/g, "_")}`.slice(0, 60);
+    const { d, caseId, served } = await toCleanup(appId);
+    await breakIt(appId, caseId);
+    const first = await pass(d, appId, caseId, 1, 90);
+    expect(first).toMatchObject({
+      stage: "files_cleanup_pending",
+      proof: "logical_only",
+      last_error_code: "local_fence_broken",
+    });
+    expect(
+      await rows(
+        "SELECT * FROM lifecycle_projection_diagnostics WHERE app_id = ? AND case_id = ?",
+        appId,
+        caseId,
+      ),
+    ).toEqual([]);
+    expect(
+      await rows(
+        "SELECT * FROM lifecycle_projection_queue WHERE app_id = ? AND case_id = ?",
+        appId,
+        caseId,
+      ),
+    ).toEqual([]);
+    expect(
+      await rows(
+        "SELECT restored_at FROM lifecycle_snapshot_tombstones WHERE app_id = ? AND case_id = ?",
+        appId,
+        served,
+      ),
+    ).toEqual([{ restored_at: null }]);
+    expect(
+      await count(
+        "SELECT count(*) AS n FROM lifecycle_case_tombstones WHERE app_id = ? AND case_id = ?",
+        appId,
+        caseId,
+      ),
+    ).toBe(1);
+    // With the fences back, the next attempt completes.
+    expect((await pass(d, appId, caseId, 1, 90))?.stage).toBe("complete");
+  });
+});
+
+describe("outbox writer fence", () => {
+  it("writes no claims while erasure is off (existing behavior unchanged)", async () => {
+    const appId = "app_fence_off";
+    await seed(appId);
+    vi.spyOn(sinks, "lifecycle").mockResolvedValue();
+    // The batch takes the oldest pending rows of every app, so drain until ours are sent.
+    while ((await forwardOutbox(env, Date.now())).sent > 0);
+    expect(
+      await count("SELECT count(*) AS n FROM lifecycle_forward_claims WHERE app_id = ?", appId),
+    ).toBe(0);
+    expect(
+      await count(
+        "SELECT count(*) AS n FROM lifecycle_event_log WHERE app_id = ? AND forwarded_at IS NOT NULL",
+        appId,
+      ),
+    ).toBeGreaterThan(0);
+  });
+
+  it("a claim whose sender died stops blocking once its lease has expired", async () => {
+    const appId = "app_fence_dead";
+    const { caseId } = await seed(appId);
+    const d = deps({ executor: syntheticRunner({ signer, now }).runner });
+    await env.DB.prepare(
+      "INSERT INTO lifecycle_forward_claims (claim_id, app_id, case_id, claimed_at, lease_until) VALUES ('dead', ?, ?, ?, ?)",
+    )
+      .bind(appId, caseId, clock, clock + 40 * MIN)
+      .run();
+    await requestErasure(d, OP, { appId, caseId, reason: "subject_request" });
+    // Past the settle window (15 min) but inside the sender's 40 min lease: held.
+    expect((await pass(d, appId, caseId, 1, 16))?.last_error_code).toBe("forward_in_flight");
+    // Lease expiry (40 min) + drain bound (15 min), then the job moves on and completes.
+    let job = await pass(d, appId, caseId, 1, 20);
+    for (let i = 0; i < 20 && job?.stage !== "complete"; i++)
+      job = await pass(d, appId, caseId, 1, 30);
+    expect(job?.stage).toBe("complete");
   });
 });

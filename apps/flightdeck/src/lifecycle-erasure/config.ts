@@ -54,6 +54,12 @@ export type ErasureConfig = {
   table: string;
   /** Wait after the request before the Iceberg DELETE: lets in-flight Pipelines writes land. */
   settleMs: number;
+  /**
+   * Assumed upper bound on Pipelines delivery after a send returns. The Iceberg DELETE is only
+   * accepted this long after the last send for the case was released (or its lease expired).
+   * An assumption, not a measurement: see the gates in the playbook.
+   */
+  drainMs: number;
   /** Minimum wait between the verified DELETE and snapshot expiration. */
   cleanupDelayMs: number;
   /** Jobs older than this and not complete are reported overdue. */
@@ -71,6 +77,13 @@ export function erasureConfig(env: object): ErasureConfig {
   const settleMs = integer(
     vars,
     "LIFECYCLE_ERASURE_SETTLE_MS",
+    { min: 2 * MINUTE, max: DAY },
+    problems,
+    15 * MINUTE,
+  );
+  const drainMs = integer(
+    vars,
+    "LIFECYCLE_ERASURE_DRAIN_MS",
     { min: 2 * MINUTE, max: DAY },
     problems,
     15 * MINUTE,
@@ -100,6 +113,7 @@ export function erasureConfig(env: object): ErasureConfig {
     problems,
     table,
     settleMs: settleMs ?? 15 * MINUTE,
+    drainMs: drainMs ?? 15 * MINUTE,
     cleanupDelayMs: cleanupDelayMs ?? HOUR,
     overdueMs: overdueMs ?? 30 * DAY,
     policyVersion,

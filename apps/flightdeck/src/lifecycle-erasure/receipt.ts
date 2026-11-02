@@ -11,9 +11,15 @@ import { canonical } from "../lifecycle-projection/identity";
  * or generation, and the two kinds are not interchangeable:
  *
  *   logical_delete    an Iceberg DELETE committed a snapshot and the current snapshot holds no
- *                     matching rows. Data files for older snapshots STILL EXIST (time travel).
- *   physical_cleanup  snapshots predating the DELETE were expired, no retained snapshot holds
- *                     matching rows, and orphan files were removed.
+ *                     matching rows. The data files that held them STILL EXIST: older snapshots
+ *                     (time travel) reference them, and a merge-on-read DELETE leaves the
+ *                     original bytes in place behind a delete file.
+ *   physical_cleanup  the bytes are gone: the DELETE was materialized (copy-on-write, or a
+ *                     rewrite after a merge-on-read delete), every data file that held the rows
+ *                     (identified by the digest recorded at DELETE time) is absent from every
+ *                     retained snapshot and from storage, no delete file still applies, older
+ *                     snapshots were expired and orphan files removed, each after the cleanup
+ *                     deadline. Zero query-visible rows plus orphan removal is NOT enough.
  *
  * Verifying a receipt proves only that the runner attested to it. Whether the runner really did
  * the work is an external trust assumption, documented in docs/operations/lifecycle-erasure-retention.md.
@@ -40,6 +46,8 @@ const common = {
   issued_at: ms,
 };
 
+const deleteMode = v.picklist(["copy_on_write", "merge_on_read"]);
+
 export const LogicalReceipt = v.strictObject({
   ...common,
   kind: v.literal("logical_delete"),
@@ -50,6 +58,10 @@ export const LogicalReceipt = v.strictObject({
   rows_deleted: count,
   /** Rows matching the identity in the CURRENT snapshot after the DELETE. Must be 0. */
   rows_remaining: count,
+  delete_mode: deleteMode,
+  /** sha256 of the newline-joined sorted paths of the data files that held the rows, read BEFORE the DELETE. */
+  affected_files_digest: hex64,
+  affected_files: count,
 });
 
 export const PhysicalReceipt = v.strictObject({
@@ -58,23 +70,38 @@ export const PhysicalReceipt = v.strictObject({
   logical_receipt_checksum: hex64,
   /** The DELETE snapshot this cleanup is relative to. */
   snapshot_id: v.pipe(v.string(), v.regex(/^[0-9a-zA-Z_-]{1,40}$/)),
-  /** Snapshots committed before this instant were expired. */
+  delete_mode: deleteMode,
+  /** Must equal the digest recorded in the logical receipt: the same files, not just the same count. */
+  affected_files_digest: hex64,
+  /** Commit of the rewrite that dropped the deleted bytes (the DELETE itself for copy-on-write). */
+  materialized_at: ms,
+  /** Of the recorded files, how many still exist in a retained snapshot or in storage. Must be 0. */
+  affected_files_remaining: count,
+  /** Position/equality delete files still applying to the table's retained snapshots for this app. Must be 0. */
+  delete_files_applying: count,
+  /** When snapshots committed before `expired_before` were expired. */
+  expired_at: ms,
   expired_before: ms,
   /** Commit time of the oldest snapshot still retained. */
   oldest_retained_committed_at: ms,
   /** Retained snapshots (time travel) that still contain a matching row. Must be 0. */
   retained_snapshots_with_rows: count,
-  orphan_files_removed: v.boolean(),
+  /** When orphan files were removed. */
+  orphans_removed_at: ms,
 });
 
 export const ReconciliationAttestation = v.strictObject({
   v: v.literal(1),
   kind: v.literal("basin_reconciliation"),
   app_id: token,
-  /** Basin was confirmed to hold every D1 log row of the app with seq <= through_seq. */
+  /** The range covered is (after_seq, through_seq]. */
+  after_seq: count,
   through_seq: count,
-  /** Number of such rows (checked against D1 at record time). */
+  /** Highest log seq ever allocated when the attestation was taken. through_seq cannot exceed it. */
+  allocated_seq: count,
+  /** Number of the app's log rows in the range, and a digest of exactly those rows (see rowsDigest). */
   event_count: count,
+  rows_digest: hex64,
   issued_at: ms,
 });
 
@@ -161,7 +188,15 @@ export type ReceiptCode =
   | "receipt_logical_missing"
   | "receipt_snapshots_retained"
   | "receipt_orphans_not_removed"
-  | "receipt_reconciliation_mismatch";
+  | "receipt_reconciliation_mismatch"
+  | "receipt_reconciliation_future"
+  | "receipt_reconciliation_gap"
+  | "receipt_files_remain"
+  | "receipt_not_materialized"
+  | "receipt_delete_mode_mismatch"
+  | "receipt_wrong_files"
+  | "receipt_before_cleanup_deadline"
+  | "receipt_out_of_order";
 
 /**
  * Parses and authenticates a signed receipt of one kind. Order matters: shape first (so the
@@ -211,6 +246,9 @@ export type JobBinding = {
   logicalSnapshotId: string | null;
   logicalCommittedAt: number | null;
   logicalReceiptChecksum: string | null;
+  logicalDeleteMode: "copy_on_write" | "merge_on_read" | null;
+  logicalAffectedDigest: string | null;
+  cleanupNotBefore: number | null;
 };
 
 const bound = (
@@ -233,7 +271,8 @@ export function checkLogical(
   if (r.issued_at > now + FUTURE_SKEW_MS || r.committed_at > now + FUTURE_SKEW_MS) {
     return "receipt_from_future";
   }
-  // A DELETE before the settle window may miss rows still in flight to Basin.
+  // The DELETE must commit after the writer fence and drain: an earlier one can miss rows that
+  // were still on their way to Basin.
   if (
     job.settleUntil === null ||
     r.committed_at < job.settleUntil ||
@@ -253,24 +292,51 @@ export function checkPhysical(
 ): ReceiptCode | null {
   if (!bound(r, job)) return "receipt_wrong_job";
   if (r.table !== expectedTable) return "receipt_wrong_table";
-  if (!job.logicalReceiptChecksum || job.logicalCommittedAt === null)
+  if (
+    !job.logicalReceiptChecksum ||
+    job.logicalCommittedAt === null ||
+    job.cleanupNotBefore === null ||
+    !job.logicalDeleteMode ||
+    !job.logicalAffectedDigest
+  ) {
     return "receipt_logical_missing";
+  }
   if (
     r.logical_receipt_checksum !== job.logicalReceiptChecksum ||
     r.snapshot_id !== job.logicalSnapshotId
   ) {
     return "receipt_wrong_snapshot";
   }
+  if (r.delete_mode !== job.logicalDeleteMode) return "receipt_delete_mode_mismatch";
+  if (r.affected_files_digest !== job.logicalAffectedDigest) return "receipt_wrong_files";
   if (r.issued_at > now + FUTURE_SKEW_MS) return "receipt_from_future";
-  // Every snapshot from before the DELETE must be gone, or time travel can still read the rows.
+  // Operation times, not just the signing time: the work itself must have happened after the
+  // configured cleanup deadline, in order, and no later than the receipt.
+  if (r.expired_at < job.cleanupNotBefore || r.orphans_removed_at < job.cleanupNotBefore) {
+    return "receipt_before_cleanup_deadline";
+  }
   if (
-    r.issued_at < job.logicalCommittedAt ||
-    r.expired_before < job.logicalCommittedAt ||
-    r.oldest_retained_committed_at < job.logicalCommittedAt ||
+    r.materialized_at < job.logicalCommittedAt ||
+    r.materialized_at > r.expired_at ||
+    r.expired_at > r.orphans_removed_at ||
+    r.orphans_removed_at > r.issued_at
+  ) {
+    return "receipt_out_of_order";
+  }
+  // Merge-on-read leaves the deleted bytes in the original data file behind a delete file. It is
+  // only physically gone after a rewrite that is a separate commit after the DELETE.
+  if (job.logicalDeleteMode === "merge_on_read" && r.materialized_at <= job.logicalCommittedAt) {
+    return "receipt_not_materialized";
+  }
+  if (r.affected_files_remaining !== 0 || r.delete_files_applying !== 0)
+    return "receipt_files_remain";
+  // Every snapshot that still references the pre-materialization files must be gone.
+  if (
+    r.expired_before < r.materialized_at ||
+    r.oldest_retained_committed_at < r.materialized_at ||
     r.retained_snapshots_with_rows !== 0
   ) {
     return "receipt_snapshots_retained";
   }
-  if (!r.orphan_files_removed) return "receipt_orphans_not_removed";
   return null;
 }

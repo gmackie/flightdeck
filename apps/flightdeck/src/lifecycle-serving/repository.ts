@@ -152,11 +152,19 @@ export class LifecycleSnapshotRepository {
   async commitRebuild(
     appId: string,
     provenance: Provenance,
+    /**
+     * Served case ids to carry over untouched: cases whose source evidence no longer exists
+     * (retired by retention), so a rebuild cannot recompute them. They and the definitions they
+     * use stay visible; every other row follows the usual replace/supersede rules.
+     */
+    preserve: readonly string[] = [],
   ): Promise<{ superseded_cases: number; superseded_definitions: number }> {
     const p = parseInput(Provenance, provenance);
     const now = this.now();
     const gen = p.generation;
     const active = `EXISTS (SELECT 1 FROM ${STATE} WHERE app_id = ? AND building_generation = ?)`;
+    const kept = JSON.stringify(preserve);
+    const isKept = "(SELECT value FROM json_each(?))";
     const results = await this.db.batch([
       this.db
         .prepare(
@@ -188,22 +196,31 @@ export class LifecycleSnapshotRepository {
         .prepare(
           `UPDATE ${CASES} SET deleted_at = ?, deleted_reason = 'superseded'
            WHERE app_id = ? AND generation < ? AND deleted_at IS NULL AND ${active}
+             AND case_id NOT IN ${isKept}
              AND NOT EXISTS (SELECT 1 FROM ${CASES}_staging t WHERE t.app_id = ${CASES}.app_id
                AND t.case_id = ${CASES}.case_id AND t.generation = ?)`,
         )
-        .bind(now, appId, gen, appId, gen, gen),
+        .bind(now, appId, gen, appId, gen, kept, gen),
       this.db
         .prepare(
           `UPDATE ${DEFINITIONS} SET deleted_at = ?, deleted_reason = 'superseded'
            WHERE app_id = ? AND generation < ? AND deleted_at IS NULL AND ${active}
              AND NOT EXISTS (SELECT 1 FROM ${DEFINITIONS}_staging t WHERE t.app_id = ${DEFINITIONS}.app_id
-               AND t.process_key = ${DEFINITIONS}.process_key AND t.version = ${DEFINITIONS}.version AND t.generation = ?)`,
+               AND t.process_key = ${DEFINITIONS}.process_key AND t.version = ${DEFINITIONS}.version AND t.generation = ?)
+             AND NOT EXISTS (SELECT 1 FROM ${CASES} k WHERE k.app_id = ${DEFINITIONS}.app_id
+               AND k.process_key = ${DEFINITIONS}.process_key AND k.process_version = ${DEFINITIONS}.version
+               AND k.deleted_at IS NULL AND k.case_id IN ${isKept})`,
         )
-        .bind(now, appId, gen, appId, gen, gen),
-      ...[INTERVALS, EDGES].map((table) =>
+        .bind(now, appId, gen, appId, gen, gen, kept),
+      ...[
+        [INTERVALS, "case_id"],
+        [EDGES, "from_case_id"],
+      ].map(([table, owner]) =>
         this.db
-          .prepare(`DELETE FROM ${table} WHERE app_id = ? AND ${active}`)
-          .bind(appId, appId, gen),
+          .prepare(
+            `DELETE FROM ${table} WHERE app_id = ? AND ${active} AND ${owner} NOT IN ${isKept}`,
+          )
+          .bind(appId, appId, gen, kept),
       ),
       ...[CASES, DEFINITIONS, INTERVALS, EDGES].map((table) =>
         this.db
