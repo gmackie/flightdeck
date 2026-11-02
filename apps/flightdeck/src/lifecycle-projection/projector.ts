@@ -130,9 +130,11 @@ export class LifecycleProjector {
       await this.db
         .prepare(
           `DELETE FROM ${QUEUE} WHERE app_id = ? AND enqueued_seq <= ?
-         AND case_id IN (SELECT value FROM json_each(?))`,
+         AND case_id IN (SELECT value FROM json_each(?))
+         AND EXISTS (SELECT 1 FROM lifecycle_projection_state
+           WHERE app_id = ? AND active_generation = ? AND building_generation IS NULL)`,
         )
-        .bind(appId, watermark, JSON.stringify(covered))
+        .bind(appId, watermark, JSON.stringify(covered), appId, generation)
         .run();
       await this.advance(appId);
       return totals;
@@ -174,13 +176,14 @@ export class LifecycleProjector {
       await this.db
         .prepare(
           `INSERT INTO ${QUEUE} (app_id, case_id, enqueued_seq, attempts, next_attempt_at)
-         VALUES (?, ?, ?, 0, ?)
+         SELECT ?, ?, ?, 0, ?
+         WHERE EXISTS (SELECT 1 FROM ${LOG} WHERE app_id = ? AND case_id = ?)
          ON CONFLICT (app_id, case_id) DO UPDATE SET
            enqueued_seq = max(enqueued_seq, excluded.enqueued_seq),
            next_attempt_at = CASE WHEN enqueued_seq <= excluded.enqueued_seq
              THEN excluded.next_attempt_at ELSE next_attempt_at END`,
         )
-        .bind(appId, caseId, maxSeq, eligible)
+        .bind(appId, caseId, maxSeq, eligible, appId, caseId)
         .run();
     }
     const records = rows.filter((r) => r.record.occurred_at <= asOf).map((r) => r.record);
@@ -206,13 +209,24 @@ export class LifecycleProjector {
         servingDefinition(adapted.facts.definition),
         provenance,
       );
-      await this.repo.upsertCase(appId, mapped.snapshot, provenance);
-      outcome = "projected";
+      const written = await this.repo.upsertCase(appId, mapped.snapshot, provenance, caseId);
+      if (written === "stale")
+        throw new SnapshotRejected("generation", "case write was not persisted");
+      outcome = written === "written" ? "projected" : "removed";
     } else if (adapted.facts) {
       // Evidence no longer yields a servable case (e.g. its start was retracted): hide it.
-      await this.repo.hideCase(appId, await servingId(caseId), provenance);
+      const written = await this.repo.hideCase(appId, await servingId(caseId), provenance);
+      if (written === "stale")
+        throw new SnapshotRejected("generation", "case removal was not persisted");
     }
-    await this.finish(appId, caseId, maxSeq, mapped.diagnostics, acknowledge && !future.length);
+    await this.finish(
+      appId,
+      caseId,
+      maxSeq,
+      mapped.diagnostics,
+      acknowledge && !future.length,
+      generation,
+    );
     return future.length ? "deferred" : outcome;
   }
 
@@ -223,6 +237,7 @@ export class LifecycleProjector {
     seq: number,
     diagnostics: Map<string, number>,
     acknowledge: boolean,
+    generation: number,
   ): Promise<void> {
     const now = this.now();
     await this.db.batch([
@@ -233,15 +248,18 @@ export class LifecycleProjector {
         this.db
           .prepare(
             `INSERT INTO ${DIAGNOSTICS} (app_id, case_id, code, count, updated_at)
-             VALUES (?, ?, ?, ?, ?)`,
+             SELECT ?, ?, ?, ?, ? WHERE NOT EXISTS
+               (SELECT 1 FROM lifecycle_case_tombstones WHERE app_id = ? AND case_id = ?)`,
           )
-          .bind(appId, caseId, code, count, now),
+          .bind(appId, caseId, code, count, now, appId, caseId),
       ),
       this.db
         .prepare(
-          `DELETE FROM ${QUEUE} WHERE app_id = ? AND case_id = ? AND enqueued_seq <= ? AND ?`,
+          `DELETE FROM ${QUEUE} WHERE app_id = ? AND case_id = ? AND enqueued_seq <= ? AND ?
+           AND EXISTS (SELECT 1 FROM lifecycle_projection_state
+             WHERE app_id = ? AND active_generation = ? AND building_generation IS NULL)`,
         )
-        .bind(appId, caseId, seq, acknowledge ? 1 : 0),
+        .bind(appId, caseId, seq, acknowledge ? 1 : 0, appId, generation),
     ]);
   }
 
@@ -253,11 +271,21 @@ export class LifecycleProjector {
     await this.db
       .prepare(
         `INSERT INTO ${QUEUE} (app_id, case_id, enqueued_seq, attempts, next_attempt_at,
-           last_error_code) VALUES (?, ?, ?, ?, ?, ?)
+           last_error_code) SELECT ?, ?, ?, ?, ?, ?
+         WHERE EXISTS (SELECT 1 FROM ${LOG} WHERE app_id = ? AND case_id = ?)
          ON CONFLICT (app_id, case_id) DO UPDATE SET attempts = excluded.attempts,
            next_attempt_at = excluded.next_attempt_at, last_error_code = excluded.last_error_code`,
       )
-      .bind(appId, caseId, top?.seq ?? 0, attempts, this.now() + backoff(attempts), code)
+      .bind(
+        appId,
+        caseId,
+        top?.seq ?? 0,
+        attempts,
+        this.now() + (code === "snapshot_generation" ? 0 : backoff(attempts)),
+        code,
+        appId,
+        caseId,
+      )
       .run();
   }
 

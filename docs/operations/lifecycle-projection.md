@@ -32,6 +32,7 @@ evidence log → replay engine (FLIG-16) → serving tables (FLIG-21) → read A
    one D1 batch transaction publishes all four tables and their generation metadata.
    `LifecycleProjector.rebuild(appId)` repeats that on demand (for example after bumping
    `REDUCER_VERSION`). Rebuild queue entries are acknowledged only after publication succeeds.
+   Publication rechecks current tombstones and the durable retention cutoff before activation.
 5. A cron (`*/5 * * * *`, `src/lifecycle-projection/schedule.ts`) retries due projection work
    and forwards pending outbox rows.
 
@@ -82,6 +83,9 @@ an error code (`projection_error`, `snapshot_invalid`, `snapshot_cycle`, `snapsh
 One bad case never blocks the rest of its app, or a rebuild (during a rebuild it is hidden
 until its retry succeeds). A queue entry is only cleared if
 the projection covered the newest event for that case.
+Stale or refused generation writes stay queued for retry. Acknowledgement also checks the
+intended active generation inside the D1 transaction, so a rebuild starting after persistence
+cannot let an old drain acknowledge evidence for the new generation.
 
 Accepted future-dated evidence remains queued until its occurrence time. Eligible history is
 still projected, but the case is not acknowledged until all its evidence is eligible. The
@@ -102,6 +106,10 @@ case's evidence, queue entry, diagnostics and served rows, and records a tombsto
 deliveries or backfills of that case are accepted but never stored, forwarded or projected
 (counted as `erased_case_event`). This holds even if the erasure comes before the case was ever
 projected, which closes the serving model's tombstone-before-first-projection gap for this path.
+The same transaction writes a `source_erased` serving tombstone using the mapped case id.
+Persistence also checks the source tombstone using the original producer id. These fences
+refuse in-flight replays even if their evidence was loaded before erasure; serving-only restore
+cannot lift a source erasure.
 **Not covered by `eraseCase`:** rows already forwarded to Basin. A rebuild from Basin must consult
 `lifecycle_case_tombstones`. Basin-side deletion is tracked by the erasure job protocol (default
 off, receipt-gated, nothing verified against a real catalog) in

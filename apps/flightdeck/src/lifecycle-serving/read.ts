@@ -144,56 +144,59 @@ export async function caseDetail(
   appId: string,
   caseId: string,
 ): Promise<CaseDetail | null> {
-  const row = await db
-    .prepare(
-      `SELECT ${SUMMARY_COLUMNS}, generation, source_watermark, reducer_version, as_of
-       FROM ${CASES} WHERE app_id = ? AND case_id = ? AND deleted_at IS NULL`,
-    )
-    .bind(appId, caseId)
-    .first<CaseSummary & CaseDetail["provenance"]>();
-  if (!row) return null;
-  const { generation, source_watermark, reducer_version, as_of, ...summary } = row;
+  // D1 batches execute in one transaction: summary, metadata, intervals and links all
+  // observe the same publication (and the same incremental update or erasure).
   // Relations to deleted (or never projected) cases are hidden rather than dangling.
   const live = (column: string) => `EXISTS (SELECT 1 FROM ${CASES} c WHERE c.app_id = e.app_id
     AND c.case_id = e.${column} AND c.deleted_at IS NULL)`;
-  const [intervals, parent, children, outgoing, incoming] = await db.batch<Record<string, unknown>>(
-    [
-      db
-        .prepare(
-          `SELECT stage_key, state, entered_at, exited_at, outcome FROM lifecycle_stage_intervals
+  const [record, intervals, parent, children, outgoing, incoming] = await db.batch<
+    Record<string, unknown>
+  >([
+    db
+      .prepare(
+        `SELECT ${SUMMARY_COLUMNS}, generation, source_watermark, reducer_version, as_of
+       FROM ${CASES} WHERE app_id = ? AND case_id = ? AND deleted_at IS NULL`,
+      )
+      .bind(appId, caseId),
+    db
+      .prepare(
+        `SELECT stage_key, state, entered_at, exited_at, outcome FROM lifecycle_stage_intervals
          WHERE app_id = ? AND case_id = ? ORDER BY seq`,
-        )
-        .bind(appId, caseId),
-      db
-        .prepare(
-          `SELECT ${SUMMARY_COLUMNS} FROM ${CASES}
-         WHERE app_id = ? AND case_id = ? AND deleted_at IS NULL`,
-        )
-        .bind(appId, summary.parent_case_id ?? ""),
-      db
-        .prepare(
-          `SELECT ${SUMMARY_COLUMNS} FROM ${CASES}
+      )
+      .bind(appId, caseId),
+    db
+      .prepare(
+        `SELECT ${SUMMARY_COLUMNS} FROM ${CASES}
+         WHERE app_id = ? AND case_id = (SELECT parent_case_id FROM ${CASES}
+           WHERE app_id = ? AND case_id = ? AND deleted_at IS NULL) AND deleted_at IS NULL`,
+      )
+      .bind(appId, appId, caseId),
+    db
+      .prepare(
+        `SELECT ${SUMMARY_COLUMNS} FROM ${CASES}
          WHERE app_id = ? AND parent_case_id = ? AND deleted_at IS NULL
          ORDER BY started_at DESC, case_id DESC LIMIT ?`,
-        )
-        .bind(appId, caseId, MAX_CHILDREN + 1),
-      db
-        .prepare(
-          `SELECT relation, to_case_id AS case_id FROM lifecycle_case_edges e
+      )
+      .bind(appId, caseId, MAX_CHILDREN + 1),
+    db
+      .prepare(
+        `SELECT relation, to_case_id AS case_id FROM lifecycle_case_edges e
          WHERE app_id = ? AND from_case_id = ? AND ${live("to_case_id")}
          ORDER BY relation, to_case_id`,
-        )
-        .bind(appId, caseId),
-      db
-        .prepare(
-          `SELECT relation, from_case_id AS case_id FROM lifecycle_case_edges e
+      )
+      .bind(appId, caseId),
+    db
+      .prepare(
+        `SELECT relation, from_case_id AS case_id FROM lifecycle_case_edges e
          WHERE app_id = ? AND to_case_id = ? AND ${live("from_case_id")}
          ORDER BY relation, from_case_id LIMIT ?`,
-        )
-        .bind(appId, caseId, MAX_INCOMING + 1),
-    ],
-  );
+      )
+      .bind(appId, caseId, MAX_INCOMING + 1),
+  ]);
   const rows = <T>(r: D1Result<Record<string, unknown>> | undefined) => (r?.results ?? []) as T[];
+  const row = rows<CaseSummary & CaseDetail["provenance"]>(record)[0];
+  if (!row) return null;
+  const { generation, source_watermark, reducer_version, as_of, ...summary } = row;
   const kids = rows<CaseSummary>(children);
   const inbound = rows<{ relation: string; case_id: string }>(incoming);
   const parentRow = rows<CaseSummary>(parent)[0] ?? null;
