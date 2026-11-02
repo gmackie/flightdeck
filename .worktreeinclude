@@ -1,0 +1,4 @@
+# Ignored state inherited into new Worktrunk worktrees (wt step copy-ignored --require-include).
+# Warm dependency/build state only; never secrets (.dev.vars stays out).
+node_modules/
+dist/
