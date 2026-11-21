@@ -29,7 +29,7 @@ stages:
     targets:
       - name: worker
         platform: cloudflare-workers
-        nodeId: 9e73e056-399b-4900-9b10-6ede023f2adc  # hetzner-build runs the deploy
+        nodeId: 9e73e056-399b-4900-9b10-6ede023f2adc # hetzner-build runs the deploy
         config:
           workerName: flightdeck
           appDir: apps/flightdeck
