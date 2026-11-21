@@ -1,0 +1,64 @@
+# Flightdeck CI on ForgeGraph's copy (git.forgegraf.com/gmackie/flightdeck), FLIG-49. Forgejo
+# ignores .github/workflows when this directory exists, so this workflow is all that runs there.
+# GitHub (gmackie/flightdeck, the repository authority) still runs .github/workflows.
+#
+# The last step reports this run's real verdict to ForgeGraph (docs: CI_REPORTING.md in
+# ForgeGraph). The deploy's CI gate needs every pipeline on the exact commit to have passed,
+# and Forgejo does not deliver workflow_run completions itself. FORGEGRAPH_TOKEN comes from
+# `forge ci provision`.
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter @flightdeckhq/browser --if-present size
+      - run: pnpm smoke:pack
+
+      - name: Report CI result to ForgeGraph
+        if: always()
+        env:
+          FG_CI_TOKEN: ${{ secrets.FORGEGRAPH_TOKEN }}
+          JOB_STATUS: ${{ job.status }}
+          REPO_FULL: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+          # run_id (action_run.id) is the identity ForgeGraph tracks; the UI URL uses run_number.
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_number }}
+        run: |
+          if [ -z "${FG_CI_TOKEN}" ]; then
+            echo "::error::FORGEGRAPH_TOKEN is not set; run forge ci provision"
+            exit 1
+          fi
+          case "${JOB_STATUS}" in
+            success) STATUS=success ;;
+            cancelled) STATUS=cancelled ;;
+            *) STATUS=failure ;;
+          esac
+          export STATUS
+          node -e '
+            const e = process.env;
+            const [owner, repo] = e.REPO_FULL.split("/");
+            process.stdout.write(JSON.stringify({
+              owner, repo, sha: e.SHA, branch: e.BRANCH, status: e.STATUS,
+              runId: e.RUN_ID, runUrl: e.RUN_URL, workflowName: "CI",
+            }));
+          ' > "${RUNNER_TEMP}/fg-ci-report.json"
+          curl --fail-with-body -sS -X POST "https://forgegraf.com/api/fg/ci/report" \
+            -H "Authorization: Bearer ${FG_CI_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data-binary "@${RUNNER_TEMP}/fg-ci-report.json"
