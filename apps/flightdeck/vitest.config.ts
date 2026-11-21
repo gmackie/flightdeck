@@ -19,6 +19,10 @@ export default defineConfig(async () => {
         "test/*.sqlite.test.*",
       ],
       setupFiles: ["./test/setup.ts"],
+      // Projects ignore the root CLI's --testTimeout/--hookTimeout, so the slower Forgejo runner
+      // needs them here (run 4 on ce58091: a 10 s beforeAll timeout in lifecycle-analytics-bridge).
+      // CI only, and timeouts only: every test still runs and must pass.
+      ...(process.env.CI ? { testTimeout: 60_000, hookTimeout: 60_000 } : {}),
     },
   };
 });
