@@ -1,0 +1,47 @@
+# ForgeGraph delivery for Flightdeck (FLIG-49). `forge deploy create production` deploys the
+# existing `flightdeck` Worker from a ForgeGraph node: `buildCommand` and then `deployCommand` run
+# in `appDir` (apps/flightdeck), with Cloudflare credentials from the workspace integration. This
+# replaces the hand-run `pnpm run ship`.
+#
+# GitHub (gmackie/flightdeck) stays the repository authority: PRs merge there, and ForgeGraph's
+# git.forgegraf.com/gmackie/flightdeck copy is kept in sync by the GitHub push/workflow_run webhook.
+#
+# The Worker serves the dashboard SPA from ../dashboard/dist, so the build step builds it before
+# Wrangler uploads. Workspace packages export their TypeScript sources and need no build.
+#
+# D1 migrations (apps/flightdeck/migrations) are NOT chained into deployCommand. Apply them on
+# purpose with `wrangler d1 migrations apply DB --remote` when a change adds one.
+#
+# Only apps/flightdeck deploys. apps/lifecycle-mcp (flightdeck-lifecycle-mcp) is an optional,
+# separate Worker that is not deployed in production; it has no target here.
+#
+# The Worker has no secrets today, so secret sync is off. Its configuration is the `vars` block in
+# apps/flightdeck/wrangler.jsonc.
+
+app: flightdeck
+server: https://forgegraf.com
+
+stages:
+  - name: production
+    url: https://flightdeck.gmac.workers.dev
+    node: hetzner-fg
+    sortOrder: 20
+    targets:
+      - name: worker
+        platform: cloudflare-workers
+        nodeId: 9e73e056-399b-4900-9b10-6ede023f2adc # hetzner-build runs the deploy
+        config:
+          workerName: flightdeck
+          appDir: apps/flightdeck
+          configPath: apps/flightdeck/wrangler.jsonc
+          buildCommand: pnpm install --frozen-lockfile && pnpm build:dashboard
+          deployCommand: pnpm exec wrangler deploy
+          syncSecrets: false
+          # The production health probe ForgeGraph runs after a deploy.
+          healthCheckUrl: https://flightdeck.gmac.workers.dev/healthz
+
+health:
+  # Unauthenticated liveness served by the Worker ({"ok":true}).
+  url: /healthz
+  interval: 60
+  timeout: 10
