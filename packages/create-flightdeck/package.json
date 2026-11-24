@@ -41,7 +41,7 @@
     "typecheck": "tsc -p ."
   },
   "devDependencies": {
-    "@types/node": "^26.6.6",
-    "esbuild": "^0.28.2"
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2"
   }
 }

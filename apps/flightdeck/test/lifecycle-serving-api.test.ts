@@ -9,7 +9,7 @@ import {
 import { DAY, HOUR, MIN, openSnap, prov, repo, seed, snap, T0 } from "./lifecycle-fixtures";
 
 /** Response bodies are asserted structurally, so they are read as loose JSON. */
-// biome-ignore lint/suspicious/noExplicitAny: test-only JSON access
+// oxlint-disable-next-line typescript/no-explicit-any -- test-only JSON access
 type Json = any;
 
 const PRINCIPAL: AccessPrincipal = { sub: "svc-test", serviceToken: true };

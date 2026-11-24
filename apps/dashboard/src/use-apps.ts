@@ -7,7 +7,7 @@ export type AppsState = { status: "loading" } | AppsResult;
 export function useApps(enabled = true): [AppsState, () => void] {
   const [state, setState] = useState<AppsState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` re-runs the fetch on reload.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- `attempt` re-runs the fetch on reload.
   useEffect(() => {
     if (!enabled) return;
     let live = true;

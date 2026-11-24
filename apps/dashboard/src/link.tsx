@@ -13,7 +13,7 @@ export const RouterLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(
       ev.preventDefault();
       navigate(href);
     };
-    // biome-ignore lint/a11y: a real link (href and children arrive in props); Enter fires click.
+    // oxlint-disable-next-line jsx-a11y/anchor-has-content, jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- a real link (href and children arrive in props); Enter fires click.
     return <a ref={ref} {...props} onClick={handle} />;
   },
 );

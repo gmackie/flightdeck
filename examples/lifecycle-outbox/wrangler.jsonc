@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "flightdeck-lifecycle-outbox-example",
   "main": "src/index.ts",
-  "compatibility_date": "2026-10-30",
+  "compatibility_date": "2026-11-17",
   // Flightdeck must grant this app lifecycle.write (docs/operations/lifecycle-ingestion.md).
   "services": [
     {

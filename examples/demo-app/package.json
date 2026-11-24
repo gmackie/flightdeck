@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "@flightdeckhq/browser": "workspace:*",
-    "esbuild": "^0.28.2",
-    "wrangler": "^4.165.0"
+    "esbuild": "0.28.2",
+    "wrangler": "4.164.0"
   }
 }

@@ -13,7 +13,7 @@ import { fixtureDefinitions } from "./fixture-adapter";
  * go through the real `/api/*` dispatcher with signed Access JWTs and D1 grants.
  */
 
-// biome-ignore lint/suspicious/noExplicitAny: test-only JSON access
+// oxlint-disable-next-line typescript/no-explicit-any -- test-only JSON access
 export type Json = any;
 
 const TEAM = "https://lifecycle-e2e.cloudflareaccess.com";

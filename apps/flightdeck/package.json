@@ -13,13 +13,13 @@
     "@flightdeckhq/lifecycle-queries": "workspace:*",
     "@flightdeckhq/schema": "workspace:*",
     "@flightdeckhq/worker": "workspace:*",
-    "jose": "^6.2.14",
-    "ulid": "^3.0.2",
-    "valibot": "^1.5.0"
+    "jose": "6.2.17",
+    "ulid": "3.0.2",
+    "valibot": "1.5.0"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.4.11",
-    "wrangler": "^4.165.0",
+    "@cloudflare/vitest-plugin": "1.8.4",
+    "wrangler": "4.164.0",
     "@modelcontextprotocol/client": "2.4.0"
   }
 }

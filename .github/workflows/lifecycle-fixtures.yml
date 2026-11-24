@@ -22,7 +22,7 @@ jobs:
       # The fixtures need only Node. The repo's `packageManager: pnpm` field would make setup-node
       # try to use pnpm for caching, so turn the package-manager cache off.
       - uses: actions/setup-node@v5
-        with: { node-version: 24, package-manager-cache: false }
+        with: { node-version: 26.13.1, package-manager-cache: false }
       - run: node --test "test/*.test.mjs"
       - run: node cli.mjs validate --fixtures
       - name: Generate and validate a 100k dataset (not committed)

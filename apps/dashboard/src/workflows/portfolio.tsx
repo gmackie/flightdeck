@@ -66,7 +66,7 @@ export function LifecyclePortfolio({
   label: string;
 }) {
   return (
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users need to scroll overflowing rows.
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- keyboard users need to scroll overflowing rows.
     <section className="wf-scroll" aria-label={label} tabIndex={0}>
       <ul className="wf-portfolio" aria-label={label}>
         {nodes.map((node) => {

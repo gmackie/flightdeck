@@ -54,7 +54,7 @@
     "@flightdeckhq/schema": "workspace:^"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2",
-    "happy-dom": "^21.0.4"
+    "esbuild": "0.28.2",
+    "happy-dom": "21.0.4"
   }
 }
