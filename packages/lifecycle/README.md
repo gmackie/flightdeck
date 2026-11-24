@@ -368,7 +368,6 @@ completion replay equivalence, interruption overlap, explicit terminal/identity 
 object normalization and rejection of incompatible names. The canonical schema is still
 owned by A; this mapping records the inspected contract without editing its files.
 
-
 ### Canonical terminal definitions and safe diagnostics
 
 A's `ProcessDefinitionV1.stages[].terminal: true` explicitly means entering that stage ends

@@ -86,7 +86,7 @@ export async function connect(setup: Setup = {}): Promise<Client> {
 
 export type ToolOutcome = {
   isError: boolean;
-  // biome-ignore lint/suspicious/noExplicitAny: test access to arbitrary result shapes.
+  // oxlint-disable-next-line typescript/no-explicit-any -- test access to arbitrary result shapes.
   data: any;
   error: { code: string; message: string } | null;
   text: string;

@@ -3,7 +3,7 @@
   // Optional, separate, read-only lifecycle MCP server. See docs/operations/lifecycle-mcp.md.
   "name": "flightdeck-lifecycle-mcp",
   "main": "src/index.ts",
-  "compatibility_date": "2026-10-30",
+  "compatibility_date": "2026-11-17",
   // No public endpoint: no workers.dev hostname, no preview URLs and no routes. An operator adds an
   // Access-protected custom domain only after the read API and grants are wired (see the docs).
   "workers_dev": false,

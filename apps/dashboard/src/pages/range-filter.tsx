@@ -13,7 +13,7 @@ export function Segmented<T extends string>(props: {
   onChange: (value: T) => void;
 }) {
   return (
-    // biome-ignore lint/a11y/useSemanticElements: a fieldset would add a visible border and legend.
+    // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- a fieldset would add a visible border and legend.
     <div role="group" aria-label={props.label} className="fd-segmented">
       {props.options.map((o) => (
         <Button

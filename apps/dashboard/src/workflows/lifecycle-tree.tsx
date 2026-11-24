@@ -157,7 +157,7 @@ export function LifecycleTree({
             }
           />
           {isExpanded ? (
-            // biome-ignore lint/a11y/useSemanticElements: ARIA trees require nested groups, not form fieldsets.
+            // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- ARIA trees require nested groups, not form fieldsets.
             <ul role="group">{renderNodes(node.children ?? [], level + 1)}</ul>
           ) : null}
         </li>
@@ -187,7 +187,7 @@ export function LifecycleTree({
           Collapse all
         </button>
       </div>
-      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard users need to scroll overflowing rows. */}
+      {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- keyboard users need to scroll overflowing rows. */}
       <section className="wf-scroll" aria-label={`${label} lifecycle rows`} tabIndex={0}>
         <div className="wf-columns" aria-hidden="true">
           <span>Workflow / owner</span>
@@ -195,7 +195,7 @@ export function LifecycleTree({
           <span>State</span>
           <span>Age</span>
         </div>
-        {/* biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ul/tree is the standard ARIA tree pattern, with roving focus and arrow keys. */}
+        {/* ul/tree is the standard ARIA tree pattern, with roving focus and arrow keys. */}
         <ul ref={tree} className="wf-tree" role="tree" aria-label={label} aria-describedby={helpId}>
           {renderNodes(nodes, 1)}
         </ul>

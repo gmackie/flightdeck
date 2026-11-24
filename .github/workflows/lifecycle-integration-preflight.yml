@@ -26,7 +26,7 @@ jobs:
         with: { persist-credentials: false }
       # The repo's packageManager field would make setup-node try pnpm caching; turn it off.
       - uses: actions/setup-node@v5
-        with: { node-version: 24, package-manager-cache: false }
+        with: { node-version: 26.13.1, package-manager-cache: false }
       - run: node --disable-warning=ExperimentalWarning --test "scripts/lifecycle-preflight/test/*.test.mjs"
   preflight:
     needs: harness-tests
@@ -40,7 +40,7 @@ jobs:
       # pnpm must be on PATH before setup-node resolves `cache: pnpm`.
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
-        with: { node-version: 24, cache: pnpm }
+        with: { node-version: 26.13.1, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - name: Preflight (synthetic config, all local commands)
         run: |

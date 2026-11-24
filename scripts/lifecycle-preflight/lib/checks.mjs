@@ -161,7 +161,10 @@ export const CHECKS = {
     } else {
       for (const f of trackedFiles) {
         const base = f.split("/").pop();
-        if (/^\.dev\.vars/.test(base) || (/^\.env/.test(base) && !/\.example$/.test(base))) {
+        if (
+          base.startsWith(".dev.vars") ||
+          (base.startsWith(".env") && !base.endsWith(".example"))
+        ) {
           results.push(blocked(`tracked secrets file ${f}`));
         }
       }
@@ -332,7 +335,7 @@ export const CHECKS = {
     const results = [
       pass(`distinct AUDs ${fingerprint(a.dashboardAud)} / ${fingerprint(a.mcpAud)}`),
     ];
-    if (config.environment === "staging" && /^synthetic-/.test(a.dashboardAud + a.mcpAud)) {
+    if (config.environment === "staging" && (a.dashboardAud + a.mcpAud).startsWith("synthetic-")) {
       results.push(blocked("staging config uses synthetic AUD placeholders"));
     }
     return combine(results);

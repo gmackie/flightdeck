@@ -63,7 +63,7 @@ const sameSet = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((value) => b.includes(value));
 
 function resolvePolicy(policy: Partial<InterpretationPolicy> | undefined): InterpretationPolicy {
-  const merged = { ...DEFAULT_POLICY, ...(policy ?? {}) };
+  const merged = { ...DEFAULT_POLICY, ...policy };
   for (const [name, value] of Object.entries(merged)) {
     const bound = name === "maxWatermarkLagMs" ? 31 * DAY_MS : 1;
     check(

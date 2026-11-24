@@ -177,7 +177,7 @@ export function createLifecycleServer(ctx: ToolContext): McpServer {
         outputSchema: outputs[name],
         annotations: READ_ONLY,
       },
-      // biome-ignore lint/suspicious/noExplicitAny: each schema/handler pair is typed in tools.ts.
+      // oxlint-disable-next-line typescript/no-explicit-any -- each schema/handler pair is typed in tools.ts.
       (args: any) => runTool(name, ctx, args),
     );
   }

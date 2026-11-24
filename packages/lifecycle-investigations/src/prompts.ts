@@ -176,7 +176,7 @@ export function renderInvestigationPrompt(
     "Invalid question",
   );
   const question = ((args.question as string | undefined) ?? "")
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: strips control characters
+    // oxlint-disable-next-line no-control-regex -- strips control characters
     .replace(/[\u0000-\u001f\u007f]/g, " ")
     .trim();
   const text = [

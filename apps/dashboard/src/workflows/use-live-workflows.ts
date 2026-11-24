@@ -50,7 +50,7 @@ async function mapBounded<T, R>(
   limit: number,
   fn: (item: T) => Promise<R>,
 ): Promise<R[]> {
-  const out: R[] = new Array(items.length);
+  const out: R[] = Array.from({ length: items.length });
   let next = 0;
   const worker = async () => {
     while (next < items.length) {
@@ -163,7 +163,7 @@ export function useLiveWorkflows(
 ): [LiveWorkflowsState, () => void] {
   const [state, setState] = useState<LiveWorkflowsState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` re-runs the fetch on reload.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- `attempt` re-runs the fetch on reload.
   useEffect(() => {
     let live = true;
     setState({ status: "loading" });

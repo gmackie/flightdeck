@@ -134,6 +134,7 @@ export function LifecycleBar({
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   return (
     <TooltipProvider>
+      {/* oxlint-disable-next-line jsx-a11y/interactive-supports-focus -- roving tabindex: the stage buttons inside take focus, not the toolbar. */}
       <div
         role="toolbar"
         aria-label={`${label} lifecycle stages`}

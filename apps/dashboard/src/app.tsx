@@ -182,7 +182,7 @@ export function App() {
   const selected = apps.find((a) => a.id === param) ?? apps[0] ?? null;
 
   // Canonicalize the URL: `/` becomes `/live`, and `?app=` names the app actually shown.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `href` changes on every navigation.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps -- `href` changes on every navigation.
   useEffect(() => {
     if (location.pathname === "/") navigate(`/live${location.search}`, { replace: true });
     else if (!demo && state.status === "ok" && (selected?.id ?? null) !== param) {

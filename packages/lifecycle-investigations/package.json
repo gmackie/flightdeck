@@ -17,7 +17,7 @@
     "@flightdeckhq/lifecycle-queries": "workspace:*"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "5.0.5"
+    "@vitest/coverage-v8": "5.1.1"
   },
   "files": [
     "dist",
